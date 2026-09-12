@@ -1,0 +1,58 @@
+# Ignore everything without an extension, then selectively allow files and directories.
+*
+!*.*
+!*/
+
+# Don't ignore makefiles and license files.
+!makefile
+!Makefile
+!LICENSE
+
+# Ignore GHDL work libraries and simulation artifacts. The rules above re-include anything
+# with an extension, so every generated file type has to be named here explicitly.
+work/
+work-obj*.cf
+*.ghw
+*.vcd
+*.fst
+*.o
+e~*
+
+# Ignore Quartus build artifacts.
+db/
+incremental_db/
+output_files/
+greybox_tmp/
+*.qws
+*.rpt
+*.summary
+*.smsg
+*.sld
+*.done
+*.qarlog
+
+# Ignore the Python environment and bytecode used to redraw the diagrams.
+.venv/
+__pycache__/
+*.pyc
+
+# Ignore IDE directories.
+.vscode/
+.vs/
+.claude/
+
+# Ignore temp/ directory.
+temp/
+
+# Ignore solution modules written into an exercise directory, keeping the testbenches we ship.
+#
+# An exercise directory holds the testbench and nothing else: the module is the reader's to write,
+# and shipping it early is the one thing the course design rules out. Solving an exercise locally,
+# to check the testbench we hand out actually accepts a correct answer, leaves that solution
+# sitting in the working tree where a single `git add -A` would publish it. These two lines make
+# "not pushed" structural rather than a thing to remember.
+#
+# Already-tracked files are unaffected, so every shipped *_tb.vhd stays tracked either way. If a
+# future exercise ever genuinely needs to ship a design file, `git add -f` overrides this.
+lectures/*/exercises/*/*.vhd
+!lectures/*/exercises/*/*_tb.vhd
