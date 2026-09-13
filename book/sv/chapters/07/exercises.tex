@@ -1,0 +1,401 @@
+% Avsnitt 7.7, ur lectures/L07/appendix/b_exercises.md.
+
+\section{Övningar}
+\label{c7:sec:exercises}
+
+\begin{aside}
+\textbf{Så kontrollerar du ditt arbete.} Varje övning nedan som ber dig skriva en VHDL-modul kommer
+med en självkontrollerande testbänk under \file{lectures/L07/exercises/}. Skriv din modul i dess
+katalog \file{exercises/<module>/}, med det entitetsnamn och den \textbf{portordning} övningen
+anger, och kör den sedan med GHDL \textemdash{} se \secref{c2:sec:testbenches}.
+
+Från och med det här kapitlet återanvänder designerna moduler du skrivit tidigare, och de delas inte
+ut en andra gång: varje övning säger vilka av dina egna filer som ska kopieras in, och skriver ut
+den \code{ghdl -a}-rad som behöver dem.
+\end{aside}
+
+% ------------------------------------------------------------------------------------------
+\exerciseset{Timers för hand}
+
+\exercise{En timer med ett annat målvärde}{Krets}
+\label{c7:ex:byhand}
+Bygg en andra timer för hand i CircuitVerse, enligt \secref{c7:sec:byhand}, men med målvärdet
+\code{TICK_COUNT = 12} i stället för avsnittets \code{10}.
+
+\xpart{a} Rikta om jämföraren:
+\begin{itemize}
+  \item Skriv \code{12} binärt med 4 bitar.
+  \item De fyra XNOR-grindarna sitter kvar precis där de sitter. Säg vilka av deras konstanta
+    ingångar som ändras, och till vad.
+  \item Säg, i en mening, varför en likhetsjämförare byggd av XNOR inte behöver någon grind
+    tillagd, borttagen eller omkopplad för att jämföra mot ett annat värde.
+\end{itemize}
+
+\xpart{b} Bygg den: återanvänd din 4-bitars räknare och jämförare från passet, och ändra bara
+konstanterna. Sätt klockperioden till \code{1000 ms} och bekräfta att \code{timeout} slår till en
+gång var trettonde klockflank, under exakt en flank varje gång.
+
+\xpart{c} Ta nu bort nollställningen, så att \code{timeout} inte längre tvingar räknaren tillbaka
+till \code{0000}. Förutsäg, innan du kör den, hur ofta \code{timeout} slår till nu. Kör den och
+bekräfta. Förklara resultatet utifrån räknarens eget överslag (\secref{c6:sec:counter}).
+
+\xpart{d} Gör sönder jämföraren med flit: koppla loss en XNOR:s utgång från AND-grinden och håll den
+AND-ingången hög i stället. Förutsäg vilka räknarvärden som nu höjer \code{timeout}, innan du
+simulerar, och bekräfta genom att stega räknaren genom en hel cykel. Det här är hur ”tre av de fyra
+bitarna stämmer” ser ut, och det är det vanligaste sättet för en handritad jämförare att bli fel.
+
+\note[Tips]Att räkna \code{0} till och med \code{12} är tretton flanker, inte tolv.
+\Secref{c7:sec:concept}:s anmärkning om \code{TICK_COUNT + 1} är samma ettfel, och det är värt att
+reda ut här, där du kan räkna flankerna med ögat, snarare än senare vid 50~MHz.
+
+\exercise{Fyra frågor om modulen}{Resonemang}
+\label{c7:ex:questions}
+Svara på var och en av frågorna nedan i en eller två meningar, med hänvisning till modulen
+\code{timer} i \secref{c7:sec:module}:
+
+\xpart{a} Varför är \code{timeout} en encykelspuls snarare än en signal som ligger kvar hög när
+målvärdet väl är nått?
+
+\xpart{b} Medan en löpande timers \code{enable}-ingång hålls låg, vad händer med dess interna
+räknare från en klockflank till nästa: nollställs den, pausar den, eller räknar den vidare?
+
+\xpart{c} Varför tar \code{timer} \code{reset_s2_n} (den synkroniserade reset-signalen) snarare än
+den råa \code{reset_n} som sin reset-ingång?
+
+\xpart{d} CircuitVerse-timern i Övning~\ref{c7:ex:byhand} behövde kopplas om för att målvärdet
+skulle ändras, medan VHDL-modulen inte behöver ändras alls. Vad ersätter omkopplingen, och när låses
+dess värde fast?
+
+% ------------------------------------------------------------------------------------------
+\exerciseset{Timers i VHDL}
+
+\exercise{Tre tickantal}{Resonemang}
+\label{c7:ex:ticks}
+DE0-CV-kortets systemklocka är \code{50 MHz}. Räkna för varje mål nedan ut den
+\code{TICK_COUNT}-generic du skulle skicka in till modulen \code{timer}:
+
+\xpart{a} En \code{timeout}-puls en gång per sekund.
+
+\xpart{b} En \code{timeout}-puls var \code{250} ms.
+
+\xpart{c} En \code{timeout}-puls tjugo gånger per sekund (\code{20 Hz}).
+
+\note[Tips]Sambandet mellan en period och dess tickantal är
+$\mathit{TICK\_COUNT} = \mathit{sekunder} \times 50\,000\,000 - 1$. Termen $-1$ är samma ettfel som
+Övning~\ref{c7:ex:byhand} kretsade kring: räknaren löper \code{0} till och med \code{TICK_COUNT}, så
+en period är \code{TICK_COUNT + 1} klockcykler, inte \code{TICK_COUNT}.
+
+\exercise{\code{timer}}{VHDL}
+\label{c7:ex:timer}
+Skriv själva modulen \code{timer}, som en entitet vid namn \code{timer}.
+
+Den byggs live under passet och är tryckt i sin helhet i \secref{c7:sec:module}, så det här är ingen
+gåta. Skriv den ändå, utan att kopiera: varje design härifrån till bokens slut instansierar den här
+modulen, båda capstones inräknade, och det är värt att ha byggt det du strax ska återanvända sex
+gånger.
+
+Entiteten har en generic:
+
+\begin{booktable}{@{}p{6em}p{4.4em}p{6em}L@{}}
+  \thead{Generic} & \thead{Typ} & \thead{Förval} & \thead{Betydelse} \\
+  \midrule
+  \code{TICK_COUNT} & \code{natural} & \code{50_000_000} & Antal tick att räkna innan en timeout.
+    En sekund vid DE0-CV:ns \code{50 MHz}-klocka, avrundat: enligt Övning~\ref{c7:ex:ticks}:s regel
+    är det exakta värdet \code{49_999_999}, och 20~ns fel på en sekund är inte värt den mindre
+    läsbara konstanten. \\
+\end{booktable}
+
+och dessa portar:
+
+\begin{booktable}{@{}p{5.6em}p{3.4em}p{5.2em}L@{}}
+  \thead{Port} & \thead{Riktn.} & \thead{Typ} & \thead{Betydelse} \\
+  \midrule
+  \code{clock} & in & \code{std_logic} & Systemklocka. \\
+  \code{reset_s2_n} & in & \code{std_logic} & Aktiv låg, redan synkroniserad reset. Asynkron: den
+    nollställer räknaren och \code{timeout} utan att någon klockflank är inblandad. \\
+  \code{enable} & in & \code{std_logic} & Timerns enable. Medan den är låg \textbf{håller} räknaren
+    sitt värde, och fortsätter därifrån i stället för att börja om. \\
+  \code{timeout} & out & \code{std_logic} & Encykelspuls, som slår till var \code{TICK_COUNT + 1}
+    cykler medan timern är aktiverad. \\
+\end{booktable}
+
+Arkitekturen ska:
+\begin{itemize}
+  \item Deklarera den interna räknaren som \code{natural range 0 to TICK_COUNT}, så att registret
+    dimensioneras av genericen snarare än lämnas obegränsat.
+  \item Använda en enda process, känslig för \code{clock} och \code{reset_s2_n}, enligt mallen för
+    klockad process från \secref{c3:sec:template}.
+  \item Nollställa både räknaren och \code{timeout} vid reset, utanför den klockade grenen.
+  \item Driva \code{timeout} låg villkorslöst högst upp i den klockade grenen, och hög bara vid den
+    flank som nollställer räknaren. Det mönstret, ett förval följt av en överskrivning, är vad som
+    gör pulsen exakt en cykel bred snarare än två.
+\end{itemize}
+
+Svara sedan, i en mening var:
+\begin{itemize}
+  \item \code{enable = '0'} måste \textbf{pausa} räknaren, inte nollställa den. Anta att du
+    nollställde den i stället. Förutsäg vad referenstestbänken rapporterar, och vilken av de två
+    egenskaperna ovan den mäter när den gör det. Kör den sedan och se. (\Chapref{c8:ch}:s
+    \code{fsm_led} hänger på pausen, vilket är varför testbänken bryr sig.)
+  \item Räknaren räknar \code{0} till och med \code{TICK_COUNT}, så en period är
+    \code{TICK_COUNT + 1} cykler. Var i din kod är det där ”+ 1” faktiskt skrivet? Det står inte som
+    en literal någonstans.
+  \item \Secref{c7:sec:byhand}:s handritade \code{timeout} är en kombinatorisk avkodning av
+    räkningen; din är registrerad. Båda har samma period. Vilken cykel slår var och en till på, och
+    varför spelar skillnaden roll för något nedströms som samplar \code{timeout}?
+\end{itemize}
+
+\modulefig[0.62]{lectures/L07/appendix/images/timer.png}
+
+\begin{selfcheck}
+\textbf{Självkontroll.} Döp din entitet till \code{timer}, med genericen \code{TICK_COUNT}
+(\code{natural}), ingångarna \code{clock}, \code{reset_s2_n}, \code{enable} och utgången
+\code{timeout}, deklarerade i den ordningen; dess testbänk ligger i \file{exercises/timer/}. Den kör
+tre hela perioder, så en timer som bara slår till en gång passerar inte, och den pausar mitt i
+räkningen för att bekräfta att räkningen fortsatte i stället för att börja om.
+
+\textbf{Spara den här filen.} Övning~\ref{c7:ex:blinker} nedan återanvänder den, det gör
+\code{walking_led} i Övning~\ref{c7:ex:walking} också, och likaså båda \chapref{c8:ch}:s capstones.
+\end{selfcheck}
+
+\exercise{\code{blinker}}{VHDL}
+\label{c7:ex:blinker}
+Skriv en entitet vid namn \code{blinker} som blinkar en lysdiod på och av en gång per sekund, genom
+att återanvända modulen \code{timer} du just skrev snarare än att räkna klockcykler själv.
+
+Entiteten har en generic:
+
+\begin{booktable}{@{}p{6em}p{4.4em}p{6em}L@{}}
+  \thead{Generic} & \thead{Typ} & \thead{Förval} & \thead{Betydelse} \\
+  \midrule
+  \code{TICK_COUNT} & \code{natural} & \code{25_000_000} & En halv sekund vid DE0-CV:ns
+    \code{50 MHz}-klocka. Exponera det som en generic i stället för att baka in antalet, så att en
+    testbänk kan korta blinket; FPGA-bygget använder bara standardvärdet. \\
+\end{booktable}
+
+och dessa portar:
+
+\begin{booktable}{@{}p{5em}p{3.4em}p{5.2em}L@{}}
+  \thead{Port} & \thead{Riktn.} & \thead{Typ} & \thead{Betydelse} \\
+  \midrule
+  \code{clock} & in & \code{std_logic} & Systemklocka. \\
+  \code{reset_n} & in & \code{std_logic} & Aktiv låg reset, rå från omvärlden. Asynkron: aktivera
+    den och \code{led} slocknar omedelbart, utan att vänta på någon klockflank. \\
+  \code{led} & out & \code{std_logic} & Nollställd till \code{'0'} medan reset-signalen är aktiv,
+    och lämnad där till den första timeouten efter att reset-signalen släppts. \\
+\end{booktable}
+
+Lägg märke till att den här entiteten tar den \textbf{råa} \code{reset_n} snarare än en redan
+synkroniserad \code{reset_s2_n}. Att synkronisera den är en del av övningen, och det är vad
+\secref{c4:sec:resetsync} menar med ”exakt en modul i en design är undantaget”: här är den modulen
+\code{blinker} själv.
+
+Arkitekturen ska:
+\begin{itemize}
+  \item Instansiera din \code{reset_sync} från Övning~\ref{c4:ex:resetsync}, och använda dess
+    utgång \code{reset_s2_n} som reset för allt inuti.
+  \item Instansiera modulen \code{timer} från \secref{c7:sec:module}, skicka din egen generic
+    \code{TICK_COUNT} rakt igenom till timerns \code{TICK_COUNT}, och hålla dess
+    \code{enable}-ingång hög.
+  \item Växla \code{led} i en synkron process varje gång timerns \code{timeout}-puls slår till.
+\end{itemize}
+
+Implementera inte räknelogiken, eller synkroniseraren, på nytt själv. Återanvänd \code{timer} och
+\code{reset_sync} oförändrade, via en \code{generic map} och en \code{port map}, enligt
+kompositionsmönstret i \secref{c7:sec:compose}. Förklara varför en timerperiod på en \textbf{halv}
+sekund ger en blinkcykel på \textbf{en} sekund (en hel period av på och sedan av).
+
+Svara sedan, i en mening var:
+\begin{itemize}
+  \item Lysdioden måste vara släckt under reset, och testbänken kontrollerar att den slocknar utan
+    någon klockflank däremellan. Vilken halva av mönstret aktivera-asynkront\--släpp-synkront
+    kontrollerar det, och vilken halva kontrollerar det inte?
+  \item Din \code{timer} resettas av \code{reset_s2_n}, två flanker efter att \code{reset_n}
+    släppts. Vad skulle gå fel om du matade den med den råa \code{reset_n} i stället? Namnge felet,
+    inte bara regeln.
+\end{itemize}
+
+\modulefig[0.56]{lectures/L07/appendix/images/blinker.png}
+
+\begin{selfcheck}
+\textbf{Självkontroll.} Döp din entitet till \code{blinker}, med genericen \code{TICK_COUNT}
+(\code{natural}), ingångarna \code{clock}, \code{reset_n} och utgången \code{led}, deklarerade i den
+ordningen; dess testbänk ligger i \file{exercises/blinker/}. \textbf{Kopiera in dina egna
+\file{reset_sync.vhd} och \file{timer.vhd} i den katalogen} innan du bygger; ingen av dem delas ut
+där, eftersom du skrivit båda:
+
+\begin{shell}
+cd lectures/L07/exercises/blinker
+cp ../../../L04/exercises/reset_sync/reset_sync.vhd .   # the two you wrote yourself
+cp ../timer/timer.vhd .
+ghdl -a --std=93 reset_sync.vhd timer.vhd blinker.vhd blinker_tb.vhd
+\end{shell}
+
+Testbänken skriver över \code{TICK_COUNT} med ett litet värde och kontrollerar att lysdioden växlar
+om och om igen, ligger kvar exakt en timerperiod mellan växlingarna, och att den första växlingen
+kommer sent med din synkroniserares två flanker.
+\end{selfcheck}
+
+% ------------------------------------------------------------------------------------------
+\exerciseset{Den vandrande lysdioden}
+
+En enda tänd lysdiod som vandrar längs en rad, en position per timertick, startad och stoppad med en
+knapp. Den byggs live under passet och är beskriven i \secref{c7:sec:walking}.
+
+Det här är utdelningen från de fyra senaste kapitlen, och den skriver nästan ingen egen logik: tre
+moduler, två av dem oförändrade från \chapref{c4:ch} och en skriven här, komponerade.
+Övning~\ref{c7:ex:walking} bygger den, och Övning~\ref{c7:ex:variants} och \ref{c7:ex:direction}
+ändrar det du byggt.
+
+\exercise{\code{walking_led}}{VHDL}
+\label{c7:ex:walking}
+Skriv en entitet vid namn \code{walking_led}.
+
+Entiteten har två generics:
+
+\begin{booktable}{@{}p{6em}p{4.4em}p{6em}L@{}}
+  \thead{Generic} & \thead{Typ} & \thead{Förval} & \thead{Betydelse} \\
+  \midrule
+  \code{LED_COUNT} & \code{natural} & \code{8} & Hur många lysdioder biten vandrar längs. Raden är
+    så här bred, och vandringen slår över efter så här många steg. \\
+  \code{TICK_COUNT} & \code{natural} & \code{25_000_000} & Skickas rakt igenom till din
+    \code{timer}, så att biten flyttar en position per timerperiod: ett steg per halv sekund vid
+    DE0-CV:ns \code{50 MHz}-klocka. \\
+\end{booktable}
+
+och dessa portar:
+
+\begin{booktable}{@{}p{5em}p{3.4em}p{11.4em}L@{}}
+  \thead{Port} & \thead{Riktn.} & \thead{Typ} & \thead{Betydelse} \\
+  \midrule
+  \code{clock} & in & \code{std_logic} & Systemklocka. \\
+  \code{reset_n} & in & \code{std_logic} & Aktiv låg reset, rå från omvärlden. Att synkronisera den
+    är ditt jobb, precis som den var i \code{blinker}. \\
+  \code{button_n} & in & \code{std_logic} & Aktiv låg tryckknapp, rå. Varje tryck startar eller
+    stoppar vandringen. \\
+  \code{led} & out & \code{std_logic_vector(LED_COUNT-1 downto 0)} & Lysdiodsraden. Exakt en bit är
+    tänd åt gången; vid reset är det bit \code{0}. \\
+\end{booktable}
+
+Arkitekturen komponerar tre moduler du redan skrivit, och lägger till två processer:
+\begin{itemize}
+  \item Instansiera din \textbf{\code{reset_sync}}, och använd dess \code{reset_s2_n} som reset för
+    allt annat i designen, de två instanserna nedan inräknade.
+  \item Instansiera din \textbf{\code{button_sync}} med \code{generic map(1)}, för en encykelspuls
+    per tryck. Dess knappportar är vektorer med \code{COUNT} bitar medan \code{button_n} här är en
+    skalär, så överbrygga bredden med en \code{std_logic_vector(0 downto 0)} med ett element i
+    vardera riktningen. \Secref{c7:sec:walking} visar det.
+  \item Instansiera din \textbf{\code{timer}} med din egen \code{TICK_COUNT}, driv dess
+    \code{enable} från skiftflaggan nedan och ta dess \code{timeout} som skiftticket.
+  \item En process som växlar \textbf{\code{shift_enable}} vid varje puls från knappen, nollställd
+    till \code{'0'} vid reset. Vandringen börjar därför stoppad.
+  \item En process som håller det \textbf{skiftregister} som driver \code{led}: vid reset, ladda en
+    enda tänd bit på position \code{0} och nollställ resten; vid varje \code{timeout} från timern,
+    rotera ett steg mot MSB och låt den översta biten slå över tillbaka in i bit \code{0}. Det är
+    ett PISO-register (\secref{c6:sec:piso}) med sin egen seriella utgång kopplad tillbaka till sin
+    seriella ingång, vilket är det som gör en engångsutskiftning till en oändlig vandring.
+\end{itemize}
+
+Svara sedan, i en mening var:
+\begin{itemize}
+  \item \code{shift_enable} driver timerns \code{enable}, så att stoppa vandringen stoppar timern
+    också. Övning~\ref{c7:ex:timer} fick dig att visa att \code{enable} \textbf{pausar} räkningen
+    snarare än nollställer den. Vad ser en betraktare på kortet, vid det tryck som startar om
+    vandringen, om din timer nollställer i stället?
+  \item \code{button_sync} instansieras med \code{COUNT = 1} här och med \code{COUNT = 2} i
+    \chapref{c8:ch}:s \code{fsm_led}, ur samma fil utan någon ändring. Vad hade du behövt skriva i
+    stället om bredden var fastlagd i modulen snarare än inskickad som en generic?
+\end{itemize}
+
+\modulefig[0.7]{lectures/L07/appendix/images/walking_led.png}
+
+\begin{selfcheck}
+\textbf{Självkontroll.} Döp din entitet till \code{walking_led}, med generics \code{LED_COUNT} och
+\code{TICK_COUNT} (båda \code{natural}), ingångarna \code{clock}, \code{reset_n}, \code{button_n}
+och utgången \code{led}, deklarerade i den ordningen; dess testbänk ligger i
+\file{exercises/walking_led/}. Den skriver över båda generics (\code{LED_COUNT = 4},
+\code{TICK_COUNT = 3}) så att ett helt varv tar en handfull klockcykler snarare än två sekunder, och
+den kontrollerar resetmönstret, att ingenting rör sig före det första trycket, och att antalet
+skiftningar över ett fast fönster stämmer med den takt timern sätter. Kopiera först in de tre
+moduler den komponerar; kommandot står i \secref{c7:sec:walking}.
+\end{selfcheck}
+
+\exercise{Att ändra takt och bredd}{Simulering}
+\label{c7:ex:variants}
+Gör följande ändringar en i taget, och kör om testbänken efter var och en. Del \textbf{a)} och
+\textbf{b)} ändrar bara testbänkens konstanter \textemdash{} att de inte kräver någon ändring alls i
+din \file{walking_led.vhd} är hela poängen med dem. Del \textbf{c)} är den som rör modulen.
+
+\xpart{a} Ändra vandringshastigheten:
+\begin{itemize}
+  \item Ändra konstanten \code{TICK_COUNT} i \textbf{testbänken} från \code{3} till \code{6}.
+  \item Den ska fortfarande passera, den här gången för att testbänken anpassar sig med dig: dess
+    observationsfönster är fasta \code{PULSES * 6} cykler, och den härleder det antal skiftningar
+    den förväntar sig ur \code{TICK_COUNT}, en skiftning per \code{TICK_COUNT + 1} cykler.
+  \item Hitta nu var den anpassningen slutar betyda något. Fortsätt höja \code{TICK_COUNT} förbi
+    fönstrets längd och räkna ut vad det förväntade antalet blir, och vad kontrollen då faktiskt
+    bevisar. Ett test som passerar av fel skäl är värt att kunna känna igen.
+  \item Förklara sedan varför ett ändrat tickantal inte kan göra sönder \emph{designen}, bara sakta
+    ner den.
+\end{itemize}
+
+\xpart{b} Ändra bredden: ändra testbänkens konstant \code{LED_COUNT} från \code{4} till \code{8}.
+Den ska fortfarande passera, utan någon ändring alls i din \file{walking_led.vhd}. Förklara hur
+modulen hade behövt se ut för att det här skulle ha krävt en ändring.
+
+\xpart{c} Ladda två tända bitar på var sin sida av registret vid reset (t.ex. \code{"10001000"} för
+\code{LED_COUNT = 8}), och låt dem vandra i takt:
+\begin{itemize}
+  \item Peka ut den enda rad i din \file{walking_led.vhd} du behöver ändra.
+  \item \textbf{Förutsäg} vad referenstestbänken kommer att rapportera, innan du kör någonting.
+  \item Kör den sedan och se. Förklara resultatet: är designen fel, eller kontrollerar testbänken
+    något som inte längre är specifikationen?
+\end{itemize}
+
+\note[Tips]Både \code{LED_COUNT} och \code{TICK_COUNT} är generics, så del \textbf{a)} och
+\textbf{b)} kräver ingen ändring alls i modulens kropp. Det är hela poängen med en generic: en
+modul, många storlekar, inga ändringar.
+
+\exercise{En andra knapp som vänder riktningen}{VHDL}
+\label{c7:ex:direction}
+Den nuvarande designen vandrar bara åt ett håll (mot MSB, där den översta biten slår över tillbaka
+till botten). Ändra din \file{walking_led.vhd} så att en \textbf{andra} knapp vänder
+vandringsriktningen.
+
+\xpart{a} Lägg till en andra, synkroniserad knappingång: dra den genom samma
+\code{button_sync}-instans, och skicka \code{2} till dess generic \code{COUNT}
+(\code{generic map(2)}, positionsvis, som överallt annars i den här boken).
+
+\xpart{b} Lägg till en signal \code{direction}, och växla den vid den nya knappens flank, precis så
+som \code{shift_enable} växlas av den första knappen.
+
+\xpart{c} Gör rotationen i \code{SHIFT_PROCESS} beroende av \code{direction}. När
+\code{direction = '0'}, rotera mot MSB (bokens konvention från \secref{c6:sec:shift}, och det du
+skrev i Övning~\ref{c7:ex:walking}):
+
+\begin{vhdlcode}
+shift_reg <= shift_reg(LED_COUNT-2 downto 0) & shift_reg(LED_COUNT-1);
+\end{vhdlcode}
+
+När \code{direction = '1'}, rotera åt andra hållet, mot bit 0:
+
+\begin{vhdlcode}
+shift_reg <= shift_reg(0) & shift_reg(LED_COUNT-1 downto 1);
+\end{vhdlcode}
+
+Det här är det enda stället i boken där ett skiftregister medvetet går emot konventionen: att vända
+riktningen är hela poängen med övningen. Lägg märke till att det andra uttrycket är precis den
+spegelbild \secref{c6:sec:shift} varnar dig för att hålla utkik efter i andras kod.
+
+\xpart{d} Din entitets portar har nu ändrats: \code{button_n} är en tvåbitarsvektor snarare än en
+enda bit.
+\begin{itemize}
+  \item Förklara varför \file{walking_led_tb.vhd} inte längre går att köra mot din version, och
+    exakt vad GHDL kommer att klaga på när du försöker.
+  \item Det här är den vanliga kostnaden för att ändra ett gränssnitt, och den är värd att känna en
+    gång: en testbänk är skriven mot en bestämd entitet, och att bredda en port gör sönder varje
+    instansiering av den, också de du inte skrivit själv.
+  \item Beskriv, i löpande text, den följd av tryck du skulle använda för att övertyga dig själv om
+    att designen fungerar, och vad du skulle förvänta dig att lysdioderna gör vid varje steg. Den
+    följden är precis vad en testbänk för den nya entiteten skulle behöva driva.
+\end{itemize}

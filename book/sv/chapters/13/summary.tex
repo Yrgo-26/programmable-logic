@@ -1,0 +1,36 @@
+% Avsnitt 13.7, ur lectures/L13/README.md.
+
+\section{Sammanfattning}
+\label{c13:sec:review}
+
+\needspace{6\baselineskip}
+\subsection*{Det här ska du kunna nu}
+\begin{itemize}
+  \item Implementera en bitseriell CRC-15-motor som matchar CAN:s polynom.
+  \item Förklara varför generering och kontroll är samma operation, och vad ett nollställt
+    CRC-register vid slutet av en mottagen ram bevisar.
+  \item Räkna några bitar genom rekursionen för hand och jämföra med simuleringen.
+  \item Säga varför motorn behöver nollställas mellan ramar, och vilket fel som uppstår om den inte
+    gör det.
+\end{itemize}
+
+\needspace{6\baselineskip}
+\subsection*{Frågor att testa dig själv med}
+\begin{enumerate}
+  \item Varför behöver motorn inget läge för ”generera” respektive ”kontrollera”?
+  \item Vad betyder det att CRC-registret är noll efter att en mottagen ram matats igenom?
+  \item Vad händer om en ram avbryts och nästa ram börjar matas in utan \code{clear}?
+  \item Varför matas en instoppad bit inte in i CRC-motorn?
+  \item Vilken signal i \code{can_controller} avgör när \code{crc15} får uppdatera sig, och varför
+    är det inte \code{bit_done}?
+\end{enumerate}
+
+\needspace{6\baselineskip}
+\subsection*{Riktvärde}
+Vid det här laget bör två av de fyra lövmodulerna vara klara. Vilka två spelar ingen roll.
+
+\needspace{6\baselineskip}
+\subsection*{Blicken framåt}
+\Chapref{c14:ch} bygger sändningsskiftregistret: att serialisera ut på bussen, med samma
+stoppbitsregel som i \chapref{c10:ch}, nu i VHDL. \Chapref{c14:ch} och \ref{c15:ch} bygger
+tillsammans de moduler som avgör vilka bitar som når \code{crc15} och när.

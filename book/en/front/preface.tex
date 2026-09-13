@@ -1,0 +1,223 @@
+% Preface: the README's "Om kursen", "Efter kursen" and "Att bygga", info/README.md's
+% prerequisites and software list, and the course's three verification layers, as the front
+% matter of a book.
+
+\chapter{Preface}
+\markboth{Preface}{Preface}
+
+This book takes you from a gate network on paper to a CAN node in an FPGA that a microcontroller
+can talk to over SPI.
+
+The first half builds up VHDL and synchronous design from the ground: combinational networks,
+sequential networks, metastability and synchronisation, counters, shift registers, timers and
+state machines, each one first reasoned about as a \emph{circuit} and only then expressed in the
+language. The second half is a group project where that knowledge is put to something larger: a
+simplified CAN controller, designed module by module, and the two layers that make it reachable
+from the outside \textemdash{} a register bank and an SPI bridge.
+
+\textbf{The subject is VHDL and digital design in an FPGA, not the fundamentals of digital
+electronics.} Gates, truth tables, Boolean algebra and Karnaugh maps are revised rather than
+taught, and they are revised where the language calls for them. What the book teaches from zero is
+the language and the toolchain.
+
+\section*{What you are assumed to bring}
+\begin{itemize}
+  \item Logic gates and truth tables, and reading a sum of products out of a table.
+  \item Boolean algebra: the basic identities and De Morgan's laws.
+  \item Karnaugh maps, for functions of three or four variables.
+  \item Registers, D flip-flops, and what a clock edge does.
+  \item State machines as a concept: states, transitions, and the difference between Moore and
+    Mealy.
+\end{itemize}
+
+No programming language beyond general software experience is assumed. Familiarity with C or
+something like it helps, since several explanations set VHDL's semantics against it, and the one
+section that actually contains C++ (\secref{c10:sec:framing}) is a short introduction to framing
+rather than an exercise in the language.
+
+The group project adds \textbf{Git and GitHub} at a basic level: clone, branch, commit, push and
+pull request.
+
+\section*{What you should be able to do afterwards}
+\begin{itemize}
+  \item Realise a Boolean function as a gate network, and simulate it by hand.
+  \item Read and write combinational and sequential VHDL: entities, architectures, signals,
+    variables and processes.
+  \item Explain metastability and apply the two-flip-flop synchroniser to every asynchronous
+    input.
+  \item Design counters, shift registers, timers and state machines, and compose a design out of
+    modules you have already built rather than rewriting their logic.
+  \item Design the hardware of a communication protocol: bit timing, checksums, bit stuffing,
+    frame sequencing and arbitration.
+  \item Design the interface between hardware and software: a register bank and an SPI transport,
+    against a contract someone else writes to.
+  \item Verify a design by running a self-checking testbench under GHDL, and trace a failure back
+    to the code that caused it.
+  \item Work in a group with feature branches, pull requests and code review.
+\end{itemize}
+
+\section*{How the book is laid out}
+The book is typeset from a course of twenty sessions, and \textbf{every chapter is one session}.
+The chapter's sections are the session's appendices, in the same order and under the same
+subheadings, so that a chapter here and a lecture directory in the course repository can be read
+side by side. The two parts match the course's two halves:
+
+\begin{booktable}{@{}p{4.6em}p{3.6em}L@{}}
+  \thead{Chapter} & \thead{Session} & \thead{Subject} \\
+  \midrule
+  \multicolumn{3}{@{}l}{\textit{Part \ref{part:vhdl}: digital design in VHDL}} \\
+  1 & \file{L01} & Combinational logic and first VHDL \\
+  2 & \file{L02} & Larger networks, multiplexers and submodules \\
+  3 & \file{L03} & Sequential networks \\
+  4 & \file{L04} & Metastability and synchronisation \\
+  5 & \file{L05} & Variables and the hardware underneath \\
+  6 & \file{L06} & Counters and shift registers \\
+  7 & \file{L07} & Timers \\
+  8 & \file{L08} & State machines \\
+  9 & \file{L09} & Practical exam 1: sequential networks \\
+  \addlinespace
+  \multicolumn{3}{@{}l}{\textit{Part \ref{part:can}: the group project, a CAN node}} \\
+  10 & \file{L10} & Project start: the CAN bus, the frame and \code{can_def} \\
+  11 & \file{L11} & Architecture, the top level and the register map \\
+  12 & \file{L12} & Synchronisation and the bit timer \\
+  13 & \file{L13} & The CRC-15 engine \\
+  14 & \file{L14} & Transmit shift register and bit stuffing \\
+  15 & \file{L15} & Receive shift register and destuffing \\
+  16 & \file{L16} & The CAN controller I: the state machine and the transmit path \\
+  17 & \file{L17} & The CAN controller II: reception and arbitration \\
+  18 & \file{L18} & The register bank and SPI from the waveform \\
+  19 & \file{L19} & The SPI bridge, \code{can_spi_node} and bring-up \\
+  20 & \file{L20} & Practical exam 2: CAN modules \\
+\end{booktable}
+
+Every chapter opens with what is in it, works its way through the material, closes with a review
+of what you should be able to explain afterwards, and ends with its exercises. The appendices hold
+the tool references, the project specification, the shared contract with the driver course, and a
+closing note on where to read next.
+
+Chapters~\ref{c9:ch} and \ref{c20:ch} are the two examinations. They contain no new theory; they
+say what the exam measures, what shape the tasks take and how to prepare, and they are worth
+reading in advance rather than the day before.
+
+\textbf{One more book belongs to part~\ref{part:can}.} This book describes how to \emph{build} a
+CAN node; the protocol itself is described in \canbook{} (``CAN: the bus, the frame and the
+controller''), a short Swedish book written for both halves of a CAN system. It is the protocol
+reference throughout the second half: its chapters 1--6 are the requirement specification for what
+is built here, bit by bit, and its chapter~7 describes exactly the simplified controller
+part~\ref{part:can} arrives at. Every chapter that adds a protocol rule says where in that book the
+rule is stated, and \secref{app:reading:protocol} has the full chapter map between the two. Its
+chapters 1 and 2 are worth reading before \chapref{c10:ch}; the rest works best as a reference.
+
+\section*{Three layers of verification}
+The course checks its work at three levels, and keeping them apart is a point in itself:
+
+\begin{booktable}{@{}p{9.2em}L@{}}
+  \thead{Layer} & \thead{What it checks} \\
+  \midrule
+  \textbf{By hand} & In CircuitVerse, before any VHDL exists. You derive what the circuit should
+    do, build it, and simulate it against your own prediction. Nothing checks that step
+    automatically, deliberately: predicting a behaviour and then confirming it is the skill the
+    rest of the book rests on. \\
+  \textbf{In the exercises} & You write the VHDL and run a testbench handed out with it,
+    self-checking, under GHDL. No FPGA board is needed, and nearly everything can be verified on
+    an ordinary laptop. \\
+  \textbf{On the board} & The design is synthesised in Quartus Prime Lite and run on a Terasic
+    DE0-CV. During the first half that step is demonstrated; in the group project's last session
+    you do it yourself. \\
+\end{booktable}
+
+\Secref{c2:sec:testbenches} is the full introduction to testbenches, and appendix~\ref{app:sim} is
+the reference you will come back to. Appendix~\ref{app:quartus} is the Quartus flow.
+
+\section*{What the exercises look like}
+The exercises come after every chapter, numbered within the chapter, and each one is tagged with
+its kind:
+
+\begin{booktable}{@{}p{7.4em}L@{}}
+  \thead{Kind} & \thead{What it asks of you} \\
+  \midrule
+  \kindtag[fillaccent5]{Circuit} & Draw, build and simulate a circuit by hand in CircuitVerse, and
+    check it against your own truth table or your own timing diagram. \\
+  \kindtag[fillaccent]{VHDL} & Write a module, with the entity name and the \textbf{port order}
+    the exercise states, and run the testbench handed out with it. \\
+  \kindtag[fillaccent3]{Simulation} & Change something and find out what GHDL reports. Several of
+    them ask you to \emph{predict} the outcome first and then run. \\
+  \kindtag[fillaccent2]{Reasoning} & Answer in prose or in numbers: what the code does, why one
+    construction is better than another, or what a number works out to. \\
+  \kindtag[fillaccent4]{C++} & The course's only C++ exercise, in \chapref{c10:ch}. \\
+\end{booktable}
+
+\textbf{There are no printed solutions, and that is deliberate.} Every exercise that asks you to
+write a VHDL module comes with a self-checking testbench, and that testbench is the answer key: it
+drives your module through every case and says exactly which check failed. The pen-and-paper
+exercises you check against the truth table or the timing diagram you derived yourself, which is
+the whole point of them. A list of answers would remove precisely the step the exercise exists
+for.
+
+\begin{aside}
+\textbf{The port order is the contract.} Every testbench handed out binds to the module it drives
+\textbf{positionally}, and so does every instantiation in the course. Nothing binds a port by
+name. The contract is therefore the \emph{order} and the \emph{types} of the ports, exactly as
+every exercise's interface table lists them, top to bottom. The \emph{names} of the ports are
+yours.
+
+That bargain is worth understanding rather than merely following. Positional binding is shorter to
+write and to read, and it makes the interface table the single source of truth. What it gives up
+is the compiler's help: swap two ports of the same type and nothing complains during analysis, the
+design simply misbehaves in simulation instead. The book keeps its port names all the same, so that
+the text and your code speak about the same signals.
+\end{aside}
+
+\section*{Setting up the tools}
+Everything in this book runs in a Linux terminal: on Linux, or on Windows through WSL. Three
+things cover everything that is not a board:
+
+\begin{itemize}
+  \item \textbf{GHDL}, the open-source VHDL analyser and simulator. It is the tool the course runs
+    on: every module is verified against a testbench in GHDL, and nothing you are asked to produce
+    needs anything else.
+  \item \textbf{CircuitVerse}, a free logic simulator that runs in the browser
+    (\url{https://circuitverse.org/simulator}). Nothing to install.
+  \item \textbf{Git}, for the group project, plus \code{g++} for \chapref{c10:ch}'s framing
+    exercise.
+\end{itemize}
+
+\noindent On WSL or Ubuntu:
+
+\begin{shell}
+sudo apt -y update
+sudo apt -y install git make ghdl g++
+ghdl --version           # 3.x or later
+\end{shell}
+
+\noindent The course repository has the test framework as a submodule, so clone it with the
+submodules:
+
+\begin{shell}
+git clone --recurse-submodules <repo-url>
+git submodule update --init       # if it is already cloned without them
+\end{shell}
+
+\noindent Two commands at the root of the repository cover most of what the book asks for:
+
+\begin{shell}
+make build               # Build and simulate everything there is: examples, exercises, project.
+make lint                # Markdown links, duplicate check, no trailing whitespace.
+\end{shell}
+
+\noindent\code{make build-project} reports every project testbench as skipped in a freshly checked
+out repository. That is the expected state: \file{controller/} and \file{bridge/} hold only the
+files handed out, and the modules are the group's to write in its own repository. A testbench
+whose modules are missing is skipped, never failed.
+
+\textbf{Quartus Prime Lite and a DE0-CV board are recommended but not necessary.} No exercise and
+no assessed element requires them; appendix~\ref{app:quartus} describes the flow for those who
+want it, and for the group project's last session, where every group brings up its own node on
+hardware handed out to them.
+
+\section*{Where to read next}
+The node built in part~\ref{part:can} is one half of a system. The other half, the C++ code that
+talks to it over SPI, is written in another course, against the same register map and the same
+protocol specification \textemdash{} and against the same protocol book, which is shared between
+the two. Appendix~\ref{app:reading} describes it, the standards the design relates to, and four
+directions to take the subject further.

@@ -1,0 +1,180 @@
+% Chapter 20, typeset from lectures/L20/README.md and info/examination.md.
+
+\chapter{Practical exam 2: CAN modules}
+\label{c20:ch}
+
+{\large\itshape Three hours, individual, at the computer. Covers the project's modules: bit timing,
+CRC, bit stuffing, frame sequencing, register semantics and the SPI transaction.\par}
+
+\begin{chapterbox}{In this chapter}
+\begin{itemize}
+  \item Why an individual exam follows a group project.
+  \item The exam's format: writing tasks with a testbench handed out, and reading tasks on paper.
+  \item The four kinds of task: variants, repairs, a single register, reading.
+  \item What you are allowed to use \textemdash{} including the group's own project code.
+  \item How to prepare, what the exam measures, and where the design goes afterwards.
+\end{itemize}
+\end{chapterbox}
+
+This is the course's second and last examination. Like \chapref{c9:ch} it contains no new theory; the
+chapter says what the exam measures, what shape the tasks take and how to prepare. Marks and grade
+boundaries are in appendix~\ref{app:project}.
+
+The exam covers \textbf{the project's modules}, that is, \chapref{c10:ch} to \ref{c19:ch}: the bit
+timing, the CRC, the bit stuffing in both directions, the frame sequencing, the register semantics
+and the SPI transaction. Part~\ref{part:vhdl}'s material has not gone away \textemdash{} every module
+in the project is built from the synchronous process template, a counter, a shift register and a
+Moore machine \textemdash{} but the emphasis is on part~\ref{part:can}.
+
+% ------------------------------------------------------------------------------------------
+\section{Why an individual exam on a group project}
+\label{c20:sec:why}
+
+The project is assessed as a group and accounts for half the course. This exam measures something
+else: that every individual understands what the group built, not only the part they wrote
+themselves.
+
+That is not a distrust of the way of working but a consequence of it. A group of four or five splits
+eleven modules between them, and that split is exactly what makes the project feasible in ten
+sessions. The downside is equally predictable: whoever wrote \code{crc15} can get away without ever
+having needed to understand why \code{bit_timer} has two pulses, and whoever wrote the register bank
+without having thought about what the stuffing does to the CRC. The tasks are therefore drawn from
+\emph{all} parts of the project, regardless of who wrote which module.
+
+\begin{aside}
+There is a practical consequence of this worth taking seriously long before the exam: \textbf{the code
+review during the project is the preparation}. A group that genuinely reviews each other's PRs,
+instead of approving them unread, has already read everything the exam asks about.
+\Chapref{c15:ch}'s code review seminar is the occasion to practise that; it is also the occasion that
+pays off here.
+\end{aside}
+
+% ------------------------------------------------------------------------------------------
+\section{Format}
+\label{c20:sec:format}
+
+The same shape as \chapref{c9:ch}: independent tasks, unrelated to each other and ordered roughly by
+increasing difficulty.
+
+Most are \textbf{writing tasks} \textemdash{} a self-checking testbench handed out and a description
+of the module it drives, with port order, types and behaviour. The task is to write the module so that
+the testbench passes.
+
+Besides those there are \textbf{reading tasks}: a timing diagram or an SPI transaction to interpret on
+paper. They have no testbench, for exactly the reason that makes them worth asking \textemdash{}
+reading a waveform is a skill in itself, and it is not examined by writing VHDL. They are marked
+against an answer key, and partly correct answers earn partial marks the same way partly correct logic
+does.
+
+\subsection*{The four kinds of task}
+\begin{description}[style=unboxed,leftmargin=0pt,itemsep=0.8ex]
+  \item[Variants.] A \code{bit_timer} with a different sample point or a different bit rate. A
+    stuffing detector counting a different number. A CRC with a different polynomial. The module is
+    familiar; the one point where it differs from the project's is the point that requires you to
+    have understood it.
+  \item[Repairs.] A given state machine or a given shift register that is \emph{almost} right. Find
+    the fault using the testbench's output and fix it. It is \chapref{c14:ch}'s and \ref{c15:ch}'s
+    working method put to the test: read what the testbench reports, and work backwards from there to
+    the line that caused it.
+  \item[A single register.] One register from the register bank, with its set and clear rule, isolated
+    from the rest. \Chapref{c18:ch}'s difference between a pulse and a sticky level is the whole
+    task.
+  \item[Reading.] A timing diagram or an SPI transaction to interpret: what is on the bus, and what
+    should have been there?
+\end{description}
+
+Partly correct logic earns partial marks, so never hand in an empty file because the module did not
+get finished; the same goes for a half-interpreted timing diagram. The marking reads the code as well,
+not only the testbench's outcome: a module that passes by doing something other than what was asked
+does not earn full marks.
+
+% ------------------------------------------------------------------------------------------
+\section{Permitted aids}
+\label{c20:sec:aids}
+
+\textbf{Allowed:}
+\begin{itemize}
+  \item All the course material: this book, the lectures' READMEs and every appendix. The register map
+    and the protocol specification (appendix~\ref{app:protocol}) belong there of course; several tasks
+    are written against them.
+  \item \textbf{The group's own project code.} You built it; it would be strange to pretend
+    otherwise. The tasks are written so that copying does not help \textemdash{} the variants differ
+    at precisely the point that requires you to have understood the module, and the repairs have no
+    counterpart in the repository at all.
+  \item Your own computer with GHDL, and CircuitVerse if you want to draw a circuit or a waveform
+    before you write it. That is often faster, not slower.
+\end{itemize}
+
+\textbf{Not allowed:} communication with others in any form; language models and other tools that
+generate or explain VHDL for you; and searching the internet for ready-made solutions. The line is not
+drawn at who presses the keys but at whose understanding is being tested.
+
+The full and authoritative list of permitted aids is in appendix~\ref{app:project}; if anything here
+says otherwise, that one applies. If you are unsure whether something is allowed: ask before the exam,
+not during it.
+
+% ------------------------------------------------------------------------------------------
+\section{Before the exam}
+\label{c20:sec:prep}
+
+\begin{itemize}
+  \item Go through the modules in the project that \emph{somebody else} in the group wrote. That is
+    where the gaps are, and it is the one piece of advice in this list that is hard to follow the day
+    before.
+  \item The self-check questions at the end of \chapref{c12:ch} to \ref{c19:ch} are deliberately
+    written as revision material. If you can answer them all without looking anything up, you are
+    ready.
+  \item Read the testbenches handed out through once more. They are the clearest thing there is about
+    exactly what every module promises, and a writing task is always easier for somebody who knows how
+    a testbench states its requirements.
+  \item Redraw \code{bit_timer}'s two pulses and \code{can_controller}'s state diagram on a sheet of
+    paper, from memory. Those two pictures carry more of the project than any single file does.
+  \item Make sure GHDL works on your machine \emph{before} you arrive. A broken toolchain is no reason
+    for extra time.
+\end{itemize}
+
+% ------------------------------------------------------------------------------------------
+\section{What the exam measures}
+\label{c20:sec:measures}
+
+\begin{itemize}
+  \item That you can turn a specification in words into a correct module, with the right port order.
+  \item That you understand the bit timing: why the sample point sits where it does, and which pulse
+    does what.
+  \item That you can reason about bit stuffing in both directions \textemdash{} inserting and removing
+    are the same rule seen from two sides, and both sides have to keep the CRC out of it.
+  \item That you can tell a pulse from a sticky level, and know which layer is responsible for which.
+  \item That you can read a testbench's output and find your way back to the cause.
+\end{itemize}
+
+% ------------------------------------------------------------------------------------------
+\section{After the course}
+\label{c20:sec:after}
+
+The controller goes on: the parallel class writes the C++ driver against the same registers over the
+same SPI transport, and the node travels on to the CAN labs in the next embedded systems course. What
+holds the two halves together is the register map and the protocol specification in
+appendix~\ref{app:protocol} \textemdash{} not the code on either side. That is the whole point of an
+interface: two groups that have never read each other's source can still meet on a bus, because the
+specification between them was written before either of them started.
+
+Over twenty chapters the book has gone from a gate on paper to a CAN node a microcontroller can talk
+to. Every pattern along the way is common property in digital design and carries over unchanged into
+whatever you build next:
+
+\begin{itemize}
+  \item the two-flip-flop synchroniser (\chapref{c4:ch}), which every asynchronous input passes
+    through,
+  \item the clocked process template (\chapref{c3:ch}), which every sequential module in the book is
+    written with,
+  \item the Moore machine (\chapref{c8:ch}), as an enumerated type and a \code{case},
+  \item the shift register and the counter (\chapref{c6:ch}) as building blocks rather than as special
+    cases, and
+  \item finally the split into blocks with one clear responsibility each (\chapref{c11:ch}), which is
+    the only reason eleven modules can be written by five people in parallel and still fit together.
+\end{itemize}
+
+If you want to go further than the design in this book \textemdash{} to a controller with error
+counters and ACK checking, to verification beyond a hand-written testbench, or to the next protocol
+built with the same method \textemdash{} appendix~\ref{app:reading} points out what there is to read
+next.

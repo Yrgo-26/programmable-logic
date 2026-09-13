@@ -1,0 +1,45 @@
+% Kapitel 16, satt ur lectures/L16: Appendix A blir avsnitt 16.1-16.7, Appendix B övningarna.
+
+\chapter{CAN-kontrollern I: tillståndsmaskinen och sändvägen}
+\label{c16:ch}
+
+{\large\itshape Ramen som tillståndsmaskin, först förklarad och sedan byggd på sändarsidan.\par}
+
+\begin{chapterbox}{I det här kapitlet}
+\begin{itemize}
+  \item Den ramsekvenserande tillståndsmaskinen som begrepp: tillståndsdiagrammet, fälttabellen och
+    mönstret \code{STATE_LOAD_*}/skifta, innan någon VHDL skrivs.
+  \item Att lägga till tillståndstypen och maskinens signaler i \code{can_controller}, och sedan
+    skriva dess sändväg.
+  \item Att driva den öppna dräneringsbussen från skiftregistrets aktuella bit.
+  \item Att mata \code{crc15} korrekt: grinda på \code{bit_valid}, inte på \code{bit_done}.
+\end{itemize}
+\end{chapterbox}
+
+\code{can_controller} är det enda block som känner till det faktiska CAN-ramformatet
+(\chapref{c10:ch}). Den instansierar \code{bit_timer}, \code{crc15}, \code{tx_shift_reg} och
+\code{rx_shift_reg} internt och sekvenserar en hel ram fält för fält. Det här kapitlet bygger
+\textbf{sändvägen} (en nod som skickar en komplett ram); \chapref{c17:ch} lägger till mottagning och
+arbitrering.
+
+Entiteten och dess femton portar skrevs i \chapref{c11:ch} och är oförändrade; se
+\secref{c11:sec:interface} för vad var och en är till för. Ingenting i det här kapitlet eller i
+\chapref{c17:ch} ändrar dem: hela \code{can_controller}s sänd- och mottagarbeteende byggs
+\emph{innanför} ett gränssnitt som legat fast sedan \chapref{c11:ch}.
+
+Två påminnelser som spelar roll för tillståndsmaskinen nedan:
+\begin{itemize}
+  \item \code{can_controller_tb} binder \textbf{positionellt}, så portordningen som fastställdes i
+    \chapref{c11:ch} är det som måste stämma; namnen är dina.
+  \item \code{tx_bus} och \code{bus_en} hör ihop. Att driva bussen dominant betyder
+    \code{bus_en = '1'} med \code{tx_bus = '0'}; att släppa den betyder \code{bus_en = '0'}. En nod
+    driver aldrig recessivt aktivt.
+\end{itemize}
+
+Det här är projektets största enskilda kodinsats och den enda del som är svår att dela upp på flera
+personer. Ett rimligt upplägg är att två skriver och resten granskar tätt, snarare än att fyra
+skriver var sin del av samma process.
+
+\input{chapters/16/controller}
+\input{chapters/16/summary}
+\input{chapters/16/exercises}

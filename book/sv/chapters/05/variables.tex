@@ -1,0 +1,259 @@
+% Avsnitt 5.1-5.5, ur lectures/L05/appendix/a_variables_and_hardware.md (A.1-A.4).
+
+\section{Vad som återstår}
+\label{c5:sec:intro}
+
+Varje konstruktion du behöver för att beskriva hårdvara har du redan använt: \code{entity} och
+\code{architecture} i \chapref{c1:ch}, \code{std_logic_vector}, \code{process} och \code{case} i
+\chapref{c2:ch}, den klockade processen och schemaläggningsregeln i \chapref{c3:ch},
+subkomponenter och generics i \chapref{c2:ch} och \ref{c4:ch}.
+
+Två saker återstår, och de är de två svåraste att lista ut på egen hand:
+\begin{itemize}
+  \item Den första är \code{variable}, den enda konstruktion boken inte har behövt förrän nu. Den
+    ser ut som en signal och beter sig inte alls som en, och skillnaden är precis den sort som ger
+    en design som simulerar trovärdigt och är tyst felaktig. \Secref{c5:sec:variable} går igenom
+    fallet där det biter.
+  \item Den andra är vad något av det här faktiskt blir. Sedan \chapref{c1:ch} har du litat på att
+    syntesverktyget bygger den krets du beskrev. Det gör det, men inte av något du skulle känna
+    igen. \Secref{c5:sec:fabric} öppnar lådan. Det visar sig att en FPGA inte innehåller några
+    grindar alls, vilket är skälet till att \chapref{c2:ch}:s Karnaughdiagram köpte dig mindre än
+    de såg ut att göra. Din klocka har en hastighetsgräns (\secref{c5:sec:fmax}), och något
+    specifikt sätter den. Och ett \code{case} med en gren som saknas ger dig tyst ett minneselement
+    som ingen bad om (\secref{c5:sec:latch}).
+\end{itemize}
+
+Inget av avsnitten svarar på ”är min logik rätt?” Den frågan har du besvarat sedan \chapref{c1:ch}.
+De svarar på de två frågorna efter den: är det här vad jag menade, och kommer det att få plats och
+gå.
+
+% ------------------------------------------------------------------------------------------
+\section{\code{variable}: processlokal lagring som uppdateras direkt}
+\label{c5:sec:variable}
+
+En \code{variable} deklareras inuti en \code{process}, mellan \code{process(...)} och \code{begin}.
+Den avgörande skillnaden mot en \code{signal}: variabeltilldelning använder \code{:=} och får
+verkan \textbf{omedelbart}, så redan nästa sats som läser den ser det uppdaterade värdet, precis
+som en tilldelning i C. Det finns ingen schemaläggning, ingenting av den
+vänta-tills-processen-suspenderar-fördröjning som \secref{c3:sec:template} stavade ut för signaler,
+och inget ”sista tilldelningen vinner”.
+
+\begin{booktable}{@{}p{9em}p{9.6em}L@{}}
+   & \thead{\code{signal} (\code{<=})} & \thead{\code{variable} (\code{:=})} \\
+  \midrule
+  Deklareras & I arkitekturens deklarativa del & I processens deklarativa del \\
+  Synlig från & Var som helst i arkitekturen & Endast inuti sin egen process \\
+  Uppdateringstillfälle & Schemalagd: tillämpas när processen nästa gång suspenderar & Omedelbar:
+    tillämpas före nästa sats \\
+  Upprepad tilldelning i ett varv & Bara den sista överlever; tidigare kastas & Var och en får
+    verkan, i tur och ordning \\
+\end{booktable}
+
+\subsection*{Varför det här faktiskt spelar roll: en XOR-paritetsgenerator}
+En entitet som beräknar XOR-pariteten hos en 8-bitars ingång, \code{'1'} om \code{bits} har ett
+udda antal ettställda bitar:
+
+\begin{vhdlcode}
+entity parity_gen is
+    port(bits  : in  std_logic_vector(7 downto 0);
+         parity: out std_logic);
+end entity;
+\end{vhdlcode}
+
+Med bakgrund i mjukvara är den första ingivelsen att ackumulera den löpande XOR-summan i en loop,
+med en signal som ackumulator:
+
+\begin{vhdlcode}
+-- Don't do this: shown to demonstrate why it doesn't work.
+architecture broken of parity_gen is
+signal parity_s: std_logic;
+begin
+    parity <= parity_s;
+
+    process(bits) is
+    begin
+        parity_s <= '0';
+        for i in bits'range loop
+            parity_s <= parity_s xor bits(i);
+        end loop;
+    end process;
+end architecture;
+\end{vhdlcode}
+
+Spåra ett varv, med schemaläggningsregeln från \secref{c3:sec:template}: varje läsning av
+\code{parity_s} returnerar det den höll \emph{innan det här varvet började} (kalla det
+\code{old_parity}), och bara den sista tilldelningen överlever.
+\begin{itemize}
+  \item \code{parity_s <= '0';} schemalägger \code{'0'}. Ännu inte tillämpad.
+  \item \code{i = 7} (\code{bits'range} på \code{(7 downto 0)} går från hög till låg): läser
+    \code{parity_s}, får \code{old_parity}, eftersom \code{'0'}:an inte har tillämpats.
+    Schemalägger \code{old_parity xor bits(7)}, och kastar \code{'0'}:an.
+  \item \code{i = 6}: läser \code{parity_s}, återigen \code{old_parity}. Schemalägger
+    \code{old_parity xor bits(6)}, och kastar den föregående.
+  \item \dots och så vidare för varje iteration \dots
+  \item \code{i = 0}, den sista satsen i varvet: läser fortfarande \code{old_parity}, schemalägger
+    \code{old_parity xor bits(0)}, och kastar allt före den.
+  \item Processen suspenderar och \code{parity_s} blir \code{old_parity xor bits(0)}, den enda av
+    nio schemalagda tilldelningar som överlevde.
+\end{itemize}
+
+Resultatet beror bara på \code{bits(0)} och på vad \code{parity_s} råkade hålla sedan tidigare. Sju
+iterationer och den inledande \code{'0'}:an beräknades och slängdes. Det här är inget randfall: det
+är vad en signal-som-ackumulator \emph{alltid} gör, eftersom varje iteration läser samma frusna
+värde och bara den textuellt sista tilldelningen behålls.
+
+Samma beräkning med en \code{variable}, och det här är det genomarbetade exemplet på disk:
+
+\vhdlfile{lectures/L05/parity_gen/parity_gen.vhd}
+
+Nu tillämpas \code{acc := '0'} omedelbart; \code{i = 7} läser \code{'0'}, XOR:ar in \code{bits(7)}
+och uppdaterar \code{acc} på en gång; \code{i = 6} läser det just uppdaterade värdet, och så vidare
+genom varje iteration. Loopen slutar med att \code{acc} håller den sanna XOR:en av alla åtta
+bitarna, och \code{parity_s <= acc;} schemalägger det enda korrekta värdet, den enda tilldelningen
+till \code{parity_s} i varvet.
+
+\subsection*{Vad den loopen inte är}
+Det är inte åtta steg som hårdvaran utför ett efter ett. Det är här en bakgrund i C vilseleder som
+mest, så det är värt att säga rakt ut: en \code{for}-loop vars gränser är fastlagda vid
+elaboreringen \textbf{rullas ut} av syntesverktyget. De åtta iterationerna blir åtta XOR-grindar i
+en kedja, som alla lägger sig inom en fortplantningsfördröjning, i samma klockcykel. Det finns
+ingen räknare för \code{i}, ingen förgrening, ingen iteration i tiden. Loopen skriver åtta grindar
+på tre rader; den gör inte åtta saker i följd.
+
+Det är också därför \code{acc}, som läser sig som en löpande summa, inte kostar någon lagring alls.
+Den behöver aldrig överleva en klockflank: vart och ett av dess värden är bara ledningen mellan två
+av de där XOR-grindarna. En \code{variable} är rätt verktyg just för att den aldrig överlever ett
+varv.
+
+Detsamma gäller \code{bits'range}. \textbf{Attributet} \code{'range} ger indexintervallet för
+\code{bits}, här \code{7 downto 0}, så att loopen täcker varje bit utan att gränserna skrivs två
+gånger. Det löses upp vid elaboreringen, som allt annat i loopens huvud, vilket är precis därför
+verktyget kan rulla ut den. \code{for i in 0 to 1 loop} i \chapref{c3:ch}:s \file{led_toggle.vhd}
+betyder samma sak: båda bitarna får sina egna grindar och båda uppdateras i samma cykel.
+
+\subsection*{Tumregeln}
+\begin{itemize}
+  \item Använd en \code{variable} för en tillfällig beräkning som konsumeras helt inom ett varv:
+    loopackumulatorer, temporära byten, mellanvärden som lämnas över till en signal på slutet,
+    precis som \code{acc}.
+  \item Använd en \code{signal} för allt som en annan process eller omvärlden läser, och allt som
+    måste hålla sitt värde över skilda varv (en räknare, eller ett skiftregisters lagrade bitar,
+    båda i \chapref{c6:ch}).
+\end{itemize}
+
+En variabel \emph{kan} behålla sitt värde mellan varv genom samma process, och beter sig då som
+statisk lokal lagring snarare än en ny lokal variabel varje gång, så det går att bygga tillstånd
+med en. Men eftersom dess uppdateringar är omedelbara snarare än schemalagda beter den sig
+annorlunda än en signal som används på samma sätt, särskilt för allt som modellerar en kedja av
+register som stegar ett steg per klockflank. Om tillstånd genuint behöver bestå och läsas av annan
+logik, grip efter en \code{signal}: semantiken med schemalagd uppdatering är det som får
+\chapref{c6:ch}:s räknare och skiftregister att fungera.
+
+% ------------------------------------------------------------------------------------------
+\section{Vad FPGA:n faktiskt består av}
+\label{c5:sec:fabric}
+
+En FPGA är inget oskrivet blad som grindar etsas in i. Den är ett fast rutnät av identiska små
+block, tillverkade innan någon skrev din VHDL, och ”syntes” är att lista ut hur de ska konfigureras
+så att de beter sig som den krets du beskrev. Två av dem spelar roll här:
+\begin{itemize}
+  \item En \textbf{uppslagstabell}, eller \textbf{LUT}: ett litet minne, typiskt fyra till sex
+    ingångar och en utgång. Ladda den med sanningstabellen för vilken boolesk funktion som helst av
+    de ingångarna, så beräknar den den funktionen. Det är det ärliga svaret på ”vad blir en grind
+    på en FPGA”: ingenting blir en grind. En LUT med fyra ingångar beräknar \code{a and b},
+    \code{a xor b or (c and not d)}, eller vilken annan funktion som helst av upp till fyra
+    ingångar till exakt samma kostnad, eftersom det i varje fall är samma block som håller en annan
+    tabell.
+  \item En \textbf{vippa}: en bit klockad lagring, som sitter bredvid varje LUT.
+\end{itemize}
+
+På DE0-CV:ns Cyclone~V är de paketerade tillsammans som en \textbf{ALM}, som håller en delbar LUT
+med sex ingångar, användbar som en funktion av sex variabler eller två mindre, plus fyra vippor.
+Det är den enhet Quartus fitter-rapport räknar, vilket är skälet till att den talar om ALM:ar
+snarare än grindar.
+
+Det är nästan hela historien. \code{register4} blir fyra vippor, \code{mux_8to1} en handfull
+LUT:ar, och \chapref{c8:ch}:s tillståndsmaskin LUT:ar som matar de vippor som håller tillståndet.
+
+Det förklarar också något från \chapref{c2:ch} som annars skulle se ut som ett brutet löfte: boken
+lät dig minimera uttryck med Karnaughdiagram för att spara grindar, och nämnde sedan aldrig
+besparingen igen. På en FPGA kostar en funktion av fyra variabler en LUT vare sig du minimerade den
+eller inte. Minimering spelar fortfarande roll: det är så du förstår en krets, den är precis rätt
+för de flöden med diskret logik och ASIC som Karnaughdiagram uppfanns för, och att reducera en
+funktion under LUT:ens ingångsbredd är det som hindrar den från att behöva en andra nivå av LUT:ar.
+Men på det här kortet köper den oftast ingenting, och det är bättre att veta det än att undra.
+
+% ------------------------------------------------------------------------------------------
+\section{Varför en klocka har en hastighetsgräns}
+\label{c5:sec:fmax}
+
+Signaler tar tid på sig genom en LUT och längs ledningarna mellan block. Den
+\textbf{fortplantningsfördröjningen} är skälet till att en klocka inte kan gå hur snabbt som helst.
+
+Tänk dig den form varje design i den här boken har, en vippa, lite kombinatorik, ännu en vippa:
+\begin{itemize}
+  \item På en stigande flank presenterar den första ett nytt värde, som måste färdas genom varje
+    LUT och ledning mellan de två och \emph{lägga sig} innan nästa flank anländer.
+  \item Om det inte har gjort det fångar den andra vippan ett värde som fortfarande ändras, och
+    designen gör fel sak tillförlitligt och gåtfullt.
+\end{itemize}
+
+Så klockperioden måste täcka tre saker:
+\begin{itemize}
+  \item Den första vippans \textbf{clock-to-Q}-fördröjning: tiden mellan flanken och att dess
+    utgång faktiskt ändras.
+  \item Den \textbf{kombinatoriska fördröjningen} genom LUT:arna och ledningarna mellan de två.
+  \item Den andra vippans \textbf{setup-tid}.
+\end{itemize}
+
+Den långsammaste sådana vägen är \textbf{kritiska vägen}, och ett genom den summan är \textbf{Fmax}.
+
+Quartus beräknar Fmax åt dig, i tidsanalyssteget (bilaga~\ref{app:quartus}), men bara om du talar
+om för den vad klockan är. Det innebär en \file{.sdc}-villkorsfil med ett \code{create_clock} på
+\code{50 MHz}-ingången. Utan en sådan har analysatorn ingen period att jämföra något mot, så den
+rapporterar varje väg som obegränsad och ger dig ingen Fmax alls. Skilt från det är en design som
+”missar timingen” en där någon väg visade sig långsammare än den period du faktiskt deklarerade.
+
+\textbf{Inget av det ingår i den här boken.} Du kommer inte att skriva någon \file{.sdc}, läsa
+någon timingrapport, eller möta en design som missar timingen, eftersom varje design här ryms inom
+20~ns med marginal. Det är värt att veta att steget finns och vad det kräver, så att du känner igen
+det första gången en design av dig närmar sig gränsen.
+
+Två följder värda att bära med sig:
+\begin{itemize}
+  \item \textbf{Djup kombinatorik kostar dig hastighet, inte antalet vippor.} Att kedja ett långt
+    uttryck mellan två register förlänger kritiska vägen; att dela upp det så att en del av arbetet
+    sker på en cykel och resten på nästa förkortar den. Den avvägningen, fler register mot en
+    snabbare klocka, är det enskilt vanligaste greppet i snabb digital konstruktion.
+  \item \textbf{\code{50 MHz} är en budget på 20~ns.} Det är den siffra varje väg i din design
+    tävlar mot, och det är gott om tid vid de här hastigheterna.
+\end{itemize}
+
+% ------------------------------------------------------------------------------------------
+\section{Låset du får av misstag}
+\label{c5:sec:latch}
+
+\Chapref{c3:ch} byggde ett D-lås, visade att det var transparent medan det var aktiverat, och lade
+det sedan åt sidan till förmån för vippan. Här kommer det tillbaka objudet.
+
+\Secref{c2:sec:process} krävde ett \code{when others} på varje \code{case}, och gav språkets skäl:
+ett \code{case} måste täcka varje värde av sin selektors typ. Den allmänna regeln bakom det är att
+en kombinatorisk \code{process} måste tilldela sin utgång på \emph{varje} väg genom sig, och det
+skälet går nu att formulera:
+\begin{itemize}
+  \item VHDL kräver att en signal behåller sitt gamla värde om ingenting tilldelar ett nytt.
+  \item Om någon väg genom din process lämnar \code{x} otilldelad har du sagt att \code{x} måste
+    \emph{minnas} sitt föregående värde på den vägen, och att minnas är inte något ett
+    kombinatoriskt nät kan göra.
+  \item Så verktyget bygger det enda som kan: ett lås, precis det från \secref{c3:sec:latch}.
+\end{itemize}
+
+Det är ett \textbf{oavsiktligt lås}, och det är nästan aldrig vad någon menade. Det är en varning
+snarare än ett fel, designen kommer ofta att verka fungera, och meddelandet är värt att känna igen:
+
+\begin{console}
+Warning: Inferred latch(es) for signal "x"
+\end{console}
+
+Åtgärden är aldrig att lägga till ett lås med flit. Den är att tilldela signalen på varje väg,
+vilket är regeln du redan följde.

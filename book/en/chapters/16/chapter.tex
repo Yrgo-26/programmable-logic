@@ -1,0 +1,46 @@
+% Chapter 16, typeset from lectures/L16: Appendix A becomes sections 16.1-16.7, Appendix B the
+% exercises.
+
+\chapter{The CAN controller I: the state machine and the transmit path}
+\label{c16:ch}
+
+{\large\itshape The frame as a state machine, first explained and then built on the transmit
+side.\par}
+
+\begin{chapterbox}{In this chapter}
+\begin{itemize}
+  \item The frame-sequencing state machine as a concept: the state diagram, the field table and the
+    \code{STATE_LOAD_*}/shift pattern, before any VHDL is written.
+  \item Adding the state type and the machine's signals to \code{can_controller}, and then writing
+    its transmit path.
+  \item Driving the open-drain bus from the shift register's current bit.
+  \item Feeding \code{crc15} correctly: gate on \code{bit_valid}, not on \code{bit_done}.
+\end{itemize}
+\end{chapterbox}
+
+\code{can_controller} is the only block that knows the actual CAN frame format (\chapref{c10:ch}). It
+instantiates \code{bit_timer}, \code{crc15}, \code{tx_shift_reg} and \code{rx_shift_reg} internally
+and sequences a whole frame field by field. This chapter builds the \textbf{transmit path} (a node
+sending a complete frame); \chapref{c17:ch} adds reception and arbitration.
+
+The entity and its fifteen ports were written in \chapref{c11:ch} and are unchanged; see
+\secref{c11:sec:interface} for what each is for. Nothing in this chapter or in \chapref{c17:ch}
+changes them: the whole of \code{can_controller}'s transmit and receive behaviour is built
+\emph{inside} an interface that has stood still since \chapref{c11:ch}.
+
+Two reminders that matter to the state machine below:
+\begin{itemize}
+  \item \code{can_controller_tb} binds \textbf{positionally}, so the port order settled in
+    \chapref{c11:ch} is what has to match; the names are yours.
+  \item \code{tx_bus} and \code{bus_en} go together. Driving the bus dominant means
+    \code{bus_en = '1'} with \code{tx_bus = '0'}; releasing it means \code{bus_en = '0'}. A node
+    never drives recessive actively.
+\end{itemize}
+
+This is the project's largest single piece of coding and the one part that is hard to split between
+several people. A reasonable arrangement is two writing and the rest reviewing closely, rather than
+four writing one part each of the same process.
+
+\input{chapters/16/controller}
+\input{chapters/16/summary}
+\input{chapters/16/exercises}

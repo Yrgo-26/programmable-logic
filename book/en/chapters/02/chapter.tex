@@ -1,0 +1,34 @@
+% Chapter 2, typeset from lectures/L02: Appendix A becomes sections 2.1-2.6, Appendix C becomes
+% section 2.7, and Appendix B becomes the exercises.
+
+\chapter{Larger networks, multiplexers and submodules}
+\label{c2:ch}
+
+{\large\itshape Minimising a network, the first designs that call for a process, and the first
+design made of more than one entity.\par}
+
+\begin{chapterbox}{In this chapter}
+\begin{itemize}
+  \item Karnaugh maps: why a sum of products read straight out of the truth table rarely gives the
+    smallest network.
+  \item \code{std_logic_vector}: bundling several wires under one name, indexing and slicing.
+  \item Multiplexers, from 2-to-1 to 8-to-1.
+  \item \code{process} and \code{case}: sequential statements inside otherwise parallel hardware.
+  \item Submodules: writing a block once and instantiating it more than once.
+  \item Self-checking testbenches, and the three GHDL commands that run one.
+\end{itemize}
+\end{chapterbox}
+
+\Chapref{c1:ch} took a circuit all the way from a requirement to a file. This chapter does three
+things to that path: it tightens the \emph{derivation} with Karnaugh maps, it gives you the VHDL
+constructs a larger network needs, and it turns verification into something you run instead of
+something you do by eye.
+
+Read \secref{c2:sec:kmap} to \ref{c2:sec:submodules} in order; they build on each other.
+\Secref{c2:sec:testbenches} is the book's guide to running testbenches, and every later chapter's
+exercises refer back here.
+
+\input{chapters/02/larger_networks}
+\input{chapters/02/testbenches}
+\input{chapters/02/summary}
+\input{chapters/02/exercises}

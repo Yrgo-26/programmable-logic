@@ -1,0 +1,413 @@
+% Appendix D, typeset from project/register_map.md and project/spi_register_protocol.md.
+
+\chapter{The register map and the SPI protocol}
+\label{app:protocol}
+
+This is the contract at the middle of the project, and it is written for \textbf{two classes at
+once}: this course builds the FPGA side as an SPI slave (\chapref{c18:ch} and \ref{c19:ch}), and the
+parallel class builds the microcontroller side as master. Both halves are written against this
+document, not against each other's code. \textbf{If an implementation and this appendix disagree, the
+implementation is wrong.}
+
+The contract says nothing about CAN as a protocol; it assumes it. \canbook{} is the description, and
+its chapter~7 is the one explaining why this layer is needed at all: a controller signalling with
+one-cycle pulses cannot be polled over a serial bus.
+
+Two things are kept apart, and it is worth knowing which is which. The \emph{register map}
+(\secref{app:protocol:map} to \ref{app:protocol:order}) says \textbf{what} the registers mean. The
+\emph{transaction format} (\secref{app:protocol:electrical} to \ref{app:protocol:timing}) says
+\textbf{how} they are reached over the wires.
+
+\begin{warning}
+An older version of this project had the driver reach the registers via memory-mapped I/O at the base
+address \code{0xFF200000}. That assumes a processor with an address bus out to the FPGA fabric, which
+the microcontroller in this system does not have. The registers are reached over SPI, and the
+\textbf{Index} column below, not the offset, is what goes in the command byte.
+\end{warning}
+
+% ------------------------------------------------------------------------------------------
+\section{The registers}
+\label{app:protocol:map}
+
+\begin{booktable}{clllL}
+  \thead{Index} & \thead{Register} & \thead{Offset} & \thead{Access} & \thead{Description} \\
+  \midrule
+  0 & \code{STATUS} & \code{0x00} & R & Bit 0: TX ready. Bit 1: RX valid. Bit 2: Error. \\
+  1 & \code{TX_ID} & \code{0x04} & R/W & 11-bit transmit ID (bits 10--0). \\
+  2 & \code{TX_DLC} & \code{0x08} & R/W & Data Length Code (bits 3--0, value 0--8). \\
+  3 & \code{TX_DATA_LO} & \code{0x0C} & R/W & Transmit data bytes 0--3 (byte 0 = MSB). \\
+  4 & \code{TX_DATA_HI} & \code{0x10} & R/W & Transmit data bytes 4--7 (byte 4 = MSB). \\
+  5 & \code{TX_SEND} & \code{0x14} & W & Write \code{0x1} to trigger a transmission. \\
+  6 & \code{RX_ID} & \code{0x18} & R & Received identifier (bits 10--0). \\
+  7 & \code{RX_DLC} & \code{0x1C} & R & Received DLC (bits 3--0). \\
+  8 & \code{RX_DATA_LO} & \code{0x20} & R & Received data bytes 0--3. \\
+  9 & \code{RX_DATA_HI} & \code{0x24} & R & Received data bytes 4--7. \\
+  10 & \code{RX_ACK} & \code{0x28} & W & Write \code{0x1} to acknowledge and empty the RX
+    buffer. \\
+  11 & \code{ERROR_FLAGS} & \code{0x2C} & R/W & The error register; write \code{0x0} to clear. \\
+  12 & \code{TX_ABORT} & \code{0x30} & W & Write \code{0x1} to force TX ready back after an aborted
+    transmission. \\
+\end{booktable}
+
+Indices 13--15 are reserved: a read gives \code{0x00000000}, a write is ignored.
+
+\code{Index} is \code{Offset / 4}. The offset is still in the table because the driver's constants are
+written in that form, but it is the index that goes out on the wire.
+
+% ------------------------------------------------------------------------------------------
+\section{\code{STATUS}}
+\label{app:protocol:status}
+
+\begin{booktable}{cLLL}
+  \thead{Bit} & \thead{Meaning} & \thead{Set by} & \thead{Cleared by} \\
+  \midrule
+  0 & TX ready & reset; the controller's \code{tx_done} pulse; a rising edge on \code{error} while
+    the bit is low; an accepted write to \code{TX_ABORT} & an accepted write to \code{TX_SEND} \\
+  1 & RX valid & the controller's \code{rx_valid} pulse, which also latches \code{RX_*} & a write of
+    \code{0x1} to \code{RX_ACK} \\
+  2 & Error & a \textbf{rising edge} on the controller's \code{error} level & a write of \code{0x0}
+    to \code{ERROR_FLAGS} \\
+\end{booktable}
+
+The point of the whole layer is in that table. The controller signals with one-cycle pulses, 20 ns at
+50 MHz. A driver polling over SPI sees the system a few microseconds at a time at best, so a pulse is
+gone thousands of cycles before the next poll arrives. The register bank turns the pulses into
+\textbf{sticky, pollable levels with an explicit clear}.
+
+% ------------------------------------------------------------------------------------------
+\section{Semantics, register by register}
+\label{app:protocol:semantics}
+
+\begin{itemize}
+  \item \textbf{\code{TX_SEND}} triggers a single \code{tx_req} pulse when a value with \textbf{bit 0
+    set} is written and \code{STATUS} bit 0 is set. The other bits of the written word are ignored.
+    If \code{STATUS} bit 0 is low the write is ignored: a transmission is in progress. A write with
+    bit 0 low does nothing. A read gives \code{0x00000000}, since the register stores nothing but
+    \emph{does} something. Writes are edge events at this layer, so a repeated write is a repeated
+    request, never a held level.
+  \item \textbf{\code{RX_ACK}} clears \code{STATUS} bit 1. Requires bit 0 set; other bits are
+    ignored. A read gives \code{0x00000000}.
+  \item \textbf{\code{TX_ABORT}} sets \code{STATUS} bit 0 back to \code{1}, and does nothing else.
+    Only a write with \textbf{bit 0 set} does anything; a read gives \code{0x00000000}. The register
+    does not reach the controller \textemdash{} a controller that has aborted a transmission is
+    already back at idle and can transmit again; it is only the bank's sticky bit that is stuck. This
+    is the escape hatch: in a correct design it should never be needed, since bit 0 already has two
+    automatic routes back. A driver that finds it needs this has found a bug worth reporting.
+  \item \textbf{\code{ERROR_FLAGS}} is a latch-and-clear-on-zero construct, not a general register:
+    only a write where \textbf{the whole word is zero} clears. \code{0x000000FF} therefore does not
+    clear, even though bit 0 is set. Bit 0 is the latch and mirrors \code{STATUS} bit 2; bits 31--1
+    read as \code{0}. The name is plural for historical reasons.
+  \item \textbf{Masking on write.} \code{TX_ID} stores bits 10--0 and \code{TX_DLC} bits 3--0;
+    surplus bits read back as zero. A write of \code{0xFFFFFFFF} therefore reads back as
+    \code{0x000007FF} and \code{0x0000000F} respectively. \code{TX_DATA_LO}/\code{HI} store all 32
+    bits.
+  \item \textbf{No validation.} A \code{TX_DLC} of \code{0xF} is stored and passed on to the
+    controller as it is. Rejecting \code{dlc > 8} is the driver's responsibility. Doing it on both
+    sides is exactly how the two copies of the rule drift apart.
+  \item \textbf{No buffering on the receive side.} If a new frame arrives before the previous has
+    been acknowledged it is overwritten, and the newest wins. That is a deliberate, documented choice
+    and not a bug; a real controller has a receive queue.
+\end{itemize}
+
+\subsection{Details a driver needs}
+\label{app:protocol:driver}
+
+The points below belong to the contract as much as the tables above.
+
+\begin{itemize}
+  \item \textbf{Every register is 32 bits wide.} All five bytes of a transaction are always
+    transferred, even for a register with only four meaningful bits.
+  \item \textbf{\code{STATUS} bits 31--3 read as \code{0}.} The bank's read multiplexer zeroes
+    everything above bit 2, so a comparison against \code{0x1} is safe.
+  \item \textbf{\code{ERROR_FLAGS} does not distinguish causes.} The four causes \textemdash{} lost
+    arbitration, stuffing error, failed CRC and a received remote frame \textemdash{} all give the
+    same single bit.
+  \item \textbf{\code{RX_DATA_LO}/\code{HI} beyond \code{RX_DLC} read as \code{0x00}.} The controller
+    clears its data accumulator at every frame start, so bytes above the received length never carry
+    residue from an earlier frame: a frame with \code{DLC = 2} following one with \code{DLC = 8} reads
+    as two bytes of data and six zeros. \textbf{Mask against \code{RX_DLC} all the same}
+    \textemdash{} the zeros are the controller's guarantee, not the frame's contents, and a driver
+    copying eight bytes reports six bytes that were never sent.
+  \item \textbf{\code{TX_DATA_LO}/\code{HI} beyond \code{TX_DLC} are never sent}, so they need not be
+    cleared.
+  \item \textbf{Writes to \code{STATUS}, \code{RX_ID}, \code{RX_DLC} and
+    \code{RX_DATA_LO}/\code{HI} are silently ignored.} The transaction completes normally; no error is
+    reported.
+  \item \textbf{There is no timeout to derive.} The map does not say how long a transmission is, so a
+    driver that wants to give up has to choose its own timeout. A guide value: a maximum frame is
+    about 130 bits, and at 1 Mbit/s therefore about 130 µs, plus waiting for an idle bus.
+  \item \textbf{A lost arbitration restores \code{STATUS} bit 0}, exactly as a successful
+    transmission does. A driver therefore does not have to distinguish the outcomes in order to
+    transmit again: poll bit 0, and read \code{ERROR_FLAGS} to find out how it went.
+\end{itemize}
+
+\begin{aside}
+\textbf{What ``the transmission is over'' means here.} \code{STATUS} bit 0 coming back says that the
+transmit port is free again, not that the frame was delivered. A lost arbitration gives back the same
+bit as a clean transmission. \code{ERROR_FLAGS} is what tells them apart, and the ordinary polling
+loop is therefore: wait for bit 0, then read \code{ERROR_FLAGS} to decide whether the frame should be
+resent. \Secref{app:project:limits} lists the other simplifications against real CAN.
+\end{aside}
+
+% ------------------------------------------------------------------------------------------
+\section{Data byte order}
+\label{app:protocol:order}
+
+\code{tx_data} and \code{rx_data} are 64 bits wide, with data byte 0 in the most significant bits:
+
+\begin{widedrawing}
+bit 63                                                              bit 0
++--------+--------+--------+--------+--------+--------+--------+--------+
+| byte 0 | byte 1 | byte 2 | byte 3 | byte 4 | byte 5 | byte 6 | byte 7 |
++--------+--------+--------+--------+--------+--------+--------+--------+
+ \___________ TX_DATA_LO ___________/ \___________ TX_DATA_HI __________/
+\end{widedrawing}
+
+The names \code{LO} and \code{HI} refer to the register pair's order, not to bit significance.
+\code{TX_DATA_LO} carries the \emph{first} four data bytes.
+
+% ------------------------------------------------------------------------------------------
+\section{Counterparts in the hardware}
+\label{app:protocol:hw}
+
+\begin{booktable}{LL}
+  \thead{Register} & \thead{Port on \code{can_controller}} \\
+  \midrule
+  \code{TX_ID}, \code{TX_DLC}, \code{TX_DATA_LO}/\code{HI} & \code{tx_id}, \code{tx_dlc},
+    \code{tx_data} \\
+  \code{TX_SEND} & \code{tx_req} (a pulse) \\
+  \code{STATUS} bit 0 & \code{tx_done} (a pulse), latched into a level \\
+  \code{RX_ID}, \code{RX_DLC}, \code{RX_DATA_LO}/\code{HI} & \code{rx_id}, \code{rx_dlc},
+    \code{rx_data} \\
+  \code{STATUS} bit 1 & \code{rx_valid} (a pulse), latched into a level \\
+  \code{STATUS} bit 2, \code{ERROR_FLAGS} & \code{error} (a level), latched on a rising edge \\
+\end{booktable}
+
+The translation between the two columns is exactly what \code{register_bank} does, and nothing more.
+
+% ------------------------------------------------------------------------------------------
+\section{Electrical parameters and framing}
+\label{app:protocol:electrical}
+
+\begin{booktable}{lL}
+  \thead{Parameter} & \thead{Value} \\
+  \midrule
+  Roles & The microcontroller is SPI master, the FPGA slave. \\
+  Mode & SPI mode 0 (CPOL = 0, CPHA = 0): SCK idles low, both sides sample on the rising edge. \\
+  Bit order & MSB first, in every byte. \\
+  SCK frequency & $\le$ 1 MHz (the AVR32DB28 runs at 4 MHz and divides by 4). See
+    \secref{app:protocol:timing} for why. \\
+  \code{SS} & Active low. Framing signal: one transaction per low period. \\
+  Voltage & The AVR32DB28's core runs at 5 V, the DE0-CV at 3.3 V, and no wire passes through a level
+    shifter. The four SPI wires sit on \code{PORTC}, the AVR DB's second supply domain, with
+    \code{VDDIO2} supplied from the DE0-CV's 3.3 V rail. \\
+\end{booktable}
+
+\subsection{Pin assignment}
+\label{app:protocol:pins}
+
+Both sides are fixed here. The microcontroller side uses \code{SPI0}'s \textbf{ALT1} pin mux on the
+AVR32DB28, which puts the peripheral on \code{PC0}--\code{PC3}; the FPGA side is free, and this
+section spends that freedom on making the boards interchangeable.
+
+ALT1 is no arbitrary choice. \code{PORTC} is the AVR DB's \textbf{MVIO} domain: it is supplied from
+\code{VDDIO2} rather than from \code{VDD}, so tying \code{VDDIO2} to the DE0-CV's 3.3 V rail puts all
+four SPI wires in a 3.3 V domain while the core goes on running at 5 V. Every level the FPGA sees is
+then a level it is specified for, and the 3.3 V the FPGA drives back is read against a 3.3 V threshold
+rather than a 5 V one. On \code{SPI0}'s default mux the same four signals would sit on
+\code{PA4}--\code{PA7} in the \code{VDD} domain, and the bench would need a level shifter to be safe.
+That is why the mux is part of the contract rather than every group's own choice.
+
+The microcontroller side therefore owes two things beyond the pin numbers, and both belong to the
+driver class: \code{PORTMUX.SPIROUTEA} has to select \code{ALT1}, and \code{VDDIO2} has to be
+powered before \code{PORTC} does anything at all. \code{MVIO.STATUS} reports whether it is.
+
+\begin{warning}
+\textbf{This constrains the board, not just the firmware.} The hat carrying the AVR32DB28 is built
+for this system, and the pin table below places three requirements on its layout.
+\code{PC0}--\code{PC3} carry SPI0 and nothing else \textemdash{} no LED, no button, and above all no
+debouncing capacitor on \code{SS}, which at 1 MHz would make the framing edge unusable. Nothing else
+sits anywhere on \code{PORTC}, since the whole port is a 3.3 V domain as soon as \code{VDDIO2} is.
+And \code{VDDIO2} is routed as a net of its own out to a pin, decoupled with 100 nF near the package,
+rather than tied to \code{VDD} on the board. None of the three can be fixed in firmware once the board
+is etched.
+
+\textbf{A single fuse decides whether any of the above is true.} MVIO's dual-supply mode is selected
+by \code{MVSYSCFG} in \code{FUSE.SYSCFG1}. In single-supply mode \code{VDDIO2} is tied internally to
+\code{VDD}, \code{PORTC} becomes a 5 V port, and the wiring in this section then drives 5 V into FPGA
+inputs that cannot take 5 V \textemdash{} while the bench looks exactly like a correct one. Confirm
+the fuse against the datasheet before the first node is connected, not after the first board has
+behaved oddly.
+\end{warning}
+
+\begin{booktable}{llll}
+  \thead{Signal} & \thead{AVR32DB28} & \thead{DE0-CV port} & \thead{DE0-CV pin} \\
+  \midrule
+  \code{SCK} & \code{PC2} & \code{sclk} & \code{GPIO_0(4)} \\
+  \code{MOSI} & \code{PC0} & \code{mosi} & \code{GPIO_0(5)} \\
+  \code{MISO} & \code{PC1} & \code{miso} & \code{GPIO_0(6)} \\
+  \code{SS} & \code{PC3} & \code{ss} & \code{GPIO_0(7)} \\
+  I/O supply & \code{VDDIO2} & \textemdash{} & 3.3 V \\
+  Ground & \code{GND} & \textemdash{} & \code{GND} \\
+\end{booktable}
+
+\code{GPIO_0(0)} to \code{GPIO_0(2)} are reserved for the CAN side \textemdash{} \code{tx_bus},
+\code{bus_en} and the wired-AND bus line \textemdash{} and \code{GPIO_0(3)} is deliberately left
+unused as a gap between the two groups, so that a cable loom sitting one pin off does not short
+anything between the domains.
+
+\textbf{Why fix them at all, when Quartus does not care?} Nothing in the design breaks if a group
+picks other pins; the point is what happens at the bench. With an assignment shared by both classes,
+any microcontroller node fits any FPGA board: a cable loom can be built once instead of per pair, and
+a software group whose partner board is not ready can borrow a working one instead of falling back on
+simulation. That last case is not hypothetical \textemdash{} the two courses hold their bring-up and
+their final presentations the same week.
+
+A group \emph{may} use other pins, but only if the board and the node it is paired with agree, and
+only if it is written down where the other class can see it. An undocumented pin change shows up as a
+node that answers register reads and never sends a frame, which is an expensive way to discover a
+wiring convention.
+
+% ------------------------------------------------------------------------------------------
+\section{Transactions}
+\label{app:protocol:transactions}
+
+Every transaction is exactly \textbf{5 bytes} long: one command byte, then four data bytes. \code{SS}
+falls before the command byte and rises after the fifth byte; it has to stay low for the whole
+transaction.
+
+\begin{textdrawing}
+Bit:      7    6    5    4    3    2    1    0
+        +----+----+----+----+----+----+----+----+
+        | W  | 0  | 0  | 0  |   register index  |
+        +----+----+----+----+----+----+----+----+
+\end{textdrawing}
+
+\begin{itemize}
+  \item \textbf{Bit 7 (\code{W})}: \code{1} = write, \code{0} = read.
+  \item \textbf{Bits 6--4}: reserved, must be \code{0}.
+  \item \textbf{Bits 3--0}: the register index, \code{offset / 4} from \secref{app:protocol:map}
+    (0--12).
+\end{itemize}
+
+\paragraph{Write (\code{W = 1}).}
+The master sends the register value in the four data bytes, \textbf{MSB first} (bits 31--24 in the
+first data byte). The slave commits the assembled value to the addressed register only once the fifth
+byte is complete. Whatever the slave drives on \code{MISO} during a write is meaningless; the master
+discards it.
+
+\paragraph{Read (\code{W = 0}).}
+At the end of the command byte the slave \textbf{latches} the addressed register's current value
+\textbf{once}, into its response shift register. The four data bytes then clock that value out on
+\code{MISO}, MSB first, while the master sends dummy bytes \code{0x00}. The latch-once rule is not an
+implementation detail but part of the contract: the four bytes always belong to \emph{one} coherent
+sample of the register, taken at a single instant \textemdash{} \code{STATUS} in particular must never
+be stitched together from two separate moments.
+
+\paragraph{Abort.}
+If \code{SS} rises before the fifth byte is complete, the transaction is abandoned \textbf{with no
+side effects}: nothing is committed, no trigger fires, and the slave returns to idle, ready for the
+next falling edge on \code{SS}. That is what makes the slave self-healing after a glitch or a master
+that resets.
+
+\paragraph{Invalid commands.}
+A read of a reserved index (13--15) gives \code{0x00000000}; a write to one is ignored. A command byte
+with any reserved bit (6--4) set is invalid in the same way: no read is latched and no write is
+committed, and the slave still consumes the whole five-byte frame before returning to idle. Neither
+case is an error the slave reports \textemdash{} there is no error channel at this layer. Enforcing
+the rule about reserved \emph{command} bits is \code{spi_reg_bridge}'s job; \code{register_bank} never
+sees more than a 4-bit index.
+
+% ------------------------------------------------------------------------------------------
+\section{Timing requirements}
+\label{app:protocol:timing}
+
+\begin{itemize}
+  \item The slave \textbf{never} uses \code{SCK} as a clock. All three inputs (\code{SCK},
+    \code{MOSI}, \code{SS}) are synchronised into the 50 MHz domain with two flip-flops each, and
+    \code{SCK} edges are \emph{detected}, not clocked on (\chapref{c4:ch} for why, \chapref{c18:ch}
+    for the module that does it). \code{spi_slave} builds its synchroniser in place rather than
+    instantiating \code{meta_prev}, so that \code{spi_slave} depends on nothing in
+    \file{controller/}.
+  \item Two-flip-flop synchronisation plus edge detection costs a few 50 MHz cycles per edge; at
+    SCK $\le$ 1 MHz there are $\ge$ 50 system cycles per SPI bit, an order of magnitude of margin. The
+    protocol therefore guarantees correct operation only up to 1 MHz; faster may work, and is
+    deliberately not promised.
+  \item \code{MISO} changes on \code{SCK}'s falling edge and is sampled by the master on the rising
+    one, as mode 0 prescribes.
+  \item The master has to raise \code{SS} between transactions. Back-to-back transactions under a
+    single low \code{SS} are not supported, and attempting it is harmless: \textbf{a transaction
+    begins only on the first byte after \code{SS} has fallen}, so a sixth byte arriving while
+    \code{SS} is still low is discarded rather than taken for a new command byte.
+\end{itemize}
+
+\subsection{Setup and hold around \code{SS}}
+\label{app:protocol:ss}
+
+Since \code{SS} is synchronised and then edge-detected rather than used directly, it needs a few
+system clock cycles to take effect. At 50 MHz one cycle is 20 ns, and the numbers are:
+
+\begin{booktable}{LlL}
+  \thead{Parameter} & \thead{Minimum} & \thead{Why} \\
+  \midrule
+  \code{SS} low before the first rising \code{SCK} edge & \textbf{60 ns} (3 cycles) & the
+    frame-start edge is detected on the third system clock edge after \code{SS} falls \\
+  \code{SS} high between transactions & \textbf{60 ns} (3 cycles) & the same detector has to see the
+    line return before it can be rearmed \\
+  \code{SS} low after the last \code{SCK} edge & \textbf{60 ns} (3 cycles) & so that the last byte is
+    registered before the frame is torn down \\
+\end{booktable}
+
+Allow 100 ns for each of them in a driver and none of this is close. An AVR toggling \code{SS} through
+\code{PORTC.OUTCLR} and \code{PORTC.OUTSET} around a byte written to \code{SPI0.DATA} is already far
+slower than that, so the limits matter only if the master drives \code{SS} from hardware, or runs much
+faster than the AVR32DB28 does.
+
+There is \textbf{no} minimum gap between bytes: bytes may come back to back within a transaction, and
+the slave does not care how long the master pauses between them, as long as \code{SS} stays low.
+
+\subsection{\code{MISO} outside a read}
+\label{app:protocol:miso}
+
+\begin{itemize}
+  \item \code{MISO} is driven \textbf{low} while the slave is deselected, it is not released to high
+    impedance. The design assumes a single slave on the bus. Adding a second would require making this
+    output tri-stated.
+  \item The byte the master clocks out \textbf{during the command byte} is meaningless: the slave
+    loads its response shift register at the command byte's \emph{end}, so what leaves during it is
+    whatever happened to remain. Discard it.
+  \item During a write all four \code{MISO} data bytes are meaningless too.
+\end{itemize}
+
+% ------------------------------------------------------------------------------------------
+\section{Worked example}
+\label{app:protocol:example}
+
+Sending a frame (\code{id 0x123}, \code{dlc 2}, data \code{AA BB}) is five transactions, and then a
+poll:
+
+\begin{widedrawing}
+Write TX_ID      : 81 00 00 01 23
+Write TX_DLC     : 82 00 00 00 02
+Write TX_DATA_LO : 83 AA BB 00 00
+Write TX_DATA_HI : 84 00 00 00 00
+Write TX_SEND    : 85 00 00 00 01
+Read  STATUS     : 00 xx xx xx xx   -> MISO gives 00 00 00 00 while the transmission runs,
+                                       then 00 00 00 01 once tx_done has set TX ready again.
+\end{widedrawing}
+
+Note \code{83 AA BB 00 00}: byte 0 in the most significant position. That is the packing on both sides
+of the wire \textemdash{} the driver assembles it, \code{register_bank} presents \code{TX_DATA_LO} as
+the \emph{first} four bytes, and \code{can_controller} reads \code{tx_data} with byte 0 in bits
+63--56. The diagram in \secref{app:protocol:order} is the picture of that, and
+\code{register_bank_tb} checks it.
+
+Worth reading off the same example: the first four \code{MISO} bytes of a write are meaningless, and
+so is the \code{MISO} byte returned \emph{during} any command byte. Discard it.
+
+\begin{aside}
+\textbf{Changing this contract.} The register map and the protocol are a contract between two classes
+that cannot compile against each other. If anything changes, both sides have to know about it before
+the change is merged. In practice: changes are discussed with both supervisors first, and the
+documents are updated \emph{before} the code, never after.
+\end{aside}

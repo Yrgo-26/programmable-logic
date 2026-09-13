@@ -1,0 +1,215 @@
+% Preface: the README's "Om kursen", "Efter kursen" and "Att bygga", info/README.md's
+% prerequisites and software list, and the course's three verification layers, as the front
+% matter of a book.
+
+\chapter{Förord}
+\markboth{Förord}{Förord}
+
+Den här boken tar dig från ett grindnät på ett papper till en CAN-nod i en FPGA som en
+mikrokontroller kan prata med över SPI.
+
+Första halvan bygger upp VHDL och synkron konstruktion från grunden: kombinatoriska nät,
+sekvensnät, metastabilitet och synkronisering, räknare, skiftregister, timers och
+tillståndsmaskiner, var och en först resonerad om som en \emph{krets} och först därefter uttryckt
+i språket. Andra halvan är ett grupprojekt där den kunskapen används till något större: en
+förenklad CAN-kontroller, konstruerad modul för modul, och de två lager som gör den nåbar utifrån
+\textemdash{} en registerbank och en SPI-brygga.
+
+\textbf{Ämnet är VHDL och digital konstruktion i FPGA, inte digitalteknikens grunder.} Grindar,
+sanningstabeller, boolesk algebra och Karnaughdiagram repeteras snarare än lärs ut, och de
+repeteras där språket kräver det. Vad boken lär ut från noll är språket och verktygskedjan.
+
+\section*{Det här förutsätts du ha med dig}
+\begin{itemize}
+  \item Logiska grindar och sanningstabeller, och att läsa en summa-av-produkter ur en tabell.
+  \item Boolesk algebra: de grundläggande identiteterna och De Morgans lagar.
+  \item Karnaughdiagram, för funktioner av tre eller fyra variabler.
+  \item Register, D-vippor, och vad en klockflank gör.
+  \item Tillståndsmaskiner som begrepp: tillstånd, övergångar, och skillnaden mellan Moore och
+    Mealy.
+\end{itemize}
+
+Inget programmeringsspråk utöver allmän mjukvaruvana förutsätts. Vana vid C eller något liknande
+hjälper, eftersom flera förklaringar ställer VHDL:s semantik mot den, och det enda avsnitt som
+faktiskt innehåller C++ (\secref{c10:sec:framing}) är en kort inledning till ramning snarare än
+ett moment i språket.
+
+Till grupprojektet tillkommer \textbf{Git och GitHub} på grundnivå: klona, branch, commit, push
+och Pull Request.
+
+\section*{Det här ska du kunna efteråt}
+\begin{itemize}
+  \item Realisera en boolesk funktion som ett grindnät, och simulera den för hand.
+  \item Läsa och skriva kombinatorisk och sekventiell VHDL: entiteter, arkitekturer, signaler,
+    variabler och processer.
+  \item Förklara metastabilitet och tillämpa dubbelvippsynkroniseraren på varje asynkron ingång.
+  \item Konstruera räknare, skiftregister, timers och tillståndsmaskiner, och komponera en design
+    av moduler du redan byggt i stället för att skriva om deras logik.
+  \item Konstruera ett kommunikationsprotokolls hårdvara: bittajming, checksummor, bitstoppning,
+    ramsekvensering och arbitrering.
+  \item Konstruera gränssnittet mellan hårdvara och mjukvara: en registerbank och en
+    SPI-transport, mot ett kontrakt någon annan skriver mot.
+  \item Verifiera en design genom att köra en självkontrollerande testbänk under GHDL, och spåra
+    ett fel tillbaka till koden som orsakade det.
+  \item Arbeta i en grupp med feature-branchar, Pull Requests och kodgranskning.
+\end{itemize}
+
+\section*{Hur boken är upplagd}
+Boken är satt ur en kurs om tjugo pass, och \textbf{varje kapitel är ett pass}. Kapitlets avsnitt
+är passets appendix, i samma ordning och med samma underrubriker, så att ett kapitel här och en
+föreläsningskatalog i kursrepot går att läsa sida vid sida. De två delarna motsvarar kursens två
+halvor:
+
+\begin{booktable}{@{}p{4.6em}p{3.6em}L@{}}
+  \thead{Kapitel} & \thead{Pass} & \thead{Ämne} \\
+  \midrule
+  \multicolumn{3}{@{}l}{\textit{Del \ref{part:vhdl}: digital konstruktion i VHDL}} \\
+  1 & \file{L01} & Kombinatorik och första VHDL \\
+  2 & \file{L02} & Större nät, multiplexrar och submoduler \\
+  3 & \file{L03} & Sekvensnät \\
+  4 & \file{L04} & Metastabilitet och synkronisering \\
+  5 & \file{L05} & Variabler och hårdvaran under \\
+  6 & \file{L06} & Räknare och skiftregister \\
+  7 & \file{L07} & Timers \\
+  8 & \file{L08} & Tillståndsmaskiner \\
+  9 & \file{L09} & Praktisk tentamen 1: sekvensnät \\
+  \addlinespace
+  \multicolumn{3}{@{}l}{\textit{Del \ref{part:can}: grupprojektet, en CAN-nod}} \\
+  10 & \file{L10} & Projektstart: CAN-bussen, ramen och \code{can_def} \\
+  11 & \file{L11} & Arkitektur, toppnivån och registerkartan \\
+  12 & \file{L12} & Synkronisering och bittimern \\
+  13 & \file{L13} & CRC-15-motorn \\
+  14 & \file{L14} & Sändningsskiftregister och bitstoppning \\
+  15 & \file{L15} & Mottagningsskiftregister och avstoppning \\
+  16 & \file{L16} & CAN-kontrollern I: tillståndsmaskinen och sändvägen \\
+  17 & \file{L17} & CAN-kontrollern II: mottagning och arbitrering \\
+  18 & \file{L18} & Registerbanken och SPI från vågformen \\
+  19 & \file{L19} & SPI-bryggan, \code{can_spi_node} och bring-up \\
+  20 & \file{L20} & Praktisk tentamen 2: CAN-moduler \\
+\end{booktable}
+
+Varje kapitel öppnar med vad som finns i det, arbetar sig igenom materialet, avslutas med en
+genomgång av vad du ska kunna förklara efteråt, och slutar med sina övningar. Bilagorna håller
+verktygsreferenserna, projektspecifikationen, det delade kontraktet mot drivrutinskursen, och en
+avslutande not om var man läser vidare.
+
+Kapitel~\ref{c9:ch} och \ref{c20:ch} är de två examinationstillfällena. De innehåller ingen ny
+teori; de säger vad tentamen mäter, vilken form uppgifterna har och hur man förbereder sig, och de
+är värda att läsa i förväg snarare än dagen innan.
+
+\textbf{En bok till hör till del~\ref{part:can}.} Den här boken beskriver hur man \emph{bygger} en
+CAN-nod; protokollet självt beskrivs i \canbook, en kort svensk bok skriven för båda halvorna av ett
+CAN-system. Den är protokollreferensen genom hela andra halvan: dess kapitel 1--6 är
+kravspecifikationen för det som byggs här, bit för bit, och dess kapitel~7 beskriver precis den
+förenklade kontroller del~\ref{part:can} landar i. Varje kapitel som lägger till en protokollregel
+säger var i den boken regeln står, och \secref{app:reading:protocol} har hela kapitelkartan mellan de
+två. Läs gärna dess kapitel 1 och 2 innan \chapref{c10:ch}; resten fungerar bäst som uppslagsverk.
+
+\section*{Tre lager av verifiering}
+Kursen kontrollerar sitt arbete på tre nivåer, och att hålla isär dem är en poäng i sig:
+
+\begin{booktable}{@{}p{9.2em}L@{}}
+  \thead{Lager} & \thead{Vad det kontrollerar} \\
+  \midrule
+  \textbf{För hand} & I CircuitVerse, innan någon VHDL finns. Du härleder vad kretsen ska göra,
+    bygger den, och simulerar den mot din egen förutsägelse. Ingenting automatiskt kontrollerar
+    det steget, medvetet: att förutsäga ett beteende och sedan bekräfta det är den färdighet
+    resten av boken vilar på. \\
+  \textbf{I övningarna} & Du skriver VHDL:en och kör en utdelad självkontrollerande testbänk under
+    GHDL. Det behövs inget FPGA-kort, och nästan allt går att verifiera på en vanlig laptop. \\
+  \textbf{På kortet} & Designen syntetiseras i Quartus Prime Lite och körs på ett Terasic DE0-CV.
+    Under den första halvan demonstreras det steget; i grupprojektets sista pass gör du det
+    själv. \\
+\end{booktable}
+
+\Secref{c2:sec:testbenches} är den fullständiga introduktionen till testbänkar, och
+bilaga~\ref{app:sim} är referensen du kommer tillbaka till. Bilaga~\ref{app:quartus} är
+Quartus-flödet.
+
+\section*{Vad övningarna ser ut som}
+Övningarna kommer efter varje kapitel, numrerade inom kapitlet, och var och en är märkt med sin
+sort:
+
+\begin{booktable}{@{}p{7.4em}L@{}}
+  \thead{Sort} & \thead{Vad den ber dig om} \\
+  \midrule
+  \kindtag[fillaccent5]{Krets} & Rita, bygg och simulera en krets för hand i CircuitVerse, och
+    stäm av den mot din egen sanningstabell eller ditt eget tidsdiagram. \\
+  \kindtag[fillaccent]{VHDL} & Skriv en modul, med det entitetsnamn och den \textbf{portordning}
+    övningen anger, och kör dess utdelade testbänk. \\
+  \kindtag[fillaccent3]{Simulering} & Ändra något och ta reda på vad GHDL rapporterar. Flera av
+    dem ber dig först \emph{förutsäga} utfallet och sedan köra. \\
+  \kindtag[fillaccent2]{Resonemang} & Svara i löpande text eller i siffror: vad koden gör, varför
+    en konstruktion är bättre än en annan, eller vad ett tal blir. \\
+  \kindtag[fillaccent4]{C++} & Kursens enda C++-moment, i \chapref{c10:ch}. \\
+\end{booktable}
+
+\textbf{Det finns inga tryckta lösningar, och det är avsiktligt.} Varje övning som ber dig skriva
+en VHDL-modul har en utdelad självkontrollerande testbänk, och den är facit: den driver din modul
+genom varje fall och säger exakt vilken kontroll som fallerade. Övningarna med penna och papper
+kontrollerar du mot den sanningstabell eller det tidsdiagram du själv härledde, vilket är hela
+poängen med dem. En lista med svar skulle ta bort just det steg övningen finns till för.
+
+\begin{aside}
+\textbf{Portordningen är kontraktet.} Varje utdelad testbänk binder till modulen den driver
+\textbf{positionellt}, och det gör varje instansiering i kursen också. Ingenting binder en port
+vid namn. Kontraktet är alltså \emph{ordningen} och \emph{typerna} på portarna, exakt som varje
+övnings gränssnittstabell listar dem, uppifrån och ned. Portarnas \emph{namn} är dina.
+
+Den affären är värd att förstå snarare än bara följa. Positionell bindning är kortare att skriva
+och att läsa, och den gör gränssnittstabellen till enda sanningskälla. Det den ger upp är
+kompilatorns hjälp: byt plats på två portar av samma typ och ingenting klagar vid analys, utan
+designen beter sig helt enkelt fel i simuleringen i stället. Boken behåller ändå sina portnamn, så
+att texten och din kod talar om samma signaler.
+\end{aside}
+
+\section*{Att sätta upp verktygen}
+Allt i den här boken körs i en Linuxterminal: på Linux, eller på Windows genom WSL. Tre saker
+räcker för allt som inte är ett kort:
+
+\begin{itemize}
+  \item \textbf{GHDL}, den öppna VHDL-analysatorn och -simulatorn. Det är verktyget kursen körs
+    på: varje modul verifieras mot en testbänk i GHDL, och ingenting du ombeds producera behöver
+    något annat.
+  \item \textbf{CircuitVerse}, en gratis logiksimulator som körs i webbläsaren
+    (\url{https://circuitverse.org/simulator}). Inget att installera.
+  \item \textbf{Git}, till grupprojektet, plus \code{g++} till \chapref{c10:ch}:s ramningsövning.
+\end{itemize}
+
+\noindent På WSL eller Ubuntu:
+
+\begin{shell}
+sudo apt -y update
+sudo apt -y install git make ghdl g++
+ghdl --version           # 3.x eller senare
+\end{shell}
+
+\noindent Kursrepot har testramverket som en submodul, så klona det med submodulerna:
+
+\begin{shell}
+git clone --recurse-submodules <repo-url>
+git submodule update --init       # om det redan är klonat utan dem
+\end{shell}
+
+\noindent Två kommandon i repots rot täcker det mesta boken ber om:
+
+\begin{shell}
+make build               # Bygg och simulera allt som finns: exempel, övningar och projekt.
+make lint                # Markdownlänkar, dubblettkontroll, inga radslut med blanksteg.
+\end{shell}
+
+\noindent\code{make build-project} rapporterar varje projekttestbänk som överhoppad i ett färskt
+utcheckat repo. Det är det förväntade tillståndet: \file{controller/} och \file{bridge/}
+innehåller bara de utdelade filerna, och modulerna är gruppens att skriva i sitt eget repo. En
+testbänk vars moduler saknas hoppas över, aldrig underkänns.
+
+\textbf{Quartus Prime Lite och ett DE0-CV-kort är rekommenderade men inte nödvändiga.} Ingen
+övning och inget bedömt moment kräver dem; bilaga~\ref{app:quartus} beskriver flödet för den som
+vill, och för grupprojektets sista pass, där varje grupp tar upp sin egen nod på utdelad hårdvara.
+
+\section*{Var man läser vidare}
+Den nod som byggs i del~\ref{part:can} är ena halvan av ett system. Den andra halvan, C++-koden
+som talar med den över SPI, skrivs i en annan kurs, mot samma registerkarta och samma
+protokollspecifikation \textemdash{} och mot samma protokollbok, som är gemensam för de två.
+Bilaga~\ref{app:reading} beskriver den, standarderna konstruktionen förhåller sig till, och fyra
+riktningar vidare i ämnet.

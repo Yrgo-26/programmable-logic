@@ -1,0 +1,375 @@
+% Avsnitt 15.1-15.6, ur lectures/L15/appendix/a_rx_shift_reg.md.
+
+\section{Gränssnitt}
+\label{c15:sec:iface}
+
+\modulefig[0.62]{lectures/L15/appendix/images/rx_shift_reg.png}
+
+\begin{booktable}{@{}p{6.8em}p{3.4em}p{10em}L@{}}
+  \thead{Port} & \thead{Riktn.} & \thead{Typ} & \thead{Betydelse} \\
+  \midrule
+  \code{clock}, \code{reset_s2_n} & in & \code{std_logic} & 50 MHz klocka, synkroniserad aktiv låg
+    reset. \\
+  \code{sample} & in & \code{std_logic} & En puls per CAN-bit (\code{bit_timer.sample}) som markerar
+    när \code{rx_bus} ska läsas. \\
+  \code{rx_bus} & in & \code{std_logic} & Bussnivån, giltig vid sampelpunkten. \\
+  \code{bit_count} & in & \code{std_logic_vector(3 downto 0)} & Antal \textbf{riktiga} bitar att
+    samla in, 1--8; läses live, får ändras mellan grupper. \\
+  \code{enable} & in & \code{std_logic} & Avgör om \code{sample}-pulser behandlas. \\
+  \code{data} & out & \code{byte_t} & Den insamlade gruppen, \textbf{högerjusterad} i sina lägsta
+    \code{bit_count} bitar. \\
+  \code{valid} & out & \code{std_logic} & Pulsar när \code{bit_count} riktiga bitar samlats in. \\
+  \code{stuff_error} & out & \code{std_logic} & Pulsar om en väntad stoppbit inte inverterar. \\
+  \code{real_bit} & out & \code{std_logic} & Den enda avstoppade bit som accepterades vid det här
+    samplet. \\
+  \code{real_bit_valid} & out & \code{std_logic} & \code{'1'} vid ett sampel som accepterade en
+    riktig bit; \code{'0'} vid en kastad stoppbit. \\
+\end{booktable}
+
+\code{data} och \code{real_bit} är nivåer; \code{valid}, \code{stuff_error} och
+\code{real_bit_valid} är \textbf{pulser på en cykel}, satta till \code{'0'} som förval högst upp i
+den klockade processen, precis som \code{tx_shift_reg}s. \code{real_bit_valid} är den som biter:
+\code{can_controller} grindar \code{crc15}s enable direkt på den (\chapref{c17:ch}), så en nivå som
+ligger kvar till nästa sampel matar in samma bit under en hel bitperiod och förstör CRC:n i tysthet.
+Testbänken kontrollerar att den fallit igen cykeln efter varje sampel, av precis det skälet.
+
+Det finns ingen \code{load}: samplingen sker mitt i perioden (\code{sample}, inte \code{bit_done}),
+när alla noders signaler har hunnit stabilisera sig. En sändare ändrar bussen vid en periodgräns, så
+en mottagare som också agerade på \code{bit_done} skulle läsa i samma ögonblick som nivån ändras;
+\secref{c12:sub:bttrace}:s tickspår visar de två pulserna och de 14 ticken mellan dem.
+\code{can_controller} ändrar bara \code{bit_count} mellan grupperna; \code{valid} rapporterar själv
+varje grupps fullbordan. \code{rx_shift_reg_tb} binder \textbf{positionellt}, så ordningen och
+typerna ovan är det som måste stämma; namnen är dina.
+
+% ------------------------------------------------------------------------------------------
+\section{Vad modulen måste minnas}
+\label{c15:sec:state}
+
+Som i \chapref{c14:ch}: lista tillståndet innan någon process skrivs. Mottagarsidan har samma två
+uppgifter, speglade \textemdash{} hålla en grupp \emph{under påfyllning}, och hålla stoppbitsregeln
+ärlig \textemdash{} plus en som den inte hade: att \emph{förutsäga} var sändaren måste ha satt in en
+stoppbit. Varje regel nedan talar i termer av exakt de här fem signalerna:
+
+\begin{vhdlcode}
+signal data_reg      : byte_t;                     -- Collected real bits, filling from the right.
+signal collected     : natural range 0 to 8;       -- Real bits accepted toward this chunk so far.
+signal last_bit      : std_logic;                  -- The bit most recently sampled off the bus.
+signal consecutive   : natural range 0 to MAX_RUN; -- Current run length; 0 = none.
+signal stuff_expected: std_logic;                  -- The next sampled bit must be a stuff bit.
+\end{vhdlcode}
+
+\begin{itemize}
+  \item \textbf{\code{data_reg} och \code{collected} är gruppen som fylls på.} Varje accepterad bit
+    skiftas in från höger (\code{data_reg(6 downto 0) & rx_bus}), vilket är där högerjusteringen
+    kommer ifrån, och \code{collected} räknar accepterade bitar mot \code{bit_count}. Registret bakom
+    \code{data} måste vara den här interna signalen, med \code{data <= data_reg;} som en konkurrent
+    tilldelning utanför processen: en \code{out}-port kan inte \emph{läsas}, och en skiftning är en
+    läs-modifiera-skriv.
+  \item \textbf{\code{last_bit} och \code{consecutive} är samma följdspårare som \chapref{c14:ch}:s},
+    tecken för tecken: biten som senast låg på ledningen, och hur lång den identiska följd den
+    avslutade är. Länkens båda sidor kör samma spårare över samma bitar, mot samma \code{MAX_RUN}
+    från \code{can_def}; det är det som håller dem överens om var stoppbitarna hör hemma. Som i
+    \chapref{c14:ch} skrivs paret från en enda procedur som processen deklarerar.
+  \item \textbf{\code{stuff_expected} är spegelbilden av \chapref{c14:ch}:s \code{stuff_pending}}
+    \textemdash{} samma flagga med motsatt uppgift. Sändarens flagga säger ”jag är \emph{skyldig} en
+    stoppbit härnäst”; mottagarens säger ”nästa bit gör klokt i att \emph{vara} en”. Samma
+    armeringsvillkor (en följd som når fem), samma tajming (kontrolleras vid nästa händelse), motsatt
+    riktning på skyldigheten \textemdash{} och mottagarens version kan bli \emph{besviken}, och det
+    är där \code{stuff_error} kommer ifrån.
+\end{itemize}
+
+Utgångarna registreras i samma process: \code{data} och \code{real_bit} är nivåer; \code{valid},
+\code{stuff_error} och \code{real_bit_valid} är encykelspulserna som \secref{c15:sec:iface} beskrev.
+
+% ------------------------------------------------------------------------------------------
+\section{Processen, uppifrån och ned}
+\label{c15:sec:process}
+
+En klockad process håller allt ovanstående, plus en konkurrent tilldelning utanför den. Som i
+\chapref{c14:ch} följer genomgången koden i den ordning den skrivs. \textbf{Följdspåraren} är rad för
+rad \chapref{c14:ch}:s, med bara flaggan omdöpt efter vad den nu betyder: samma procedur, deklarerad
+inuti den här modulens process och anropad från varje gren som tar en bit av ledningen utom en, och
+undantaget noteras där det uppstår. Som i \chapref{c14:ch} jämförs \code{collected} mot
+\code{bit_count} via \code{to_integer(unsigned(...))}, så filen behöver
+\code{use ieee.numeric_std.all;}.
+
+\textbf{Skelettet.} Den konkurrenta raden först: \code{data} är en \code{out}-port och kan inte
+\emph{läsas}, medan en skiftning är en läs-modifiera-skriv, så registret är den interna
+\code{data_reg} och porten speglar bara den. Sedan processen, med sin procedur deklarerad före
+\code{begin}, asynkron reset först och allt annat på den stigande flanken:
+
+\begin{vhdlcode}
+data <= data_reg;  -- Concurrent, outside the process.
+
+process(clock, reset_s2_n) is
+    -- One procedure, the run tracker (below).
+begin
+    if (reset_s2_n = '0') then
+        -- Clear everything.
+    elsif (rising_edge(clock)) then
+        -- Defaults, then the sample branch.
+    end if;
+end process;
+\end{vhdlcode}
+
+\subsection{Följdspåraren, skriven en gång}
+\label{c15:sub:tracker}
+
+\Chapref{c14:ch}:s procedur med \code{stuff_expected} i stället för \code{stuff_pending}; den enda
+omdöpningen är hela skillnaden på mottagarsidan. Allt som \secref{c14:sub:tracker} säger om idiomet
+(varför den läser signalerna direkt, varför den deklareras inuti processen i stället för i
+arkitekturen, varför en \code{in}-parameter bevarar tajmingen före flanken, och varför syntesen
+inlinar den) gäller här oförändrat:
+
+\begin{vhdlcode}
+    -- The run tracker: runs on the bit just taken off the wire.
+    procedure track_run(new_bit: in std_logic) is
+    begin
+        if ((new_bit = last_bit) and (consecutive /= 0)) then
+            consecutive <= consecutive + 1;
+            if (consecutive = MAX_RUN - 1) then -- Run reaches MAX_RUN.
+                stuff_expected <= '1';
+            end if;
+        else
+            consecutive <= 1;                   -- Start a new run.
+        end if;
+        last_bit <= new_bit;
+    end procedure;
+\end{vhdlcode}
+
+\subsection{Reset och förval}
+\label{c15:sub:defaults}
+
+\textbf{Reset nollställer allt}: gruppen (\code{data_reg}, \code{collected}), följdspåraren
+(\code{last_bit}, \code{consecutive}, \code{stuff_expected}) och utgångarna. Det här är det
+\textbf{enda} stället spåraren någonsin nollställs. Grupperna nollställer den inte: sändarens ström
+är sammanhängande över hela ramen, så mottagarens bild av den måste vara det också.
+
+\textbf{Förvalen härnäst, och bara de här tre}, så att grenarna nedan bara \emph{höjer} dem:
+
+\begin{vhdlcode}
+valid          <= '0';
+stuff_error    <= '0';
+real_bit_valid <= '0';
+\end{vhdlcode}
+
+\begin{warning}
+\code{stuff_expected} hör \textbf{inte} hemma här, av exakt samma skäl som \code{stuff_pending} inte
+hörde hemma i \chapref{c14:ch}:s förval: den är tillstånd, armerad vid det sampel som fullbordar en
+följd och avgjord vid \emph{nästa} sampel, en hel bitperiod (femtio klockflanker) senare. Ge den
+förvalet lågt så avdunstar förutsägelsen innan den kan förfalla, och då blir stoppbitar varken
+kastade eller kontrollerade. Den skrivs på exakt tre ställen: nollställd vid reset, armerad inuti
+\code{track_run}, och nollställd när förutsägelsen förfaller (båda utfallen nedan).
+\end{warning}
+
+\subsection{Samplingsgrenen}
+\label{c15:sub:sample}
+
+\textbf{\code{(sample = '1') and (enable = '1')} är den enda arbetande grenen}; det finns ingen
+\code{load} på mottagarsidan. Den gör exakt en av tre saker, prövade i den här prioritetsordningen.
+Först: en utestående förutsägelse förfaller, och den samplade biten avgör den åt det ena eller andra
+hållet:
+
+\begin{vhdlcode}
+if ((sample = '1') and (enable = '1')) then
+    if (stuff_expected = '1') then
+        if (rx_bus /= last_bit) then
+            stuff_expected <= '0';    -- The stuff bit arrived; prediction settled.
+
+            track_run(rx_bus);        -- A stuff bit is a bit off the wire like any other.
+        else
+            stuff_error    <= '1';    -- Six identical bits: a stuffing violation.
+            stuff_expected <= '0';
+            consecutive    <= 1;      -- Restart the run at the violating bit; the
+                                      -- tracker must never count past MAX_RUN.
+        end if;
+\end{vhdlcode}
+
+Den anlända stoppbiten \emph{kastas}: ingen skiftning, ingen ändring av \code{collected}, och
+\code{real_bit_valid} förblir \code{'0'}, eftersom en stoppbit aldrig är en riktig bit (det här är
+biten som \code{crc15} inte får se). Anropet till spåraren är spegelbilden av \chapref{c14:ch}:s i
+dess stoppgren: en kastad stoppbit resynkar spåraren precis som en utsänd gör, eftersom ledningen
+inte skiljer riktiga bitar från stoppbitar och spåraren inte heller får göra det. Här behöver den
+inget särskilt argument, eftersom \code{rx_bus /= last_bit} är den här grenens eget villkor, så
+\code{track_run(rx_bus)} tar vägen för en ny följd per konstruktion och startar om räkningen på 1.
+
+I \code{else}-grenen är sex identiska bitar i rad omöjliga på en korrekt stoppad buss, så
+\code{stuff_error} pulsar. Det snyggaste för resten är att nollställa flaggan, inte acceptera något,
+och starta om följdräkningen vid den brytande biten (\code{last_bit} håller redan dess värde),
+eftersom det inte är den här modulens uppgift att avgöra vad ett brott \emph{betyder}. Omstarten är
+inte valfri prydlighet: utan den ligger \code{consecutive} kvar på \code{MAX_RUN}, nästa identiska
+bit kör spårarens \code{+ 1}, och signalens deklarerade intervall överskrids; testbänken matar in en
+bit förbi brottet för att låsa fast precis det. Det här är också den enda placering
+\code{track_run} inte kan tjäna, och av samma skäl: \code{rx_bus = last_bit} här, så anropet skulle
+ta \code{+ 1}-vägen med \code{consecutive} redan på \code{MAX_RUN}. Den brytande biten är undantaget
+från regeln proceduren kodar, så dess två rader står kvar utskrivna. \code{can_controller} behandlar
+den som fatal och avbryter mottagningen (\chapref{c17:ch}), precis som en riktig kontroller skulle
+göra.
+
+I annat fall: acceptera en riktig bit, skifta in den från höger, exponera den bitvis för
+\code{crc15}, avsluta gruppen om den här biten fullbordar den, och kör spåraren på biten som just
+accepterats:
+
+\begin{vhdlcode}
+    else
+        data_reg       <= data_reg(6 downto 0) & rx_bus;  -- Shift in from the right.
+        real_bit       <= rx_bus;
+        real_bit_valid <= '1';
+
+        if (collected = to_integer(unsigned(bit_count)) - 1) then
+            valid     <= '1';                 -- This bit completes the chunk.
+            collected <= 0;
+        else
+            collected <= collected + 1;
+        end if;
+
+        track_run(rx_bus);   -- rx_bus was just accepted off the wire.
+    end if;
+end if;
+\end{vhdlcode}
+
+Jämförelsen här är läsningen av signalen före flanken från \chapref{c14:ch}: \code{collected} mot
+\code{bit_count - 1} är idiomet ”följd-är-nu-full” tillämpat på gruppens fullbordan, samma form som
+\code{consecutive = MAX_RUN - 1} inuti \code{track_run}. Ingenting annat händer vid en gruppgräns:
+\code{bit_count} läses live, så nästa grupp börjar helt enkelt med nästa accepterade bit i den bredd
+\code{can_controller} satt vid det laget, och \code{data_reg} nollställs \emph{inte}; den nya
+gruppens bitar skiftas in under vad den gamla gruppen än lämnade ovanför dem
+(Övning~\ref{c15:ex:justify} handlar om precis det).
+
+Två spegelnoteringar värda att stanna vid:
+\begin{itemize}
+  \item \textbf{Det finns inget avslutande sampel.} \Chapref{c14:ch}:s \code{done} var tvungen att
+    släpa en skiftning, eftersom en sänd bit ändå behövde sin fulla period på bussen. En mottagare
+    samplar mitt i perioden, när biten redan fått sin stabiliseringstid, så i samma ögonblick som den
+    sista riktiga biten accepteras är gruppen helt enkelt \emph{där}: \code{valid} går vid just det
+    samplet, utan något att vänta på.
+  \item \textbf{\code{data}/\code{valid} är gruppvisa, \code{real_bit}/\code{real_bit_valid}
+    bitvisa.} En hel grupp är för grov för \code{crc15}, som behöver varje riktig bit när den
+    anländer; \code{real_bit} och \code{real_bit_valid} exponerar exakt den enda accepterade biten,
+    mottagarsidans motsvarighet till \code{tx_shift_reg}s par \code{bit_valid}/\code{stuff}.
+    Motsvarighet, inte spegelbild: på sändarsidan bär stoppbitar fortfarande \code{bit_valid = '1'}
+    och anroparen maskar bort dem med \code{stuff}, medan den kastade stoppbiten här aldrig höjer
+    \code{real_bit_valid} alls, så \code{real_bit_valid} ensam är redan CRC-grindningen
+    (\chapref{c17:ch}).
+\end{itemize}
+
+% ------------------------------------------------------------------------------------------
+\section{En grupp, sampel för sampel}
+\label{c15:sec:trace}
+
+Att ta emot är inte helt enkelt \chapref{c14:ch} baklänges. En sändare \emph{bestämmer sig} för att
+sätta in en stoppbit; en mottagare \emph{förutsäger} en och måste sedan kontrollera om den faktiskt
+kom. Den skillnaden är där båda den här modulens intressanta utgångar kommer ifrån.
+
+Här är ledningssekvensen som \code{tx_shift_reg} producerade för \code{"11111000"} i
+\secref{c14:sec:trace}, anländande till ett nyss resettat \code{rx_shift_reg} med
+\code{bit_count = 8}. Varje rad är en \code{sample}-puls. Kolumnen \code{följd} är antalet lika bitar
+i rad efter samplet, och \code{data} visar registret fyllas nedifrån.
+
+\begin{textdrawing}
+            rx_bus     åtgärd  real_bit  real_bit_valid  följd      data  valid
+sampel 1         1  acceptera         1               1     1  00000001      0
+sampel 2         1  acceptera         1               1     2  00000011      0
+sampel 3         1  acceptera         1               1     3  00000111      0
+sampel 4         1  acceptera         1               1     4  00001111      0
+sampel 5         1  acceptera         1               1     5  00011111      0
+sampel 6         0      kasta         -               0     1  00011111      0
+sampel 7         0  acceptera         0               1     2  00111110      0
+sampel 8         0  acceptera         0               1     3  01111100      0
+sampel 9         0  acceptera         0               1     4  11111000      1
+\end{textdrawing}
+
+Nio sampel för att återvinna åtta bitar, exakt de nio presentationer \chapref{c14:ch}:s sändare
+behövde för att skicka dem. Tre rader bär lärdomen:
+\begin{itemize}
+  \item \textbf{Sampel 5} tar den femte \code{'1'}:an i rad. Ingenting kastas här. Att nå fem betyder
+    bara att \emph{nästa} bit förväntas vara en stoppbit; den här biten är riktig och samlas in som
+    vanligt.
+  \item \textbf{Sampel 6} är den kastade stoppbiten. \code{real_bit_valid} faller till \code{'0'} och
+    \code{data} rör sig inte: gruppen gör inga framsteg. Det här är raden som spelar roll för
+    \chapref{c13:ch}:s motor, eftersom \code{crc15} inte får se den här biten. Följden resynkar till
+    1 och tar stoppbitens eget värde som början på den nya följden.
+  \item \textbf{Sampel 9} fullbordar den åttonde \emph{riktiga} biten, så \code{valid} pulsar och
+    \code{data} läser \code{11111000}, den ursprungliga gruppen. Stoppbiten har försvunnit utan att
+    \code{can_controller} någonsin fått veta att den fanns.
+\end{itemize}
+
+Lägg märke till att \code{data} fylls från höger, en position per accepterad bit. Efter nio sampel
+råkar gruppen uppta alla åtta bitarna, men en 6-bitarsgrupp skulle sluta med sina bitar i
+\code{data(5 downto 0)} och lämna det som ligger ovanför i fred. Det är högerjusteringen, och
+Övning~\ref{c15:ex:justify} handlar om vad som sitter ovanför.
+
+\textbf{När stoppbiten inte kommer.} Samma mekanism, en bit annorlunda. Sex \code{'0'}:or i rad där
+den sjätte skulle ha inverterat:
+
+\begin{textdrawing}
+            rx_bus      väntat     åtgärd  real_bit_valid  följd  stuff_error
+sampel 1         0  riktig bit  acceptera               1     1            0
+sampel 2         0  riktig bit  acceptera               1     2            0
+sampel 3         0  riktig bit  acceptera               1     3            0
+sampel 4         0  riktig bit  acceptera               1     4            0
+sampel 5         0  riktig bit  acceptera               1     5            0
+sampel 6         0   stopp '1'      brott               0     1            1
+\end{textdrawing}
+
+Brottet upptäcks vid sampel \textbf{6}, inte sampel 5. Fem identiska bitar är fullt lagliga och krävs
+till och med innan någon stoppbit alls existerar; det är den sjätte, som anländer där en inverterad
+bit var skyldig, som är omöjlig på en korrekt stoppad buss. \code{stuff_error} pulsar under en cykel
+och modulen fortsätter samla in; att avgöra vad ett brott \emph{betyder} hör till
+\code{can_controller}, som avbryter ramen (\chapref{c17:ch}).
+
+% ------------------------------------------------------------------------------------------
+\section{Vad testbänken låser fast}
+\label{c15:sec:tb}
+
+\begin{itemize}
+  \item Ledningssekvensen för \code{"11111000"} (stoppbit efter den femte \code{'1'}:an) avstoppas
+    tillbaka till \code{"11111000"}, \code{valid} pulsar vid det sista samplet, och
+    \code{real_bit_valid} är \code{'0'} vid den kastade stoppbiten och \code{'1'} (med
+    \code{real_bit = rx_bus}) vid varje riktig bit.
+  \item \code{real_bit_valid} är tillbaka på \code{'0'} cykeln \emph{efter} varje sampel, så en
+    version som håller nivån underkänns även om den avstoppar perfekt.
+  \item Sex \code{'1'}:or i rad höjer \code{stuff_error} vid det sjätte samplet, och en sjunde
+    identisk bit accepteras som vanligt efteråt: följdräkningen startade om vid den brytande biten i
+    stället för att räkna förbi \code{MAX_RUN}.
+  \item En 6-bitarsgrupp pulsar \code{valid} vid sitt sjätte sampel, inte sitt åttonde, och landar
+    högerjusterad i \code{data(5 downto 0)}.
+  \item En 3-bitarsgrupp som matas in omedelbart därefter, \textbf{utan någon reset emellan}, plockar
+    upp den nya \code{bit_count} och landar i \code{data(2 downto 0)}. Det här är den omdimensionering
+    från grupp till grupp som \code{can_controller} utför mellan varje fält.
+\end{itemize}
+
+% ------------------------------------------------------------------------------------------
+\section{Att lägga in den i \code{can_controller}}
+\label{c15:sec:wire}
+
+Det sista av de fyra CAN-blocken, och det första vars port map kopplas till något annat än klockan
+och sina egna signaler:
+
+\begin{vhdlcode}
+    -- rx_shift_reg.
+    signal rxsr_bit_count                     : std_logic_vector(3 downto 0);
+    signal rxsr_enable                        : std_logic;
+    signal rxsr_data                          : byte_t;
+    signal rxsr_valid,    rxsr_stuff_error    : std_logic;
+    signal rxsr_real_bit, rxsr_real_bit_valid : std_logic;
+\end{vhdlcode}
+
+\begin{vhdlcode}
+    rx_shift_reg1: entity work.rx_shift_reg
+        port map(clock, reset_s2_n, bt_sample, rx_bus_s2, rxsr_bit_count, rxsr_enable,
+                 rxsr_data, rxsr_valid, rxsr_stuff_error, rxsr_real_bit, rxsr_real_bit_valid);
+\end{vhdlcode}
+
+Två av kopplingarna där är värda att stanna vid. \code{sample} kommer direkt från \code{bit_timer1}:s
+utsignal, så mottagarvägen samplar på samma 70-procentstick som resten av designen tajmar mot;
+ingenting däremellan bestämmer när bussen ska läsas. Och bussnivån är \code{rx_bus_s2}, utgången från
+\chapref{c12:ch}:s instans \code{rx_bus_sync}, \textbf{inte} porten \code{rx_bus} själv.
+\code{rx_shift_reg} är det enda block som läser bussen, och det läser den synkroniserade kopian;
+ingenting i designen läser den råa pinnen. (Som med \code{tx_shift_reg}: ta
+\code{reset_s2_n}-kopplingen som den är tills vidare; \chapref{c17:ch} flyttar båda skiftregistren
+till en reset per ram.)
+
+Med det här håller \code{can_controller}s arkitektur alla fyra CAN-delblocken och deras signaler, vid
+sidan av \chapref{c12:ch}:s \code{meta_prev}, och inget rambeteende alls. Varje återstående koppling
+mellan dem är \chapref{c16:ch}:s tillståndsmaskin.

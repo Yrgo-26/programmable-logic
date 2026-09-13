@@ -1,0 +1,34 @@
+% Kapitel 1, satt ur lectures/L01: README:t är öppningen och sammanfattningen, och Appendix A
+% respektive B är avsnitten, i samma ordning och med samma underrubriker.
+
+\chapter{Kombinatorik och första VHDL}
+\label{c1:ch}
+
+{\large\itshape Från en sanningstabell till ett fungerande grindnät, i CircuitVerse och i VHDL.\par}
+
+\begin{chapterbox}{I det här kapitlet}
+\begin{itemize}
+  \item Logiska grindar och sanningstabeller, och varför digital logik tål brus som analog inte
+    gör.
+  \item Boolesk algebra: att läsa en summa-av-produkter direkt ur en sanningstabell.
+  \item Att bygga och simulera ett grindnät för hand i CircuitVerse.
+  \item VHDL redan från första passet: \code{entity}, \code{architecture}, \code{std_logic} och
+    den konkurrenta tilldelningen.
+  \item En komplett modul, \code{or_gate}, från sanningstabell till syntetiserbar fil.
+  \item En bromsassistent, härledd ur ett krav och demonstrerad på ett DE0-CV-kort.
+\end{itemize}
+\end{chapterbox}
+
+Det här kapitlet går den väg varje krets i boken går: från ett krav, via en sanningstabell och en
+boolesk ekvation, till ett grindnät som byggs och simuleras för hand, och först därefter till
+VHDL. Ordningen är inte en pedagogisk omväg. Den är den arbetsgång resten av boken vilar på, och
+den är lättast att se på en krets som är liten nog att överblicka i sin helhet.
+
+Arbeta kapitlet i ordning. \Secref{c1:sec:gates} till \ref{c1:sec:cv} är kretsen; \secref{c1:sec:vhdl}
+och \ref{c1:sec:module} är precis så mycket VHDL att du kan läsa och skriva ett grindnät;
+\secref{c1:sec:adas} är kravet passet bygger live, och det är värt att komma dit med ett eget svar
+att jämföra mot. Övningarna i \secref{c1:sec:exercises} är där du skriver koden själv.
+
+\input{chapters/01/combinational}
+\input{chapters/01/summary}
+\input{chapters/01/exercises}

@@ -1,0 +1,91 @@
+% Avsnitt 18.9, ur lectures/L18/README.md:s SPI-genomgång och den utdelade bridge/spi_slave.vhd.
+
+\section{SPI från vågformen och uppåt}
+\label{c18:sec:spi}
+
+Registerbanken presenterar register. Något måste nå dem utifrån, och det är SPI. Det här avsnittet
+tar transporten från vågformen och uppåt, och slutar i den utdelade \code{spi_slave}, som du läser
+snarare än skriver.
+
+\subsection*{Läge 0, MSB först, SS som ramning}
+Projektet kör \textbf{SPI läge 0} (CPOL~=~0, CPHA~=~0) rakt igenom:
+\begin{itemize}
+  \item \code{SCK} vilar lågt. Mastern genererar den; slaven producerar aldrig en klocka.
+  \item Båda sidor \textbf{samplar på den stigande flanken}. \code{MISO} ändras därför på den
+    \textbf{fallande} flanken, så att värdet hunnit stabilisera sig till nästa stigande.
+  \item \textbf{MSB först}, i varje byte.
+  \item \code{SS} är aktiv låg och är \textbf{ramningssignalen}: en transaktion per låg period.
+    Mastern måste höja \code{SS} mellan transaktioner.
+  \item \code{SCK} går i högst 1~MHz. Skälet står i \secref{c18:sub:oversample}.
+\end{itemize}
+
+Rita vågformen för hand innan du läser vidare: \code{SS} som faller, åtta stigande \code{SCK}-flanker
+med byten \code{0xA5} på \code{MOSI}, mest signifikant först, och \code{SS} som stiger. Det är hela
+bilden, och Övning~\ref{c18:ex:waveform} bygger en femtransaktionsbyte av den.
+
+\subsection{Varför slaven inte klockar på SCK}
+\label{c18:sub:oversample}
+
+Den frestande läsningen är att \code{SCK} är en klocka, så gör den till \emph{din} klocka: klocka
+skiftregistret på den och var klar. Låt bli, av två skilda skäl.
+
+\textbf{Det första är metastabilitet}, och det är \chapref{c4:ch}:s regel oförändrad. \code{SCK},
+\code{MOSI} och \code{SS} kommer alla in på pinnar som drivs av en mikrokontroller med sin egen
+kristall. De är asynkrona mot \code{clock} i precis den mening \chapref{c4:ch} avser, och varje en av
+dem måste genom två vippor innan någon logik får titta på den.
+
+\textbf{Det andra är vad en design med två orelaterade klockor kostar i en FPGA.} En andra klockdomän
+betyder en andra uppsättning tidsvillkor, ett verkligt klockdomänkors på varje signal som passerar
+mellan dem, och ett syntesverktyg som inte längre kan analysera designen som en helhet. För ett
+gränssnitt som går i 1~MHz mot en väv som går i 50 är det priset onödigt.
+
+Svaret är \textbf{översampling}: synkronisera in \code{SCK} i 50 MHz-domänen och \emph{detektera dess
+flanker} i stället för att klocka på den. Vid 1~MHz är det minst 50 systemcykler per SPI-bit, alltså
+en storleksordnings marginal. Protokollet garanterar därför korrekt funktion upp till 1~MHz; snabbare
+kan fungera, och lovas medvetet inte.
+
+Det kostar några 50 MHz-cykler per flank, och det är därifrån protokollets tidskrav kring \code{SS}
+kommer: minst 60~ns (tre cykler) före den första \code{SCK}-flanken, mellan transaktioner, och efter
+den sista flanken. Bilaga~\ref{app:protocol} har hela tabellen.
+
+\subsection{Att läsa \code{spi_slave.vhd}}
+\label{c18:sub:slave}
+
+\code{spi_slave} delas ut i stället för att skrivas: den är transport, inte bokens ämne. Men du måste
+kunna läsa den, och \chapref{c20:ch} förväntar sig att du kan det.
+
+\vhdlfile{bridge/spi_slave.vhd}
+
+Fyra saker är värda att läsa noga:
+
+\paragraph{Posten \code{sync_t} har tre fält, men bara två är synkroniseringssteg}
+\code{s1} och \code{s2} är dubbelvippsynkroniseraren; \code{s3} är förra cykelns \code{s2}, och finns
+bara för att en flank ska gå att detektera genom att jämföra de två. \code{sclk} och \code{ss}
+används för sina \emph{flanker} och behöver alla tre; \code{mosi} läses bara vid en flank som redan
+detekterats på \code{sclk}, så den behöver de två synkroniseringsstegen och ingen historik.
+
+\paragraph{De två kedjorna resettar till olika värden}
+\code{sclk_s} nollställs till idel nollor och \code{ss_s} till idel \textbf{ettor}. Varje kedja
+resettar till den nivå dess ledning vilar på, så att modulen kommer ur reset och tror på det som
+faktiskt är sant om en ledig buss: \code{sclk} vilar lågt i läge 0, och \code{ss} är aktiv låg och
+vilar \textbf{högt}. Att nollställa \code{ss}-kedjan till \code{'0'} skulle få \code{ss_active} att
+läsa \code{'1'} ur reset och bryggan att se en ram som ingen startat. Det är exakt samma regel som
+\code{button_sync} i Övning~\ref{c4:ex:buttonsync} finns till för att upprätthålla.
+
+\paragraph{En avvald slav ignorerar SPI-ledningarna helt}
+Hanteringen av \code{SCK}-flanker ligger inuti \code{else}-armen i ett test på \code{ss_s.s2}.
+\code{SCK} tillhör den slav mastern adresserar; för den här slaven är den en asynkron ingång som
+kommer in över en ledning på ett kopplingsdäck, och en störning på den ledningen ser likadan ut som
+en flank. Utan den grindningen skulle grenarna nedanför skifta in \code{MOSI} och pulsa
+\code{rx_valid} på flanker som anländer medan \code{ss} är hög, och \code{spi_reg_bridge} skulle
+tappa bytejusteringen för varje transaktion därefter.
+
+\paragraph{\code{ss_falling} är ett \code{elsif} före SCK-grenarna}
+Ordningen spelar roll vid exakt en klockflank: den där \code{SS} nyss föll \emph{och} en stigande
+\code{SCK}-flank detekteras samtidigt. Genom att \code{ss_falling}-armen kommer först kan den
+\code{SCK}-flanken inte stega biträknaren förbi ramens början och kasta om varje byte i den.
+
+\code{spi_slave} lämnar över en färdig byte i taget på \code{rx_data}, med \code{rx_valid} som en
+puls, och tar nästa byte att sända på \code{tx_data}. Den vet ingenting om register.
+\Chapref{c19:ch} bygger \code{spi_reg_bridge}, lagret som gör de byteströmmarna till
+femtransaktionsbytes och till registeråtkomster mot banken du just skrivit.

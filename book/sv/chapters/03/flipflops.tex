@@ -1,0 +1,420 @@
+% Avsnitt 3.1-3.9, ur lectures/L03/appendix/a_flip_flops_and_registers.md (A.1-A.9).
+
+\section{Från kombinatorik till sekvensnät}
+\label{c3:sec:seq}
+
+Varje krets i \chapref{c1:ch} och \ref{c2:ch} var \textbf{kombinatorisk}: dess utgång är en ren
+funktion av dess nuvarande ingångar, så samma ingångar ger alltid samma utgång, och det finns
+ingen föreställning om ”före” eller ”efter” inuti kretsen.
+
+De flesta användbara system behöver mer. En räknare måste minnas sitt räknevärde. Ett register
+måste hålla kvar ett värde efter att signalen som producerade det har ändrats. En lysdiod som
+växlas av en knapp måste minnas om den är tänd, eftersom det inte alls ligger kodat i knappens
+ögonblickliga läge.
+
+Alla dessa behöver \textbf{minne}: en utgång som beror på kretsens egen \emph{föregående} utgång.
+Ett sekvensnät är kombinatorik med en del av utgången återkopplad till ingången, och den
+\textbf{återkopplingsslingan} är vad som gör ett tillståndslöst grindnät till en krets med
+tillstånd. Det här kapitlet bygger den primitiv som gör kontrollerad återkoppling praktisk,
+D-vippan, och sedan de två saker du bygger direkt av den: register och flankdetektorer.
+
+% ------------------------------------------------------------------------------------------
+\section{D-låset}
+\label{c3:sec:latch}
+
+Det enklaste lagringselementet är \textbf{D-låset}: två korskopplade grindar, grindade av en
+\code{enable}-ingång, som lagrar en enda bit.
+
+\begin{textdrawing}
+        ┌────────────┐
+   D ──►│            │──► Q
+        │   D-LÅS    │
+enable─►│            │──► Qn
+        └────────────┘
+\end{textdrawing}
+
+\code{D} är värdet som ska lagras, \code{enable} styr om låset är \emph{öppet} (genomsläppligt)
+eller \emph{stängt} (hållande), \code{Q} är det lagrade värdet och \code{Qn} är alltid dess invers.
+
+Varje utgång återkopplas in i den andras ekvation, vilket är precis \secref{c3:sec:seq}:s
+återkopplingsslinga:
+
+\[ Q = (D' \cdot \mathit{enable} + Q_n)' \]
+\[ Q_n = (D \cdot \mathit{enable} + Q)' \]
+
+\begin{booktable}{@{}p{4em}p{12em}L@{}}
+  \thead{\code{enable}} & \thead{Beteende} & \thead{Resultat} \\
+  \midrule
+  \code{1} & låset är \textbf{öppet} (genomsläppligt) & $Q = D$, $Q_n = D'$; utgången följer
+    ingången omedelbart \\
+  \code{0} & låset är \textbf{stängt} (låst) & \code{Q} och \code{Qn} håller kvar det de senast
+    hade \\
+\end{booktable}
+
+\textbf{Bygg det i CircuitVerse} av en NOT-grind, två AND-grindar och två NOR-grindar (en NOR är en
+OR följd av en NOT). Korskoppla återkopplingen så att den NOR som producerar \code{Q} matar den NOR
+som ligger på \code{Qn}-sidan och tvärtom. Driv \code{D} och \code{enable} från
+ingångsströmbrytare och betrakta \code{Q} och \code{Qn} på lysdioder.
+
+Testa det sedan:
+\begin{itemize}
+  \item Med \code{enable = 1}, ändra \code{D} och bekräfta att \code{Q} följer omedelbart. Låset
+    är \textbf{genomsläppligt}.
+  \item Med \code{enable = 0}, bekräfta att \code{Q} är oförändrad vad \code{D} än gör. Låset är
+    \textbf{låst}.
+  \item Växla \code{D} några gånger medan du slår om \code{enable}, och bekräfta att låset alltid
+    fryser det \code{Q} höll i det ögonblick \code{enable} gick låg. Det är vad
+    \textbf{nivåkänslig} betyder: genomsläpplig hela den tid \code{enable} är hög, inte bara i ett
+    enda ögonblick.
+\end{itemize}
+
+Den sista punkten är också låsets grundläggande svaghet. Eftersom det är genomsläppligt hela den
+tid \code{enable = 1} går varje glitch på \code{D} under det fönstret rakt igenom till \code{Q}. I
+ett stort synkront system är det långt svårare att garantera stabila data under en hel klockfas än
+att garantera dem kring ett enda ögonblick. Det är problemet D-vippan löser.
+
+% ------------------------------------------------------------------------------------------
+\section{D-vippan}
+\label{c3:sec:dff}
+
+En \textbf{D-vippa} lagrar en bit på samma sätt som ett lås, men är \textbf{flanktriggad} i stället
+för nivåkänslig: den samplar \code{D} bara i det \emph{ögonblick} klockan skiftar, inte under hela
+den tid klockan är hög eller låg.
+
+Mata båda med samma \code{D} och samma klocka, så syns skillnaden direkt:
+
+\lecfig[0.78]{lectures/L03/appendix/images/latch_vs_flipflop.png}{Ett lås följer \code{D} under
+varje fönster där klockan är hög, medan en vippa ändrar sig bara vid de stigande
+flankerna.}{c3:fig:latchvsff}
+
+Låset ändrar sig tre gånger: två gånger för att \code{D} rörde sig medan klockan var hög, och en
+gång för att klockan gick hög mot ett \code{D} som redan hade ändrats. Vippan ändrar sig en gång,
+eftersom bara en av de fyra stigande flankerna fann \code{D} skilt från det värde \code{Q} redan
+höll. Båda beter sig korrekt; de svarar på olika frågor.
+
+\begin{textdrawing}
+        ┌──────────────────┐
+   D ──►│                  │──► Q
+clock ─►│     D-VIPPA      │
+enable─►│ (stigande flank) │──► Qn
+reset_n►│                  │
+        └──────────────────┘
+\end{textdrawing}
+
+\code{clock} är tidsreferensen (\secref{c3:sec:clock}). \code{enable} grindar om vippan tar emot
+ett nytt värde \emph{vid den triggande flanken}. \code{reset_n} är en asynkron, aktiv låg reset:
+närhelst den är \code{0} tvingas \code{Q} omedelbart till \code{0}, oavsett klockan.
+
+\begin{booktable}{@{}p{15em}L@{}}
+  \thead{Villkor} & \thead{Resultat} \\
+  \midrule
+  \code{reset_n = 0} & $Q = 0$, $Q_n = 1$, omedelbart (asynkront, ignorerar klockan helt) \\
+  \code{reset_n = 1}, stigande flank på \code{clock}, \code{enable = 1} & $Q = D$, $Q_n = D'$,
+    samplat i det ögonblicket \\
+  \code{reset_n = 1}, stigande flank på \code{clock}, \code{enable = 0} & \code{Q} håller kvar
+    sitt föregående värde \\
+  \code{reset_n = 1}, ingen stigande flank på \code{clock} & \code{Q} håller kvar sitt föregående
+    värde, vad \code{D} än gör \\
+\end{booktable}
+
+Den sista raden är värd att se snarare än att läsa:
+
+\lecfig[0.72]{lectures/L03/appendix/images/dff_timing.png}{\code{D} går hög mitt i en cykel och
+fångas vid nästa stigande flank, dippar sedan och återhämtar sig helt mellan två flanker utan att
+\code{Q} någonsin rör sig.}{c3:fig:dfftiming}
+
+\code{D} dippar låg och kommer tillbaka inom en enda klockperiod, och \code{Q} rör sig aldrig,
+eftersom ingen flank inträffade medan den var låg. Ett lås i samma läge hade följt med ner och upp
+igen.
+
+Invärtes är en flanktriggad vippa två D-lås i serie, ett \textbf{master-slave}-par. Det ena är
+genomsläppligt medan klockan är låg och fångar \code{D}; det andra är genomsläppligt medan klockan
+är hög och för det fångade värdet vidare till \code{Q}. Nettoeffekten är att \code{Q} ändrar sig
+bara i det ögonblick klockan går från låg till hög, aldrig medan den ligger kvar på någondera
+nivån. Det yttre beteendet är vad VHDL:s \code{rising_edge()} modellerar
+(\secref{c3:sec:template}).
+
+\textbf{Bygg den i CircuitVerse} genom att bygga vidare på ditt lås från \secref{c3:sec:latch}:
+\begin{itemize}
+  \item Duplicera låset så att två sitter i serie: \emph{mastern} matar \emph{slaven}, vars
+    \code{Q} är vippans utgång.
+  \item Lägg till \code{clock}, \code{reset_n}, \code{D} och \code{enable} som ingångar.
+  \item Driv de två låsens genomsläpplighet från klockan och dess invers. För att hålla de två
+    betydelserna isär, kalla den interna styrsignalen per lås för \code{gate}: masterns
+    \code{gate} är \code{clock'} och slavens är \code{clock}. Vippans yttre \code{enable} är en
+    annan signal och kopplas separat, nedan.
+  \item Koppla det yttre \code{enable} som en 2-till-1-mux (\secref{c2:sec:mux}) på masterns
+    dataingång: när \code{enable = 1} släpper muxen igenom \code{D}, och när \code{enable = 0}
+    släpper den tillbaka in vippans eget \code{Q}, så att flanken fångar om det värde som redan är
+    lagrat. Grinda \emph{datat}, aldrig klockan.
+  \item Lägg till resetten i \textbf{båda} låsen. Att tvinga \code{Q} låg kräver två ändringar i
+    varje lås, inte en:
+  \begin{itemize}
+    \item mata in ett aktivt högt \code{reset} (\code{reset_n} genom en NOT) i den NOR som
+      producerar \code{Q}, vilket tvingar \code{Q} till \code{0}.
+    \item AND:a in \code{reset_n} i termen \code{D AND gate} i samma lås, vilket frigör \code{Qn}
+      att gå hög.
+  \end{itemize}
+  \item Sätt klockperioden till något långsamt nog att titta på, t.ex. \code{1000 ms}.
+\end{itemize}
+
+Med resetten inkopplad blir ekvationerna för varje lås:
+
+\[ Q = (D' \cdot \mathit{gate} + Q_n + \mathit{reset})' \]
+\[ Q_n = (D \cdot \mathit{gate} \cdot \mathit{reset\_n} + Q)' \]
+
+En frestande genväg är att låta \code{Qn}-ekvationen vara och i stället bryta slingan, genom att
+AND:a \code{reset_n} på den \code{Qn}-ledning som matar \code{Q}:s NOR. Det räcker inte. Med
+\code{gate = 1} och \code{D = 1} lämnar det \code{Qn} på \code{0}, vilket är det som håller
+\code{Q} på \code{1}, så resetten gör i tysthet ingenting i precis det fall du är mest benägen att
+testa den i. Båda ändringarna, i båda låsen, eller ingendera.
+
+Bekräfta att \code{Q} uppdateras bara i det ögonblick klockan går hög, och ligger stilla mellan
+flankerna även om \code{D} ändrar sig, och att en låg \code{reset_n} tvingar \code{Q} till \code{0}
+omedelbart, medan ett släpp av den inte ändrar något förrän vid nästa stigande flank.
+
+% ------------------------------------------------------------------------------------------
+\section{Klockning}
+\label{c3:sec:clock}
+
+\textbf{Klockan} är en periodisk fyrkantvåg, som varje vippa i en synkron krets läser från samma
+källa. Två tal beskriver den: \textbf{perioden} $T$, tiden för en hel cykel, och \textbf{frekvensen}
+$f = 1/T$ i Hz.
+
+Varje period har exakt två \textbf{flanker}: en \textbf{stigande flank} från \code{0} till
+\code{1}, och en \textbf{fallande flank} från \code{1} till \code{0}. En synkron design väljer en
+av dem, nästan alltid den stigande flanken, och uppdaterar varje vippa vid den flanken och bara
+den. Att använda en enda flank överallt är vad som gör tajmingen i en stor krets analyserbar: varje
+vippa ändrar sig vid samma väldefinierade ögonblick, så du kan resonera en klockcykel i taget i
+stället för att följa varje signal kontinuerligt.
+
+Simulerade och verkliga klockor går i vitt skilda tidsskalor, och logiken är identisk i båda
+fallen:
+\begin{itemize}
+  \item I CircuitVerse, sätt en period du hinner följa, t.ex. \code{1000 ms}.
+  \item På DE0-CV är systemklockan fasta \code{50 MHz}, en period på \code{20 ns}. Ingen uppfattar
+    enskilda flanker i den takten, så du resonerar i termer av ”vid nästa stigande flank”, aldrig i
+    verklig tid.
+\end{itemize}
+
+% ------------------------------------------------------------------------------------------
+\section{Register: vippor parallellt}
+\label{c3:sec:register}
+
+Ett \textbf{register} lagrar mer än en bit: N D-vippor sida vid sida, en per bit, som alla delar
+samma \code{clock}, \code{reset_n} och \code{enable}.
+
+\begin{textdrawing}
+D(0) ──►[D-FF]──► Q(0)
+D(1) ──►[D-FF]──► Q(1)
+D(2) ──►[D-FF]──► Q(2)
+   ⋮        ⋮
+D(N-1)──►[D-FF]──► Q(N-1)
+
+  (clock, reset_n, enable delas av varje vippa ovan)
+\end{textdrawing}
+
+Det är hela idén: ett 8-bitars register är åtta D-vippor som uppdateras vid samma klockflank.
+
+I VHDL instansierar du sällan N vippor explicit. Deklarera en \code{std_logic_vector} och tilldela
+hela den inuti en enda synkron process (\secref{c3:sec:template}): varje bit syntetiseras till en
+egen vippa, och alla delar processens klocka och reset.
+
+\begin{vhdlcode}
+signal q: std_logic_vector(3 downto 0);
+...
+process (clock, reset_n) is
+begin
+    if (reset_n = '0') then
+        q <= "0000";
+    elsif (rising_edge(clock)) then
+        if (enable = '1') then
+            q <= d; -- d is a std_logic_vector(3 downto 0) input
+        end if;
+    end if;
+end process;
+\end{vhdlcode}
+
+Fyra bitar, en process, fyra vippor i hårdvara: i princip inte annorlunda än fyra
+\code{d_flip_flop}-instanser kopplade parallellt.
+
+% ------------------------------------------------------------------------------------------
+\section{Den synkrona processmallen i VHDL}
+\label{c3:sec:template}
+
+Varje synkront element i det här kapitlet, vippan, registret och flankdetektorn, använder samma
+form. Utan reset är en enda D-vippa:
+
+\begin{vhdlcode}
+process (clock) is
+begin
+    if (rising_edge(clock)) then
+        q <= d;
+    end if;
+end process;
+\end{vhdlcode}
+
+\code{q} tar \code{d}:s värde vid varje stigande flank och håller kvar det resten av tiden. Den
+enda raden inuti \code{if}-satsen räcker för att syntesen ska härleda en riktig D-vippa.
+
+\subsection*{Regler}
+\begin{itemize}
+  \item \textbf{\code{clock} är den enda signalen i känslighetslistan}, om det inte finns en
+    asynkron reset. Processen ska köra bara när klockan ändras; den har ingen anledning att reagera
+    på något annat.
+  \item En process reagerar på \emph{varje} ändring hos en signal i känslighetslistan, inte bara
+    stigande, så \code{rising_edge()} filtrerar specifikt ut den stigande flanken. All logik som
+    uppdateras synkront ligger inuti det \code{if}:et.
+  \item Varje signal som tilldelas inuti en sådan process syntetiseras till en vippa, en per bit.
+\end{itemize}
+
+\subsection*{Med en asynkron reset}
+En asynkron reset måste också stå i känslighetslistan, eftersom den kan aktiveras oberoende av
+klockan, och den har företräde när den är aktiv.
+
+\begin{vhdlcode}
+process (clock, reset_n) is
+begin
+    if (reset_n = '0') then
+        q <= '0';
+    elsif (rising_edge(clock)) then
+        q <= d;
+    end if;
+end process;
+\end{vhdlcode}
+
+Läs den i prioritetsordning: kontrollera resetten först, och leta efter en stigande flank bara om
+den är inaktiv. Om ingetdera gäller (en fallande flank, eller att \code{reset_n} går från \code{0}
+tillbaka till \code{1}, vilket också triggar om processen) tilldelas ingenting och \code{q} behåller
+sitt föregående värde.
+
+\subsection*{När tilldelningen faktiskt får effekt}
+En regel ligger under allt ovanstående, och det är det enda stället där \code{<=} beter sig olikt
+tilldelning i alla språk du har skrivit mjukvara i.
+
+En signaltilldelning får inte effekt när dess rad körs. Den \textbf{schemalägger} ett värde, som
+tillämpas först när processen avslutat det här varvet och suspenderar. Fram till dess ger varje
+läsning av den signalen det värde den höll \emph{innan varvet började}, hur många tilldelningar som
+än redan har körts.
+
+Det låter som en teknikalitet. Det är skälet till att mallen ovan är en vippa och inte en ledning:
+
+\begin{vhdlcode}
+process (clock) is
+begin
+    if (rising_edge(clock)) then
+        b <= a;
+        c <= b;
+    end if;
+end process;
+\end{vhdlcode}
+
+Läst som mjukvara slutar både \code{b} och \code{c} med att hålla \code{a}. I hårdvara gör de inte
+det. Vid varje flank schemaläggs \code{b} att ta \code{a}:s värde, och \code{c} schemaläggs att ta
+det värde \code{b} höll \emph{på väg in i den flanken}, inte det som just schemalagts på den.
+Resultatet är två vippor i en kedja: \code{a} når \code{b} efter en flank och \code{c} efter två.
+Byt plats på raderna och ingenting ändras, eftersom ingen av tilldelningarna kan observera den
+andras resultat.
+
+Två konsekvenser värda att ta med sig:
+\begin{itemize}
+  \item \textbf{Ordningen spelar ingen roll} mellan tilldelningar till \emph{olika} signaler i
+    samma klockade process. Alla läser de gamla värdena och alla får effekt samtidigt. Det är
+    motsatsen till den sekventiella läsning som ordet ”process” inbjuder till, och det är därför en
+    kedja av vippor kan skrivas i vilken ordning som helst.
+  \item \textbf{Tilldela samma signal två gånger i ett varv och bara den sista tilldelningen
+    överlever.} De tidigare kastas utan att någonsin nå signalen.
+\end{itemize}
+
+\Secref{c3:sec:edge}:s flankdetektor är precis tvåelementskedjan ovan, och fungerar av precis det
+här skälet. \Chapref{c5:ch} återvänder till regeln från andra hållet, med en \code{variable}, som
+uppdateras omedelbart och därför beter sig så som den mjukvarumässiga läsningen väntar sig.
+
+% ------------------------------------------------------------------------------------------
+\section{Flankdetektering}
+\label{c3:sec:edge}
+
+Vippans andra vardagsuppgift är att detektera det \emph{ögonblick} en signal ändras, snarare än att
+läsa av dess nivå: lagra signalens föregående värde i en vippa och jämför det sedan med det
+nuvarande värdet med en grind.
+
+\begin{itemize}
+  \item \textbf{Detektering av stigande flank} (\code{0} till \code{1}):
+    $\mathit{edge} = \mathit{current} \cdot \mathit{previous}'$
+  \item \textbf{Detektering av fallande flank} (\code{1} till \code{0}):
+    $\mathit{edge} = \mathit{current}' \cdot \mathit{previous}$
+\end{itemize}
+
+\begin{textdrawing}
+signal ──┬───────────────────────────► AND ──► edge
+         │                              ▲
+         └──►[D-FF]── previous ──(NOT)──┘
+                ▲
+           clock, reset_n
+\end{textdrawing}
+
+\code{edge} är hög i exakt en klockcykel, den omedelbart efter övergången, eftersom
+\code{previous} kommer ikapp först vid \emph{nästa} flank. Det är mekanismen bakom ”gör något en
+gång per knapptryckning” i stället för ”gör något varje klockcykel knappen hålls nere”, vilket är
+precis vad \secref{c3:sec:ledtoggle} löser.
+
+% ------------------------------------------------------------------------------------------
+\section{Genomarbetat exempel: en D-vippa i VHDL}
+\label{c3:sec:dffvhdl}
+
+\file{d_flip_flop.vhd} implementerar \secref{c3:sec:dff} och \ref{c3:sec:template} tillsammans: ett
+enable som grindar om en stigande flank fångar \code{d}, och en asynkron aktiv låg reset.
+
+\vhdlfile{lectures/L03/d_flip_flop/d_flip_flop.vhd}
+
+Dess enda process är varianten med reset plus enable av \secref{c3:sec:template}:s mall: resetten
+har företräde, sedan fångar en stigande flank \code{d} in i en intern signal \code{q_s} om
+\code{enable = '1'}. \code{q_s} finns eftersom en \emph{utgångsport} inte kan läsas tillbaka inuti
+samma arkitektur; \code{q} och \code{q_n} drivs båda kombinatoriskt från den, utanför processen.
+
+För att prova den på hårdvara, tilldela \code{clock} till systemklockan på \code{50 MHz},
+\code{reset_n} till en tryckknapp, \code{d} och \code{enable} till två skjutströmbrytare, och
+\code{q}/\code{q_n} till två lysdioder. Slå sedan på \code{enable} och ändra \code{d}, så följer
+lysdioden med; slå av \code{enable} och ändra \code{d}, så gör den inte det.
+
+Det finns ingen klockflank du kan uppfatta vid \code{50 MHz}, så vad du egentligen bekräftar är att
+logiken fortfarande håller när du inte längre kan se de enskilda flankerna. Vippan ser ut att svara
+på din strömbrytare; i själva verket svarade den på en av femtio miljoner klockflanker den
+sekunden, och strömbrytaren avgjorde bara vilket värde den flanken fångade.
+
+% ------------------------------------------------------------------------------------------
+\section{Genomarbetat exempel: flankdetekterad lysdiodsväxling}
+\label{c3:sec:ledtoggle}
+
+\file{led_toggle.vhd} kombinerar \secref{c3:sec:register}, \ref{c3:sec:template} och
+\ref{c3:sec:edge} till ett litet system: två oberoende tryckknappar, som var och en växlar sin egen
+lysdiod exakt en gång per tryck.
+
+\vhdlfile{lectures/L03/led_toggle/led_toggle.vhd}
+
+Tre 2-bitars signaler, två hållna i klockade processer och en beräknad mellan dem:
+\begin{itemize}
+  \item \code{button_prev_n} är ett 2-bitars register (\secref{c3:sec:register}) som håller förra
+    cykelns \code{button_n}, resatt till \code{"11"} eftersom knapparna är aktiva låga.
+  \item \code{button_edge <= (not button_n) and button_prev_n} är \secref{c3:sec:edge}:s detektor
+    för fallande flank tillämpad på båda bitarna samtidigt, hög i en cykel exakt när en knapp går
+    från släppt till nedtryckt.
+  \item \code{led_s} är ett andra 2-bitars register som, i stället för att fånga ett nytt värde
+    varje cykel, \textbf{växlar} bit \code{i} bara när \code{button_edge(i) = '1'}. Utan den
+    grindningen skulle det växla varje klockcykel i stället för en gång per tryck, vilket är hela
+    poängen med att beräkna \code{button_edge}.
+\end{itemize}
+
+\paragraph{På kortet}
+Skapa Quartus Prime Lite-projektet mot DE0-CV:s \code{5CEBA4F23C7N} precis som i \chapref{c1:ch},
+tilldela sedan \code{clock} till oscillatorn på \code{50 MHz}, \code{reset_n} och
+\code{button_n(1 downto 0)} till tre tryckknappar, och \code{led(1 downto 0)} till två lysdioder.
+Varje tryck ska växla exakt en lysdiod, en gång, hur länge du än håller den nere.
+
+\begin{warning}
+\textbf{En reservation, medvetet lämnad öppen.} \code{button_n} är en rå signal rakt från en fysisk
+tryckknappspinne. I simulering är det en ren, ögonblicklig övergång; på riktig hårdvara är den
+varken ögonblicklig (kontakter studsar) eller synkroniserad till \code{clock}. Den här
+flankdetektorn är logiskt korrekt men \emph{osäker} att koppla direkt till en riktig knapp på en
+FPGA utan mer arbete först, och det arbetet är precis vad \chapref{c4:ch} tar upp.
+\end{warning}

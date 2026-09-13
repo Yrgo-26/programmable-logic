@@ -1,0 +1,173 @@
+% Kapitel 20, satt ur lectures/L20/README.md och info/examination.md.
+
+\chapter{Praktisk tentamen 2: CAN-moduler}
+\label{c20:ch}
+
+{\large\itshape Tre timmar, individuellt, vid datorn. Omfattar projektets moduler: bittajming, CRC,
+bitstoppning, ramsekvensering, registersemantik och SPI-transaktionen.\par}
+
+\begin{chapterbox}{I det här kapitlet}
+\begin{itemize}
+  \item Varför en individuell tentamen följer på ett grupparbete.
+  \item Tentamens form: skrivuppgifter med utdelad testbänk, och läsuppgifter på papper.
+  \item De fyra slagen av uppgifter: varianter, reparationer, ett enskilt register, läsning.
+  \item Vad som är tillåtet att använda \textemdash{} inklusive gruppens egen projektkod.
+  \item Hur man förbereder sig, vad tentamen mäter, och vart konstruktionen tar vägen efteråt.
+\end{itemize}
+\end{chapterbox}
+
+Det här är kursens andra och sista examinationstillfälle. Som \chapref{c9:ch} innehåller det ingen ny
+teori; kapitlet säger vad tentamen mäter, vilken form uppgifterna har och hur man förbereder sig.
+Poäng och betygsgränser står i bilaga~\ref{app:project}.
+
+Tentamen omfattar \textbf{projektets moduler}, alltså \chapref{c10:ch} till \ref{c19:ch}:
+bittajmingen, CRC:n, bitstoppningen åt båda hållen, ramsekvenseringen, registersemantiken och
+SPI-transaktionen. Del~\ref{part:vhdl}:s material är inte borta \textemdash{} varje modul i
+projektet är byggd av den synkrona processmallen, en räknare, ett skiftregister och en Mooremaskin
+\textemdash{} men tyngdpunkten ligger på del~\ref{part:can}.
+
+% ------------------------------------------------------------------------------------------
+\section{Varför en individuell tentamen på ett grupparbete}
+\label{c20:sec:why}
+
+Projektet bedöms i grupp och står för halva kursen. Den här tentamen mäter något annat: att var och
+en förstår det gruppen byggde, inte bara den del man själv skrev.
+
+Det är inte en misstro mot arbetsformen utan en följd av den. En grupp om fyra eller fem delar upp
+elva moduler mellan sig, och den uppdelningen är precis vad som gör projektet genomförbart på tio
+pass. Baksidan är lika förutsägbar: den som skrev \code{crc15} kan komma undan utan att någonsin ha
+behövt förstå varför \code{bit_timer} har två pulser, och den som skrev registerbanken utan att ha
+tänkt på vad stoppningen gör åt CRC:n. Uppgifterna hämtas därför ur \emph{alla} delar av projektet,
+oavsett vem som skrev vilken modul.
+
+\begin{aside}
+Det finns en praktisk konsekvens av det här som är värd att ta på allvar långt före tentamen:
+\textbf{kodgranskningen under projektet är förberedelsen}. En grupp som granskar varandras PR:er på
+riktigt, i stället för att godkänna dem osedda, har redan läst allt som tentamen frågar om.
+\Chapref{c15:ch}:s kodgranskningsseminarium är tillfället att öva det; det är också det tillfälle som
+betalar sig här.
+\end{aside}
+
+% ------------------------------------------------------------------------------------------
+\section{Upplägg}
+\label{c20:sec:format}
+
+Samma form som \chapref{c9:ch}: fristående uppgifter, oberoende av varandra och ordnade ungefär efter
+stigande svårighet.
+
+De flesta är \textbf{skrivuppgifter} \textemdash{} en utdelad, självkontrollerande testbänk och en
+beskrivning av modulen den driver, med portordning, typer och beteende. Uppgiften är att skriva
+modulen så att testbänken passerar.
+
+Därutöver finns \textbf{läsuppgifter}: ett tidsdiagram eller en SPI-transaktion att tolka på papper.
+De har ingen testbänk, av precis det skäl som gör dem värda att ställa \textemdash{} att läsa en
+vågform är en färdighet i sig, och den examineras inte av att skriva VHDL. De rättas mot ett facit,
+och delvis rätt svar ger delpoäng på samma sätt som delvis korrekt logik gör.
+
+\subsection*{De fyra slagen av uppgifter}
+\begin{description}[style=unboxed,leftmargin=0pt,itemsep=0.8ex]
+  \item[Varianter.] En \code{bit_timer} med en annan sampelpunkt eller en annan bithastighet. En
+    stoppningsdetektor som räknar ett annat antal. En CRC med ett annat polynom. Modulen är
+    bekant; den enda punkt där den skiljer sig från projektets är den punkt som kräver att du
+    förstått den.
+  \item[Reparationer.] En given tillståndsmaskin eller ett givet skiftregister som är
+    \emph{nästan} rätt. Hitta felet med hjälp av testbänkens utskrift och åtgärda det. Det är
+    \chapref{c14:ch}:s och \ref{c15:ch}:s arbetssätt satt på prov: läs vad testbänken rapporterar,
+    och gå bakåt därifrån till raden som orsakade det.
+  \item[Ett enskilt register.] Ett register ur registerbanken, med sin sättnings- och
+    nollställningsregel, isolerat från resten. \Chapref{c18:ch}:s skillnad mellan en puls och en
+    klibbig nivå är hela uppgiften.
+  \item[Läsning.] Ett tidsdiagram eller en SPI-transaktion att tolka: vad ligger på bussen, och vad
+    borde ha legat där?
+\end{description}
+
+Delvis korrekt logik ger delpoäng, så lämna aldrig in en tom fil för att modulen inte blev klar;
+detsamma gäller ett halvt uttolkat tidsdiagram. Rättningen läser dessutom koden, inte bara
+testbänkens utfall: en modul som passerar genom att göra något annat än det som efterfrågades ger
+inte full poäng.
+
+% ------------------------------------------------------------------------------------------
+\section{Hjälpmedel}
+\label{c20:sec:aids}
+
+\textbf{Tillåtet:}
+\begin{itemize}
+  \item Allt kursmaterial: den här boken, föreläsningarnas README och samtliga appendix.
+    Registerkartan och protokollspecifikationen (bilaga~\ref{app:protocol}) hör förstås dit; flera
+    uppgifter är skrivna mot dem.
+  \item \textbf{Gruppens egen projektkod.} Ni byggde den; det vore konstigt att låtsas annat.
+    Uppgifterna är skrivna så att avskrift inte hjälper \textemdash{} varianterna skiljer sig på
+    just den punkt som kräver att man förstått modulen, och reparationerna har ingen motsvarighet i
+    repot alls.
+  \item Din egen dator med GHDL, och CircuitVerse om du vill rita en krets eller en vågform innan du
+    skriver den. Det är ofta snabbare, inte långsammare.
+\end{itemize}
+
+\textbf{Inte tillåtet:} kommunikation med andra i någon form; språkmodeller och andra verktyg som
+genererar eller förklarar VHDL åt dig; och sökning på nätet efter färdiga lösningar. Gränsen går
+inte vid vem som trycker på tangenterna utan vid vems förståelse som prövas.
+
+Den fullständiga och auktoritativa hjälpmedelslistan står i bilaga~\ref{app:project}; står något
+annat här gäller den. Är du osäker på om något är tillåtet: fråga före tentan, inte under.
+
+% ------------------------------------------------------------------------------------------
+\section{Före tentamen}
+\label{c20:sec:prep}
+
+\begin{itemize}
+  \item Gå igenom de moduler i projektet som \emph{någon annan} i gruppen skrev. Det är där luckorna
+    finns, och det är det enda rådet i listan som är svårt att följa dagen innan.
+  \item Kontrollfrågorna sist i \chapref{c12:ch} till \ref{c19:ch} är avsiktligt skrivna som
+    repetitionsmaterial. Kan du svara på alla utan att slå upp något är du klar.
+  \item Läs igenom de utdelade testbänkarna en gång till. De är det tydligaste som finns om exakt
+    vad varje modul lovar, och en skrivuppgift är alltid lättare för den som vet hur en testbänk
+    formulerar sina krav.
+  \item Rita om \code{bit_timer}s två pulser och \code{can_controller}s tillståndsdiagram på ett
+    papper, ur minnet. De två bilderna bär mer av projektet än någon enskild fil gör.
+  \item Se till att GHDL fungerar på din maskin \emph{innan} du kommer. En trasig verktygskedja är
+    inget skäl till förlängd skrivtid.
+\end{itemize}
+
+% ------------------------------------------------------------------------------------------
+\section{Det här mäter tentamen}
+\label{c20:sec:measures}
+
+\begin{itemize}
+  \item Att du kan omsätta en specifikation i ord till en korrekt modul, med rätt portordning.
+  \item Att du förstår bittajmingen: varför sampelpunkten ligger där den ligger, och vilken puls som
+    gör vad.
+  \item Att du kan resonera om bitstoppning åt båda hållen \textemdash{} att sätta in och att ta
+    bort är samma regel sedd från två håll, och båda sidorna måste hålla CRC:n utanför.
+  \item Att du kan skilja en puls från en klibbig nivå, och veta vilket lager som ansvarar för
+    vilket.
+  \item Att du kan läsa en testbänks utskrift och hitta tillbaka till orsaken.
+\end{itemize}
+
+% ------------------------------------------------------------------------------------------
+\section{Efter kursen}
+\label{c20:sec:after}
+
+Kontrollern går vidare: parallellklassen skriver C++-drivrutinen mot samma register över samma
+SPI-transport, och noden följer med till CAN-labben i nästa kurs i inbyggda system. Det som håller
+ihop de två halvorna är registerkartan och protokollspecifikationen i bilaga~\ref{app:protocol}
+\textemdash{} inte koden på någondera sidan. Det är själva poängen med ett gränssnitt: två grupper
+som aldrig läst varandras källkod kan ändå mötas på en buss, därför att specifikationen mellan dem är
+skriven innan någon av dem började.
+
+Över tjugo kapitel har boken gått från en grind på ett papper till en CAN-nod som en mikrokontroller
+kan prata med. Varje mönster på vägen är allmängods i digital konstruktion och följer med oförändrat
+in i vad du än bygger härnäst:
+
+\begin{itemize}
+  \item dubbelvippsynkroniseraren (\chapref{c4:ch}), som varje asynkron ingång passerar,
+  \item den klockade processmallen (\chapref{c3:ch}), som varje sekventiell modul i boken är skriven
+    med,
+  \item Mooremaskinen (\chapref{c8:ch}), som en uppräknad typ och ett \code{case},
+  \item skiftregistret och räknaren (\chapref{c6:ch}) som byggstenar snarare än som specialfall, och
+  \item till sist uppdelningen i block med ett tydligt ansvar var (\chapref{c11:ch}), som är det enda
+    skälet till att elva moduler går att skriva av fem personer parallellt och ändå passa ihop.
+\end{itemize}
+
+Vill du gå vidare från konstruktionen i den här boken \textemdash{} till en kontroller med felräknare
+och ACK-kontroll, till verifiering bortom en handskriven testbänk, eller till nästa protokoll byggt
+med samma metod \textemdash{} pekar bilaga~\ref{app:reading} ut vad som finns att läsa härnäst.

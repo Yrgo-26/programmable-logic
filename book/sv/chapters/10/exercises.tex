@@ -1,0 +1,426 @@
+% Avsnitt 10.9, ur lectures/L10/appendix/intro_framing_exercises.md och
+% lectures/L10/appendix/c_exercises.md.
+
+\section{Övningar}
+\label{c10:sec:exercises}
+
+\begin{aside}
+Övningarna är upplagda så här. Övning~\ref{c10:ex:byhand} och \ref{c10:ex:cpp} hör till
+\secref{c10:sec:framing}: den första bygger ramar för hand, på papper, och den andra gör samma ram
+till en fungerande C++-implementation. Övning~\ref{c10:ex:ascan} slår bron mellan det ramformatet och
+CAN. Övning~\ref{c10:ex:stuffing} till \ref{c10:ex:frame} befäster \secref{c10:sec:can} till
+\ref{c10:sec:bittiming}; de görs på papper och bygger upp till att sätta ihop en hel ram för hand.
+Övning~\ref{c10:ex:package} skriver paketet \code{can_def} och arbetar sedan mot det vid
+tangentbordet.
+\end{aside}
+
+% ------------------------------------------------------------------------------------------
+\exerciseset{Ramar för hand och i C++}
+
+\exercise{Att konstruera två ramar för hand}{Resonemang}
+\label{c10:ex:byhand}
+Utgå från ramstrukturen ur \secref{c10:sec:framing}:
+
+\begin{textdrawing}
+Fält   Storlek   Beskrivning
+------ --------- -------------------------------------------
+SOF    2 byte    0xA5F7
+LEN    1 byte    Nyttolastens längd
+TYPE   1 byte    Meddelandetyp
+DST    1 byte    Destinationsadress
+SRC    1 byte    Källadress
+SEQ    2 byte    Sekvensnummer
+DATA   N byte    Nyttolast
+CHK    2 byte    Checksumma (summan av föregående byte)
+\end{textdrawing}
+
+Checksumman är summan av varje byte från SOF till och med den sista nyttolastbyten, som en
+\code{std::uint16_t} (så den slår runt vid overflow). Fält bredare än en byte (SOF, SEQ, CHK) är
+big-endian. Ramtyperna är \code{Ping = 0x00}, \code{Pong = 0x01}, \code{StatusReq = 0x02} och
+\code{StatusResp = 0x03}.
+
+En enhet på adress \code{0x17} skickar en statusförfrågan till en sensor på adress \code{0x25}, med
+sekvensnummer \code{0x7F05}. Det ger \code{TYPE = 0x02}, \code{DST = 0x25}, \code{SRC = 0x17},
+\code{SEQ = 0x7F05}, och en tom \code{DATA}.
+
+\xpart{a} Rita motsvarande \code{StatusReq}-ram på papper, och fyll i varje fält: SOF, LEN, TYPE,
+DST, SRC, SEQ och CHK. Räkna ut checksumman för hand.
+
+\xpart{b} Sensorn svarar med ett 16-bitars sensorvärde, \code{0x3201}, buret i nyttolasten. Rita
+motsvarande \code{StatusResp}-ram på papper. Reglerna: TYPE ändras till \code{StatusResp}, DST och
+SRC byter plats, SEQ är oförändrat, och DATA är \code{0x3201} (2 byte). Räkna ut även den här ramens
+checksumma för hand.
+
+\exercise{Ramen i C++}{C++}
+\label{c10:ex:cpp}
+Implementera ramen i C++ som en struct \code{comm::Frame}. Din implementation valideras av en
+befintlig uppsättning enhetstester under \file{lectures/L10/appendix/code/}.
+
+\task{1. Undersök filstrukturen}
+\begin{itemize}
+  \item \file{test/frame_test.cpp} innehåller enhetstesterna som validerar din ramimplementation. Dem
+    skriver du inte; du får dem att passera.
+  \item \file{include/comm/def.hpp} innehåller ramfältens offset (indexpositioner), fältstorlekarna
+    med mera. Uppräkningsklassen \code{comm::FrameType} ska implementeras här.
+  \item \file{include/comm/frame.hpp} innehåller deklarationen av structen \code{comm::Frame}.
+  \item \file{source/comm/frame.cpp} ska innehålla implementationsdetaljerna för structen
+    \code{comm::Frame}, alltså dess metoddefinitioner.
+\end{itemize}
+
+\task{2. Skapa ramtyperna}
+Implementera uppräkningsklassen \code{comm::FrameType} i \file{comm/def.hpp}, och ge var och en av
+de fyra typerna det id som listas i Övning~\ref{c10:ex:byhand}. Lägg till en avslutande uppräknare
+\code{Unknown}, ett steg bortom den sista riktiga typen, så att en typ utanför intervallet kan
+avvisas vid deserialisering med en enda jämförelse.
+
+\task{3. Skapa ramstructen}
+Lägg till medlemsvariablerna för structen \code{comm::Frame} i \file{comm/frame.hpp}, där
+\code{@todo} markerar stället: \code{std::uint8_t data[MaxDataLen]}, \code{std::uint16_t seq},
+\code{std::uint8_t dst}, \code{std::uint8_t src}, \code{std::uint8_t len} och \code{FrameType type}.
+
+Värdeinitiera var och en med klammerparenteser: de numeriska medlemmarna med \code{\{\}}, och
+\code{type} med \code{\{FrameType::Unknown\}}, så att en default-konstruerad ram aldrig håller en typ
+som råkar vara giltig.
+
+Bredderna är ingen smaksak. Enhetstesterna jämför en medlem mot en literal av fältets egen bredd
+genom en mall som härleder \textbf{en} typ ur båda argumenten, så ett \code{len} deklarerat som
+\code{std::size_t} eller ett \code{seq} deklarerat som \code{std::uint32_t} slösar inte bara
+utrymme; testerna slutar kompilera.
+
+\code{serialize()} och \code{deserialize()} är \textbf{redan deklarerade} i den filen, dokumenterade
+och korrekt kvalificerade (\code{const noexcept} respektive \code{noexcept}). Låt de deklarationerna
+vara; du skriver deras definitioner i steg 4 och 5.
+
+\task{4. Implementera serialiseringsmetoden}
+\Secref{c10:sec:framing}:s \code{checksum16()}, \code{writeToBuf()} och \code{readFromBuf()} ingår
+\textbf{inte} i den utdelade koden, och båda metoderna nedan behöver alla tre. Kopiera in dem i
+\file{comm/frame.cpp}, i en anonym namnrymd ovanför metoddefinitionerna, så att de förblir privata
+för den filen:
+
+\begin{cppcode}
+namespace
+{
+// checksum16(), writeToBuf() and readFromBuf() from the framing introduction go here.
+} // namespace
+\end{cppcode}
+
+Två saker om den kopieringen, som kompilatorn båda berättar för dig först i efterhand:
+\begin{itemize}
+  \item \code{writeToBuf()} och \code{readFromBuf()} är begränsade med \code{std::is_unsigned}, och
+    ingenting i inkluderingskedjan för \file{frame.cpp} drar in \code{<type_traits>}. Lägg till den
+    inkluderingen högst upp i filen.
+  \item Ha \secref{c10:sec:framing}:s varning i åtanke när du anropar dem: \code{writeToBuf()}
+    skriver \code{sizeof(T)} byte härledda ur \emph{argumentet}, inte ur fältet, så casta till
+    fältets egen bredd vid varje anropsställe.
+\end{itemize}
+
+Implementera sedan metoden \code{comm::Frame::serialize()} så att den skriver följande till den
+givna bufferten: \code{SOF = 0xA5F7} (big-endian), LEN, TYPE, DST, SRC, SEQ (big-endian), DATA i
+samma ordning som den ligger i ramens nyttolastbuffert, och CHK, beräknad över alla föregående fält,
+byte för byte.
+
+Returnera ramens totala längd om serialiseringen lyckades, och \code{0U} vid fel, vilket betyder en
+\code{buf} som är null eller en \code{bufLen} som är mindre än ramen som ska skrivas. Båda har ett
+eget test; ingen av dem är valfri.
+
+\task{5. Implementera deserialiseringsmetoden}
+Implementera i samma fil metoden \code{comm::Frame::deserialize()} så att den validerar den givna
+datan, \textbf{i den här ordningen}, eftersom varje kontroll gör nästa säker att utföra:
+\begin{itemize}
+  \item \code{buf} är inte null, och \code{bufLen} är minst \code{MinFrameLen}. Ingenting har lästs
+    ännu vid den här punkten, så det är det här som över huvud taget gör det tillåtet att läsa
+    huvudet. Hoppa över det och läsningarna av SOF och LEN nedan springer utanför en för kort
+    buffert innan någon annan kontroll får en chans.
+  \item SOF är korrekt.
+  \item LEN ligger inom gränserna, alltså högst \code{MaxDataLen}.
+  \item Den givna bufferten rymmer \textbf{hela} ramen som huvudet utger sig för. Det här är en
+    andra, striktare längdkontroll, och den första ersätter den inte: en buffert som kapats efter
+    nyttolasten lämnar ändå \emph{något} där CHK borde ligga, och att läsa det som checksumman får en
+    trunkerad ram att se hel ut.
+  \item Ramtypen är giltig, alltså att den mottagna byten ligger under \code{Unknown}.
+  \item Checksumman stämmer.
+\end{itemize}
+
+Lagra den givna datan i ramen, men först när allt av den är giltigt.
+
+Två av de punkterna är kontroller som testerna straffar hårdast. En saknad null-kontroll får inget
+test att fallera, den \textbf{kraschar hela körningen}, så du ser en segfault och inget testnamn. En
+buffertlängdskontroll som stannar vid huvudet fäller \code{DeserializeRejectsShortBuffer} och
+\code{DeserializeRejectsTruncatedPayload} och ingenting annat, vilket är ett betydligt vänligare sätt
+att få det sagt.
+
+\task{6. Validera din implementation}
+Enhetstesterna ligger bakom ett makro, så ingenting körs förrän du slår på det. Lägg till
+\code{-DL01} i \code{CXX_FLAGS} i makefilen, där en \code{Todo}-kommentar markerar stället:
+
+\begin{makecode}
+CXX_FLAGS := -Wall -Werror -std=c++17 -Iinclude -DL01
+\end{makecode}
+
+Bygg och kör dem sedan från en Linuxterminal:
+
+\begin{shell}
+cd lectures/L10/appendix/code
+make
+\end{shell}
+
+Tills du gör det rapporterar programmet att testerna är avstängda och avslutas med lyckat resultat,
+oavsett om din implementation fungerar eller inte.
+
+\begin{aside}
+\textbf{Om bygget avbryts direkt med det här, är det inte din kod:}
+
+\begin{console}
+make[1]: *** No rule to make target 'lib'.  Stop.
+make: *** [Makefile:26: ../../../../libs/test/libqacademy_test.a] Error 2
+\end{console}
+
+Testramverket ligger som en submodul i \file{libs/test}, och en klon utan
+\code{--recurse-submodules} lämnar katalogen tom. Att den ändå \emph{finns} är varför felet handlar
+om ett saknat make-mål och inte om en saknad katalog: det är ramverkets makefil som inte är hämtad
+än. Hämta den en gång, från repots rot, med \code{git submodule update --init}. Övningen behöver
+också en C++-kompilator.
+\end{aside}
+
+Testerna kontrollerar båda metoderna mot ramarna du byggde för hand i Övning~\ref{c10:ex:byhand}:
+PING-bytesen ur \secref{c10:sec:framing} och båda ramarna ur den övningen, byte för byte; en rundtur
+genom serialisering och deserialisering som måste bevara varje fält; och avvisningsfallen (felaktig
+SOF, felaktig checksumma, ogiltig typ, trunkerad buffert, nullpekare).
+
+Varje test som passerar skrivs ut i grönt; ett som fallerar skrivs ut i rött och namnger uttrycket,
+båda värdena och raden, så att du kan jämföra direkt mot din egen pappersuträkning. Räkna med att se
+alla fallera först, och gå gröna en grupp i taget medan du arbetar dig igenom steg 2--5.
+
+Två saker som är värda att veta i förväg:
+\begin{itemize}
+  \item Testerna läser \code{frame.type}, \code{frame.dst}, \code{frame.src}, \code{frame.seq},
+    \code{frame.len} och \code{frame.data} direkt, så de medlemsnamnen måste stämma. Har du döpt dina
+    till något annat står det dig fritt att ändra testerna så att de matchar.
+  \item \code{DeserializeLeavesFrameUntouchedOnFailure} ger \code{deserialize()} en korrupt buffert
+    och kontrollerar sedan att ramens fält är \emph{oförändrade}. En \code{deserialize()} som
+    kopierar in fält i ramen medan den parsar dem passerar alla andra tester och fäller det här.
+\end{itemize}
+
+% ------------------------------------------------------------------------------------------
+\exerciseset{Från ramformatet till CAN}
+
+\exercise{Samma ram, fast som CAN}{Resonemang}
+\label{c10:ex:ascan}
+Ta den \code{StatusResp}-ram du byggde för hand i Övning~\ref{c10:ex:byhand}\,b), och skicka den som
+en CAN-ram i stället. Dess fält, som påminnelse: \code{TYPE = StatusResp}, \code{DST = 0x17},
+\code{SRC = 0x25}, \code{SEQ = 0x7F05}, nyttolast 2 byte med värdet \code{0x3201}.
+
+Utgå från konventionen i \secref{c10:sec:broadcast}: identifieraren kombinerar en bas per typ med
+id:t för den sensornod meddelandet gäller, alltså den nod som frågas i en förfrågan och den nod som
+svarar i ett svar (nod 3 frågas på \code{0x303} och svarar på \code{0x403}):
+
+\[ \mathit{ID} = \mathit{TYPE\_BASE} + \mathit{nodeId} \]
+
+Typbaserna är \code{StatusReq = 0x300}, \code{StatusResp = 0x400}, \code{Ping = 0x500} och
+\code{Pong = 0x600}.
+
+\xpart{a} Skriv motsvarande CAN-ram på formen \code{ID | DLC | DATA}.
+
+\xpart{b} Ange vilka fält i \secref{c10:sec:framing}:s ram som saknar motsvarighet i CAN-ramen. Säg
+för varje saknat fält vad CAN gör i stället, eller förklara varför CAN inte behöver något
+motsvarande fält.
+
+\xpart{c} Anta att två noder börjar sända på CAN-bussen i exakt samma ögonblick. Förklara kort hur
+bussen avgör vilken nod som fortsätter sända, och hur den förlorande noden upptäcker att den har
+förlorat. Det här är arbitreringsmekanismen från \secref{c10:sec:arbitration}; återge den med egna
+ord.
+
+\xpart{d} Förklara varför det inte finns något separat checksummefält att fylla i när man
+konstruerar en CAN-ram, till skillnad från \secref{c10:sec:framing}:s ramformat.
+
+% ------------------------------------------------------------------------------------------
+\exerciseset{Bitstoppning, arbitrering och tajming}
+
+\exercise{Bitstoppning för hand}{Resonemang}
+\label{c10:ex:stuffing}
+\xpart{a} Tillämpa stoppbitsregeln på följande 10-bitarssekvens:
+
+\begin{textdrawing}
+0011111111
+\end{textdrawing}
+
+Skriv den kompletta sända bitströmmen, med alla ursprungliga bitar och varje instoppad stoppbit
+tydligt markerad.
+
+\xpart{b} En mottagare observerar följande sända ström på 9 bitar:
+
+\begin{textdrawing}
+101111101
+\end{textdrawing}
+
+Mottagaren vet att bitstoppning är i bruk. Avstoppa strömmen: identifiera eventuella stoppbitar, ta
+bort dem, och återskapa den ursprungliga följden av riktiga databitar.
+
+\xpart{c} En mottagare observerar sex dominanta (\code{0}) bitar i rad på ett ställe där en stoppbit
+skulle ha brutit en följd av fem. Förklara vad mottagaren drar för slutsats, och vad den bör göra
+härnäst.
+
+\xpart{d} \Secref{c10:sec:stuffing} påpekar att räknaren för lika bitar i rad inte nollställs vid
+fältgränser. Anta att ett fält slutar med tre lika bitar och att nästa börjar med två till av samma
+värde. Använd regeln och säg var stoppbiten hamnar, räknat från fältgränsen, och förklara varför
+inget av fälten på egen hand skulle ha orsakat den.
+
+\exercise{Att avkoda en riktig bitström}{Resonemang}
+\label{c10:ex:decode}
+En mottagare observerar följande ström på 21 bitar:
+
+\begin{textdrawing}
+0 00000010101 0 00 0010 11
+\end{textdrawing}
+
+Strömmen är redan avstoppad, så att den här övningen håller fokus på fältens uppdelning i stället
+för på stoppningen. Mellanrummen finns bara med för läsbarhetens skull; den riktiga CAN-bussen har
+inga glapp mellan fälten.
+
+\xpart{a} Dela upp strömmen i dess namngivna fält, med bredderna från \secref{c10:sec:frameformat}:
+SOF, ID, RTR, IDE, r0, DLC. Bestäm sedan identifieraren i hexadecimal form, DLC-värdet, och vilket
+fält som har börjat i de två bitar som blir över när alla namngivna fält är avräknade.
+
+\xpart{b} Bestäm utifrån DLC:n från \textbf{a)} hur många databitar mottagaren förväntar sig totalt,
+och hur många ytterligare databitar som återstår innan CRC-fältet börjar.
+
+\xpart{c} Anta att DLC i stället hade varit \code{0000}. Vilket fält skulle då följa omedelbart efter
+kontrollfältet?
+
+\exercise{Arbitrering mellan tre noder}{Resonemang}
+\label{c10:ex:arb3}
+Tre noder försöker sända vid samma SOF: nod R med ID \code{0x155}, nod S med ID \code{0x154}, och
+nod T med ID \code{0x1D5}.
+
+\xpart{a} Arbeta igenom arbitreringen bit för bit, i samma stil som \secref{c10:sec:arbitration}:s
+genomräknade exempel. Bestäm vilken nod som vinner, och vid vilken identifierarbit varje förlorande
+nod faller ur.
+
+\xpart{b} De två förlorande noderna faller ur vid olika bitpositioner. Förklara varför genom att ange
+var varje förlorande nods identifierare först skiljer sig från vinnarens identifierare, och varför
+just den första avvikande biten avgör när noden förlorar arbitreringen.
+
+\xpart{c} En förlorande nod måste sluta driva bussen, och den intressanta frågan är \emph{när}.
+(\Chapref{c11:ch} introducerar portparet \code{tx_bus}/\code{bus_en} som bokens kontroller slutar
+driva med, och \chapref{c16:ch}--\ref{c17:ch} bygger logiken; här resonerar du på protokollnivå.)
+Förklara, med en eller två meningar, vad varje förlorande nods \code{can_controller} måste göra på
+allra första klockcykeln efter att den upptäckt avvikelsen, och varför den tajmingen spelar roll.
+
+\note[Ledtråd]Tänk igenom vad ”ögonblicket” betyder i \secref{c10:sec:arbitration}:s genomräknade
+arbitreringsexempel.
+
+\exercise{Resonemang om sampelpunkten}{Resonemang}
+\label{c10:ex:sample}
+Den här boken samplar varje bit 70~\% in i bitperioden, inte vid 0~\% (allra först i perioden) eller
+100~\% (allra sist).
+
+\xpart{a} Förklara vad som skulle kunna gå fel om en mottagare samplade vid 0~\%. Utgå från
+signalutbredning, varför en bitperiod behöver en minsta varaktighet, och om det sända värdet har
+hunnit stabilisera sig.
+
+\xpart{b} Förklara vad som skulle kunna gå fel om en mottagare samplade vid 100~\%, på den sista
+möjliga klockpulsen. Gör förklaringen specifik för att det i bokens design gäller att varje nod har
+sin egen lokala bittimer, att timern omsynkroniseras bara vid SOF, och att den aldrig
+omsynkroniseras mitt i ramen (riktig CAN omsynkroniserar på flanker även mitt i ramen; bokens
+kontroller gör inte det).
+
+\xpart{c} Arbitrering kräver att varje konkurrerande nod läser bussen under \emph{samma} bitperiod
+som den driver den. Förklara varför en sampelpunkt för nära periodens början är riskabel, varför en
+sampelpunkt för nära periodens slut är riskabel, och varför faran växer ju längre in i ramen man
+kommer.
+
+\exercise{Att konstruera en CAN-ram för hand}{Resonemang}
+\label{c10:ex:frame}
+Övning~\ref{c10:ex:stuffing} till \ref{c10:ex:sample} arbetade med enskilda regler. Den här sätter
+ihop en komplett ram utifrån ramdiagrammet i \secref{c10:sec:frameformat}.
+
+\begin{aside}
+\textbf{En anmärkning om CRC:n.} Du får CRC-15-värdet för varje ram nedan. Att räkna ut en 15-bitars
+CRC över drygt 30 bitar för hand är mekaniskt snarare än lärorikt; i \chapref{c13:ch} arbetar du
+igenom rekursionen ordentligt, över en 4-bitarssekvens, när motorn i sig är ämnet.
+\end{aside}
+
+\xpart{a} Ta CAN-ramen du tog fram i Övning~\ref{c10:ex:ascan}: \code{ID = 0x425}, \code{DLC = 2},
+data \code{32 01}. Skriv ut varje fält som bitar, i sändningsordning, med bredderna från
+\secref{c10:sec:frameformat}: SOF; ID (11 bitar, MSB först); RTR; IDE och r0; DLC; data (MSB först,
+byte 0 först); CRC (given: \code{010101100100011}); CRC-avgränsare, ACK-plats, ACK-avgränsare och
+EOF.
+
+\xpart{b} Hur många bitar blir det totalt, före all stoppning?
+
+\xpart{c} Tillämpa nu stoppbitsregeln från Övning~\ref{c10:ex:stuffing} över SOF till och med
+CRC-fältet, och kom ihåg att följdräknaren inte nollställs vid fältgränser. Hur många stoppbitar
+sätts in, och hur många bitar upptar ramen på ledningen?
+
+\xpart{d} Vid bokens bithastighet på 1~Mbit/s, hur lång tid tar det att sända den ramen?
+
+\xpart{e} Upprepa \textbf{a)} till \textbf{d)} för en ram \textbf{utan nyttolast}:
+\code{ID = 0x100}, \code{DLC = 0}, CRC \code{011100000001010}. Notera vilka delar av ramen som är
+strukturellt oförändrade trots det saknade datafältet, och var CRC-fältet nu börjar.
+
+\xpart{f} Jämför dina två svar på \textbf{c)}. Den andra ramen bär ingen data alls, och ändå behöver
+dess stoppade område \emph{fler} stoppbitar än den första. Förklara varför, utifrån vad
+stoppbitsregeln faktiskt reagerar på.
+
+% ------------------------------------------------------------------------------------------
+\exerciseset{Att arbeta med paketet}
+
+\exercise{\code{can_def} och dess härledningar}{VHDL}
+\label{c10:ex:package}
+Varje konstant i \code{can_def} går att spåra tillbaka till något det här kapitlet definierat. De
+här frågorna skriver paketet, kontrollerar att härledningarna håller när indata ändras, och utökar
+det med värden som \secref{c10:sec:frameformat} namngav men som paketet ännu inte håller.
+
+\xpart{a} Skriv \file{controller/can_def.vhd}, med konstanterna och subtyperna som
+\secref{c10:sec:candef} ställer upp. Var du med på passet har du den redan; var du inte det är det
+här den kommer ifrån, och varje kapitel från \chapref{c11:ch} och framåt förutsätter att den finns.
+
+Det här är den enda modulen i boken som delas ut i sin helhet i stället för som en specifikation, och
+det av ett skäl värt att nämna: ett paket innehåller inget beteende att designa, så det finns
+ingenting mellan värdena och koden för dig att lista ut. Det nya här är själva VHDL-koden, eftersom
+en paketdeklaration är en konstruktion boken inte använt tidigare. Skriv av den för hand i stället
+för att klistra in den. Namnen är de kommande åtta kapitlens vokabulär, och att skriva dem en gång är
+billigare än att slå upp dem åtta gånger.
+
+\xpart{b} Anta att DE0-CV:ns klocka vore 40~MHz i stället för 50~MHz, med bithastigheten fortfarande
+1~Mbit/s. Räkna om \code{TICKS_PER_BIT} och \code{SAMPLE_TICK} (fortfarande 70~\%).
+
+\xpart{c} Anta i stället att klockan ligger kvar på 50~MHz men att bussen körs på 125~kbit/s, en
+verklig CAN-hastighet för ”low speed”. Räkna om båda konstanterna.
+
+\xpart{d} \code{TICKS_PER_BIT} är \code{CLOCK_FREQ_HZ / BIT_RATE_HZ}, med VHDL:s heltalsdivision för
+\code{natural}, som trunkerar. Ge ett par av klocka och bithastighet där divisionen \emph{inte} går
+jämnt ut, och förklara med en mening varför det vore ett problem för den här designen, trots att
+VHDL-koden fortfarande skulle kompilera och elaboreras utan invändningar.
+
+\xpart{e} Lägg till en konstant \code{BIT_PERIOD_NS}, längden på en CAN-bitperiod i nanosekunder,
+härledd ur \code{BIT_RATE_HZ} i stället för hårdkodad. Ange sedan sambandet mellan den,
+\code{TICKS_PER_BIT} och 50 MHz-systemklockans periodtid på 20~ns, och bekräfta att de tre stämmer
+överens.
+
+\xpart{f} \Secref{c10:sec:frameformat} anger CRC-avgränsaren, ACK-fältet och EOF som 1, 2 respektive
+7 bitar, men paketet håller ingen av dem: \code{can_controller} kommer att använda de talen som nakna
+literaler. Lägg till \code{CRC_DELIM_BITS}, \code{ACK_BITS} och \code{EOF_BITS}, och säg vilken av de
+två formerna en senare läsare är bäst betjänt av.
+
+\xpart{g} Kontrollera att paketet faktiskt kompilerar. Installera GHDL om du inte redan gjort det
+(bilaga~\ref{app:sim}), och kör sedan \code{make build-project} från roten av gruppens repo. Du bör
+se:
+
+\begin{console}
+--> controller/can_def.vhd analyzes cleanly
+\end{console}
+
+följt av de två utdelade \file{bridge/}-filerna, och därefter varje testbänk rapporterad som
+överhoppad, eftersom modulerna de kontrollerar inte finns ännu:
+
+\begin{console}
+0 testbench(es) run, 8 skipped.
+\end{console}
+
+Gör nu sönder något med flit, ett saknat semikolon eller en felstavad typ, kör om, och läs vad GHDL
+säger om det. Ställ tillbaka det.
+
+Det här är hela verifieringsberättelsen för ett paket: ett paket har inget beteende att simulera, så
+”den analyseras” är allt som finns att kontrollera. \Chapref{c11:ch} introducerar verktyget
+ordentligt, och därifrån får varje modul en testbänk också.

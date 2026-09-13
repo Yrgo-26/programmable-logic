@@ -1,0 +1,275 @@
+% Section 10.1, from lectures/L10/appendix/intro_framing.md.
+
+\section{Frames and serialisation}
+\label{c10:sec:framing}
+
+\Chapref{c1:ch} to \ref{c8:ch} ended with state machines controlling a single board: a blinking LED,
+a UART on an FPGA. The project starts from a different problem: getting independent pieces of
+hardware to exchange information reliably over a shared wire, where neither side can see inside the
+other.
+
+This is central to embedded systems because the communication happens as raw byte streams, RAM and
+flash are limited, and robustness is critical. Nodes usually communicate over serial interfaces such
+as UART, SPI, I2C or RS-485. Data is sent as a sequence of bytes, and interpreting that byte stream
+requires a structure. That structure is called a \textbf{frame}.
+
+A frame is a structured representation of data that:
+\begin{itemize}
+  \item Contains clearly defined fields.
+  \item Has a defined length.
+  \item Can be validated (for example via a checksum).
+  \item Can be serialised into a byte array (\code{std::uint8_t[]}).
+  \item Can be deserialised from a byte array.
+\end{itemize}
+
+Consider node A sending the value \code{0x2A} to node B over a shared wire, with nothing else agreed
+in advance:
+\begin{itemize}
+  \item How does B know when a new value begins, in a stream of bits that looks the same in the
+    middle of a value as it does between two values?
+  \item How does B know how long (how many bytes) the value is?
+  \item How does B know that the bits it sampled were not corrupted by electrical noise?
+  \item What happens if two nodes transmit at the same time?
+\end{itemize}
+
+Every real protocol answers these with some combination of the following, each named here after the
+field this book's frame carries it in:
+\begin{itemize}
+  \item \textbf{Framing (\code{SOF})}: a recognisable start marker (and often an end marker), so
+    that a receiver can decide where a message begins and where it ends.
+  \item \textbf{A length field (\code{LEN})}: so that the receiver knows how much payload to expect.
+  \item \textbf{A checksum (\code{CHK})}: extra bits, computed from the payload, letting the
+    receiver detect (not necessarily correct) many kinds of transmission error.
+  \item \textbf{A media access rule}: what happens when more than one node wants to transmit at the
+    same time.
+\end{itemize}
+
+A \code{TYPE} field joins them to say what the message means, so that the receiver can act on it.
+
+\subsection*{A small but realistic frame}
+To make it concrete: design a frame for sending short messages between nodes on a shared,
+byte-oriented link (UART, RS-485, \dots):
+
+\lecfig[0.68]{lectures/L10/appendix/images/example_frame_format.png}{The frame format the rest of
+this section builds, field by field.}{c10:fig:frame}
+
+Three rules matter as soon as you start working these fields out by hand:
+\begin{itemize}
+  \item \textbf{Byte order}: every field wider than a byte (SOF, SEQ, CHK) is big-endian, most
+    significant byte first.
+  \item \textbf{LEN} counts only the DATA field, never the header and never CHK.
+  \item \textbf{CHK} is a 16-bit sum of every byte from SOF through the last payload byte, wrapping
+    on overflow. It is computed over the \emph{serialised} byte stream rather than over the field
+    values as integers, so SOF contributes \code{0xA5 + 0xF7}, not \code{0xA5F7} treated as a single
+    16-bit number.
+\end{itemize}
+
+\paragraph{Why DST, SRC and SEQ in particular}
+SOF, LEN, TYPE and CHK already answer the four questions above. These three exist because a shared
+link with more than two participants raises new ones:
+\begin{itemize}
+  \item \textbf{DST and SRC}: who the frame is for and who it is from, so that a node can ignore
+    traffic addressed elsewhere and a reply can find its way back. CAN answers this entirely
+    differently, as \secref{c10:sec:broadcast} shows.
+  \item \textbf{SEQ}: matches a reply back to \emph{that particular} request, not some other one in
+    the air.
+\end{itemize}
+
+\subsection*{Choosing SOF}
+\begin{itemize}
+  \item A single sync byte is easy to hit by accident: any payload byte that happens to equal it
+    looks like the beginning of a frame.
+  \item Two bytes are therefore common, and this protocol uses \code{0xA5F7}.
+  \item SOF is the \emph{first} thing a parser checks when reading a frame. If it does not match the
+    data is discarded, and the parser goes on looking for the next SOF.
+  \item Note what that gives and does not give: it makes a false synchronisation much less likely,
+    but not impossible, since payload bytes can still happen to spell \code{A5 F7}. The remaining
+    risk is why LEN and CHK still have to be checked afterwards.
+\end{itemize}
+
+\subsection*{Worked example: PING and PONG}
+Suppose node \code{0x01} pings node \code{0x02}, with sequence number \code{0x0020} and no payload:
+\begin{itemize}
+  \item \code{SOF = 0xA5F7}, \code{LEN = 0x00}, \code{TYPE = 0x00} (Ping), \code{DST = 0x02},
+    \code{SRC = 0x01}, \code{SEQ = 0x0020}.
+  \item \code{CHK = 0xA5 + 0xF7 + 0x00 + 0x00 + 0x02 + 0x01 + 0x00 + 0x20 = 0x01BF}.
+\end{itemize}
+
+\begin{textdrawing}
+SOF      LEN   TYPE   DST   SRC   SEQ      DATA   CHK
+A5 F7    00    00     02    01    00 20    --     01 BF
+\end{textdrawing}
+
+Node \code{0x02} replies with a PONG:
+\begin{itemize}
+  \item \code{SOF = 0xA5F7}, \code{LEN = 0x00}, \code{TYPE = 0x01} (Pong), \code{DST = 0x01},
+    \code{SRC = 0x02}, \code{SEQ = 0x0020}.
+  \item \code{CHK = 0xA5 + 0xF7 + 0x00 + 0x01 + 0x01 + 0x02 + 0x00 + 0x20 = 0x01C0}.
+  \item Note that \code{DST} and \code{SRC} are swapped, \code{SEQ} is unchanged, and only
+    \code{TYPE} and the two addresses differ from the PING: identical arithmetic with different
+    inputs.
+\end{itemize}
+
+That covers three of the four opening questions, plus the extra ones a shared link with several
+nodes raises. The fourth is still open: what happens if two nodes transmit at the same time? CAN
+answers it differently, and that is the subject of \secref{c10:sec:can}.
+
+\subsection*{Frame types}
+TYPE is one byte on the wire, so a frame type travels as an unsigned integer. Every type is assigned
+an id of its own by convention: \code{Ping = 0}, \code{Pong = 1}, \code{StatusReq = 2},
+\code{StatusResp = 3}. Further types the protocol acquires simply continue the sequence.
+
+Two consequences worth noting before any code is written:
+\begin{itemize}
+  \item The received byte is untrusted input. Every value the receiver does not recognise must be
+    rejected rather than acted on, exactly like a wrong SOF or a wrong checksum.
+  \item Reserving an ID immediately above the last real type, an ``unknown'' value, makes that check
+    a single comparison. Without it the validation needs a list of valid IDs that has to be kept in
+    step every time a type is added.
+\end{itemize}
+
+\subsection*{A simple 16-bit checksum}
+For this book's purposes a checksum only has to be simple to implement, simple to test, and good
+enough to catch many random bit errors. A 16-bit sum meets all three: start at \code{0}, and for
+every byte in the range, \code{sum += byte}. The result is the checksum, modulo $2^{16}$.
+
+\begin{cppcode}
+/**
+ * @brief Compute a simple 16-bit checksum (sum of bytes modulo 2^16).
+ *
+ * @param[in] data Pointer to the bytes to checksum.
+ * @param[in] dataLen Number of bytes to checksum.
+ *
+ * @return The 16-bit checksum.
+ */
+std::uint16_t checksum16(const std::uint8_t* data, const std::size_t dataLen) noexcept
+{
+    if ((nullptr == data) || (0U == dataLen)) { return 0U; }
+    std::uint16_t checksum{};
+    for (std::size_t i{}; i < dataLen; ++i) { checksum += data[i]; }
+    return checksum;
+}
+\end{cppcode}
+
+\begin{warning}
+\textbf{A checksum's limitations, worth being explicit about.} A checksum detects only errors that
+change the arithmetic sum. A single flipped bit always changes the sum, so single-bit errors are
+always caught. The real weaknesses lie elsewhere: two whole bytes swapping places leave the sum
+unchanged, and \emph{some} combinations of several flipped bits cancel each other out and slip
+through undetected. CRCs catch a much broader, mathematically well-understood class of errors, and
+are therefore used by CAN instead of a simple sum. They are introduced in
+\secref{c10:sec:frameformat} and implemented in \chapref{c13:ch}.
+\end{warning}
+
+This is not as strong as a CRC, but it is enough for practising framing, parsing and robust error
+handling, which is what this introduction is for.
+
+\subsection*{Serialisation and deserialisation}
+\textbf{Serialisation} turns structured data into a sequence of bytes (\code{std::uint8_t[]}) so
+that it can be sent over an interface. \textbf{Deserialisation} interprets a received byte array and
+extracts the structured data again: the fields are validated first (SOF, length, type, checksum),
+and only once every check has passed is the data extracted.
+
+Validating before extracting matters because UART and RS-485 deliver bytes as a stream, so a
+receiver routinely sees rubbish between frames, dropped bytes and corrupted frames.
+
+In embedded systems this is nearly always done with C arrays (\code{std::uint8_t buffer[Size]}),
+pointers to those arrays at call boundaries (\code{std::uint8_t*}), and an explicit length
+(\code{std::size_t}).
+
+Both directions need the same byte order handling on every multi-byte field, which is repetitive and
+easy to get subtly wrong. Two function templates remove the repetition. Both constrain \code{T} with
+\code{std::is_unsigned}, so wherever they end up they need \code{<type_traits>}:
+
+\begin{cppcode}
+#include <type_traits>
+
+/**
+ * @brief Write a value to a buffer, most significant byte first.
+ *
+ *        The caller is responsible for the buffer being large enough.
+ *
+ * @tparam T The value type. Must be unsigned.
+ *
+ * @param[out] buf The buffer to write to.
+ * @param[in] offset Value offset, i.e. the index at which to write the value.
+ * @param[in] value  The value to write.
+ */
+template <typename T>
+void writeToBuf(std::uint8_t* buf, const std::size_t offset, const T value) noexcept
+{
+    static_assert(std::is_unsigned<T>::value, "Failed to write to buffer: T must be unsigned!");
+    constexpr std::size_t len{sizeof(T)};
+    constexpr std::size_t msb{len - 1U};
+    constexpr std::size_t bitsPerByte{8U};
+
+    for (std::size_t i{}; i < len; ++i)
+    {
+        const std::size_t shift{bitsPerByte * (msb - i)};
+        buf[offset + i] = static_cast<std::uint8_t>((value >> shift));
+    }
+}
+
+/**
+ * @brief Read a value from a buffer, most significant byte first.
+ *
+ * @tparam T The value type. Must be unsigned.
+ *
+ * @param[in] buf Buffer to read from.
+ * @param[in] offset Value offset in the buffer.
+ *
+ * @return The retrieved value.
+ */
+template <typename T = std::uint8_t>
+[[nodiscard]] T readFromBuf(const std::uint8_t* buf, const std::size_t offset) noexcept
+{
+    static_assert(std::is_unsigned<T>::value, "Failed to read from buffer: T must be unsigned!");
+    constexpr std::size_t len{sizeof(T)};
+    constexpr std::size_t msb{len - 1U};
+    constexpr std::size_t bitsPerByte{8U};
+    T value{};
+
+    for (std::size_t i{}; i < len; ++i)
+    {
+        const std::size_t shift{bitsPerByte * (msb - i)};
+        value |= static_cast<T>(buf[offset + i]) << shift;
+    }
+    return value;
+}
+\end{cppcode}
+
+\begin{warning}
+\textbf{A pitfall worth naming, since the compiler does not catch it.} The number of bytes written is
+\code{sizeof(T)}, derived from the \emph{argument}, not from the field. Passing in a
+\code{std::size_t} where the field is one byte writes \textbf{eight} bytes and silently overwrites
+the fields that follow:
+
+\begin{cppcode}
+constexpr std::size_t payloadLen{0U};
+writeToBuf(buf, FrameOffset::Len, payloadLen);                            // Writes 8 bytes (error).
+writeToBuf(buf, FrameOffset::Len, static_cast<std::uint8_t>(payloadLen)); // Writes 1 byte.
+\end{cppcode}
+
+Always cast to the field's own width at the call site.
+\end{warning}
+
+\subsection*{From paper to code}
+This exact frame is made runnable in C++ under \file{lectures/L10/appendix/code/}: a \code{Frame}
+struct serialising itself into a byte buffer, deserialising itself back, and rejecting anything with
+a wrong SOF, length, type or checksum. Serialising the PING above produces exactly the bytes worked
+out above, \code{A5 F7 00 00 02 01 00 20 01 BF}. \file{comm/def.hpp} already provides the field
+offsets and field lengths, so you never have to count byte positions by hand.
+
+Turning the type IDs above into a C++ enumeration, declaring the struct and implementing both methods
+yourself is Exercise~\ref{c10:ex:cpp}. A set of unit tests comes with the code, in
+\file{test/frame_test.cpp}: they check both methods against the frames worked out on paper, byte by
+byte. You do not write them; \code{make} runs them, and your job is to make them pass.
+
+\subsection*{What comes next}
+One question from the beginning of this section is still open: \textbf{what happens if two nodes
+transmit at the same time?}
+
+Nothing in this frame format answers it. A sync word cannot help, since both transmitters send one;
+a checksum cannot help, since it only reports the damage after the fact. Answering it takes a
+different kind of protocol, one where the bus's \emph{electrical} behaviour decides who continues
+and who drops out, before any data is lost. That protocol is CAN.

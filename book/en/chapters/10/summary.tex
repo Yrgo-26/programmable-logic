@@ -1,0 +1,44 @@
+% Section 10.8, from lectures/L10/README.md.
+
+\section{Summary}
+\label{c10:sec:review}
+
+\needspace{6\baselineskip}
+\subsection*{What you should be able to do now}
+\begin{itemize}
+  \item Say why communication protocols use frames, checksums and arbitration.
+  \item Describe the CAN frame's format field by field, and construct a complete frame by hand.
+  \item Explain how wired-AND arbitration resolves contention without a bus master, and decide which
+    of two nodes wins.
+  \item Apply the bit stuffing rule to a bit sequence, by hand.
+  \item Write \file{can_def.vhd}: the constants, the subtypes and the CRC polynomial the rest of the
+    project reads.
+  \item Account for the group's way of working: branching, PRs and review.
+\end{itemize}
+
+\needspace{6\baselineskip}
+\subsection*{Questions to test yourself with}
+\begin{enumerate}
+  \item Why does a protocol need a length field when the frame has a clear beginning anyway?
+  \item Why does CAN have no destination address, and what does it use instead?
+  \item Two nodes start transmitting at the same time. Which wins, and what does the loser do?
+  \item Why must a transmitter insert a bit after five identical ones in a row, and why does the
+    rule not apply to the whole frame?
+  \item What happens to the CRC computation for a stuffed bit?
+  \item Why is the sample point around 70~\% into the bit period instead of in the middle?
+\end{enumerate}
+
+\needspace{6\baselineskip}
+\subsection*{Target}
+\file{can_def.vhd} should be written and merged by the end of the session. It is a short file and the
+rest of the project reads it, so it is worth finishing straight away.
+
+The targets in these chapters are just that, targets. They are not milestones, they are not graded,
+and the group decides for itself in which order the modules are built; see
+appendix~\ref{app:project}.
+
+\needspace{6\baselineskip}
+\subsection*{Looking ahead}
+\Chapref{c11:ch} goes from protocol to block diagram: the controller's architecture, the top level
+every later module is instantiated in, the register map the driver class will consume, and the
+project's simulation flow in GHDL.

@@ -1,0 +1,115 @@
+% Avsnitt 17.8, ur lectures/L17/appendix/b_exercises.md.
+
+\section{Övningar}
+\label{c17:sec:exercises}
+
+\begin{aside}
+När din mottagningslogik är klar verifierar \file{controller/can_controller_tb.vhd} sändning och
+mottagning tillsammans, och \code{make build-project} slutar hoppa över den: alla sex testbänkar i
+\file{controller/} körs härifrån och framåt. De två i \file{bridge/} fortsätter hoppas över tills
+\chapref{c18:ch} och \ref{c19:ch} skriver modulerna de prövar.
+
+Om den fortfarande rapporteras som överhoppad efter att du tror att mottagningsvägen är klar, läs
+meddelandet före din design. Bygget avgör saken genom att leta efter \chapref{c17:ch}:s CRC-grindning
+på mottagningssidan inuti \file{can_controller.vhd}, så en korrekt kontroller som stavar de två
+uttrycken annorlunda hoppas över i stället för att köras. \code{CI_BUILD_ALL=1 make build-project}
+tvingar fram den, och bilaga~\ref{app:sim} förklarar varför kontrollen fungerar så.
+\end{aside}
+
+\exercise{Resonemang om tajmingfixen på RX-sidan}{Resonemang}
+\label{c17:ex:timing}
+\xpart{a} \Secref{c17:sec:preempt} visar att \code{rx_shift_reg} måste aktiveras
+\emph{kombinatoriskt}, under själva \code{STATE_LOAD_*}-tillståndet, i stället för att vänta tills
+\code{state} synligt blir skifttillståndet. Förklara med egna ord varför det att först vänta in att
+tillståndsövergången blir klar skulle få \code{rx_shift_reg} att missa just det sampel som utlöste
+väntan från början.
+
+\xpart{b} \code{STATE_CRC_LO_WAIT} väntar på \code{bt_bit_done}, inte på \code{bt_sample}, till
+skillnad från varje väntan vid en gruppgräns i designen (tillstånden \code{STATE_LOAD_*}). Förklara
+med egna ord varför just den övergången måste ligga i linje med en \emph{bitperiodsgräns} och inte
+med en sampelpunkt. Vilka andra tillstånd delar utlösaren \code{bt_bit_done}, och vad har de
+gemensamt med den?
+
+\xpart{c} Anta (hypotetiskt) att \code{STATE_CRC_WAIT} också väntade på \code{bt_sample} för
+RX-rollen, utöver att \code{STATE_LOAD_CRC_HI} gör detsamma omedelbart efteråt. Förklara vad som
+skulle gå fel, och varför det inte så mycket skulle visa sig som ett rent haveri som att en mottagande
+nod hamnar en bitperiod längre efter en sändande nod än den borde.
+
+\exercise{Arbitrering för hand}{Resonemang}
+\label{c17:ex:arbhand}
+Två noder begär sändning på samma cykel: nod A med ID \code{0x2A0}, nod B med ID \code{0x2C0}.
+
+\xpart{a} Skriv båda ID:na binärt (11 bitar, MSB först) och markera den första bitposition där de
+skiljer sig.
+
+\xpart{b} Säg med \secref{c10:sec:arbitration}:s arbitreringsregel (dominant \code{0} vinner) vilken
+nod som vinner och vid vilken bit förloraren faller ur.
+
+\xpart{c} Den förlorande noden upptäcker sin förlust med
+\code{bt_sample = '1' and txsr_tx_bit = '1' and rx_bus_s2 = '0'}. Säg, för förloraren vid den biten,
+vad var och en av de tre termerna evalueras till och varför villkoret slår till.
+
+\xpart{d} Förloraren sätter \code{error <= '1'} och faller ner till \code{STATE_IDLE} medan vinnaren
+fortfarande driver bussen. \code{error} nollställs i \code{STATE_START}. Förklara varför förlorarens
+\code{error} skulle bli oobserverbart för en anropare om \code{STATE_IDLE} gick in i en mottagning på
+en dominant \emph{nivå}.
+
+\xpart{e} En lockande lagning är att i stället leta efter \emph{flanken} från recessiv till dominant,
+i linje med hur \secref{c10:sec:frameformat} beskriver SOF. Visa att det egentligen inte fungerar,
+med hjälp av stoppbitsregeln: vad sätter sändaren in efter fem dominanta bitar i rad, och vad gör
+bussen på biten efter det? Ungefär hur långt in i vinnarens ram hinner förloraren innan flanktestet
+slår till ändå?
+
+\xpart{f} Ange regeln designen faktiskt använder (\secref{c16:sec:roles}). Två fakta gör den
+hållbar; ge båda: vad stoppbitsregeln begränsar inne i det stoppade området, och vad den ostoppade
+svansen lägger till ovanpå det som skjuter tröskeln till elva. Säg sedan varför tomgångsräknaren
+måste nollställas till \textbf{fullt} och inte till tomt när noden kommer ur reset.
+
+\exercise{SOF-biten som ingen behåller}{Resonemang}
+\label{c17:ex:sof}
+\code{STATE_SOF} aktiverar \code{rx_shift_reg} under en bit och kastar sedan värdet.
+\Secref{c17:sec:states} förklarar varför; den här övningen handlar om att se felet med egna ögon.
+
+\xpart{a} Ta ID \code{0x000}, DLC \code{0}. Skriv ut bitarna en sändare lägger på ledningen från SOF
+till och med kontrollfältets slut, med \secref{c16:sec:fields}:s fälttabell, och markera var
+\code{tx_shift_reg} sätter in varje stoppbit. Kom ihåg att följdräknaren räknar med SOF.
+
+\xpart{b} Gör nu samma sak sett från en mottagare som hoppade över SOF, så att dess följdräknare
+ligger en dominant bit efter. Markera var \emph{den} förväntar sig stoppbitar. Ställ upp de två mot
+varandra och ange den första bitposition där de är oense.
+
+\xpart{c} Vid den positionen skickar sändaren en stoppbit och mottagaren väntar sig ingen. Vad gör
+mottagaren med den, och vad gör det av varje bit efter den?
+
+\xpart{d} Upprepa \textbf{a)} och \textbf{b)} för ID \code{0x123}, det ID som
+\code{can_controller_tb} använder i fall 1, och bekräfta att de två räknarna är överens hela vägen.
+Ange den allmänna regeln för vilka identifierare som går sönder: vad måste gälla för de första
+identifierarbitarna, och hur många av de 2048 standard-ID:na uppfyller det?
+
+\xpart{e} Fall 2 i \code{can_controller_tb} skickar \emph{faktiskt} ID \code{0x000}. Förklara varför
+buggen ändå inte skulle visa sig där, och säg vad du skulle lägga till i testbänken för att fånga
+den.
+
+\exercise{Att ta emot en ram utan data}{Resonemang}
+\label{c17:ex:dlc0}
+Gå igenom \textbf{mottagningsrollen} genom en komplett ram med \code{DLC = 0}, med hjälp av tabellen
+per tillstånd i \secref{c17:sec:states}. En mottagare vet inte DLC:n förrän den har avkodat
+kontrollfältet, så det här är också den väg som prövar om din övergång i \code{STATE_CTRL} är rätt.
+
+\xpart{a} Lista varje tillstånd noden passerar, från \code{STATE_IDLE} tillbaka till
+\code{STATE_IDLE}. Markera den enda övergång som skiljer sig från en ram som bär data, och säg vad
+som får den att slå till.
+
+\xpart{b} Ange för varje \code{STATE_LOAD_*}-tillstånd i din lista det \code{rxsr_bit_count} som det
+kombinatoriska nätet föregriper, och säg vilket \code{bt_sample} det föregripandet måste vara på
+plats för: det som utlöser övergången ut ur \code{STATE_LOAD_*}, eller nästa.
+
+\xpart{c} Anta att föregripandet vore en cykel för sent överallt, alltså att \code{rxsr_enable} gick
+hög först när \code{state} synligt läste skifttillståndet. Hur många riktiga bitar skulle
+\code{rx_shift_reg} ha missat för en ram med \code{DLC = 0} när noden når \code{STATE_CRC_LO_WAIT},
+och vad skulle \code{crc_valid} läsa där?
+
+\xpart{d} Ditt svar på \textbf{c)} är ett CRC-fel som rapporteras många bitperioder efter det
+faktiska misstaget. Relatera det till \secref{c17:sec:preempt}:s påstående att en felställning på en
+cykel ackumuleras till en tyst felställning som visar sig först senare, långt från sin orsak, och säg
+varför det gör den här sortens bugg dyr att felsöka enbart utifrån testbänkens utskrifter.

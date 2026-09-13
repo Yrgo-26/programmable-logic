@@ -1,0 +1,180 @@
+% Section 19.10, from lectures/L19/appendix/c_exercises.md.
+
+\section{Exercises}
+\label{c19:sec:exercises}
+
+\begin{aside}
+Exercise~\ref{c19:ex:thirdnode}, \ref{c19:ex:feature} and \ref{c19:ex:afterabort} consolidate
+\secref{c19:sec:verify}. Exercise~\ref{c19:ex:bridge} to \ref{c19:ex:endtoend} consolidate
+\secref{c19:sec:bridge} to \ref{c19:sec:gaps} and appendix~\ref{app:protocol}, which is the authority
+everywhere it and an exercise disagree.
+\end{aside}
+
+\exercise{A third node, and a new arbitration outcome}{Simulation}
+\label{c19:ex:thirdnode}
+\xpart{a} Extend \file{can_controller_tb.vhd} with a third node, C, sharing the same
+\code{bus_line}. Give C the ID \code{0x002} and have it request transmission on the same cycle as node
+A (\code{0x000}) and B (\code{0x001}). Confirm (by simulation, not just prediction) that A still
+wins, and that \emph{both} B and C detect an arbitration loss.
+
+\xpart{b} Node A's \code{0x000} is the lowest identifier a standard frame can carry, so no choice of
+ID lets C beat it. Raise A's ID to \code{0x010}, and then choose an ID for C that makes C the winner
+while B (\code{0x001}) still loses. Justify your choice with \secref{c10:sec:arbitration}'s
+arbitration rule, then confirm the new winner in simulation. One consequence to notice before your
+assertions surprise you: with A on \code{0x010}, B's \code{0x001} beats A as well, so in that round
+\textbf{A loses too} and raises \code{error}; only C completes.
+
+\exercise{A feature from a real controller, as a design sketch}{Reasoning}
+\label{c19:ex:feature}
+Pick \textbf{one} entry from \secref{c19:sec:gaps}'s list of what real CAN controllers do that this
+design does not. Sketch, without necessarily implementing it in VHDL (in prose, plus an addition to
+the state diagram or a new port list if that helps), what would have to change in
+\code{can_controller} to support it. State which existing block or blocks (\code{bit_timer},
+\code{crc15}, \code{tx_shift_reg}/\code{rx_shift_reg}, or \code{can_controller} itself) would have to
+change, and which could stand exactly as they are.
+
+\exercise{\code{spi_reg_bridge}}{VHDL}
+\label{c19:ex:bridge}
+Write your own \file{spi_reg_bridge.vhd} from \secref{c19:sec:bridge} and
+appendix~\ref{app:protocol}. Verify it:
+
+\begin{shell}
+cd bridge
+ghdl -a --std=93 spi_def.vhd spi_reg_bridge.vhd spi_reg_bridge_tb.vhd
+ghdl -e --std=93 spi_reg_bridge_tb
+ghdl -r --std=93 spi_reg_bridge_tb --assert-level=error
+\end{shell}
+
+\xpart{a} Get all four cases to pass. Cases 3 and 4 are the two that make this module more than a
+byte counter \textemdash{} read their comments before you start, not afterwards.
+
+\xpart{b} Now break it deliberately. Remove every use of \code{ss_active} and count bytes modulo five
+instead. Cases 1 and 2 still pass. Say which check in case 3 fails, quote the value the error message
+reports, and explain where those bytes came from.
+
+\xpart{c} A bridge ignoring the reserved command bits also passes cases 1 and 2. Explain why the
+protocol specification puts the reserved-bit rule in \emph{this} layer rather than in
+\code{register_bank}, given that the bank never sees more than a 4-bit index.
+
+\xpart{d} The read path latches \code{reg_rdata} \textbf{once}, at the end of the command byte. Say
+what \code{register_bank} would have to do instead if the bridge reread it for every data byte, and
+why that would be the wrong place to push the rule down into the bank. Put the module back.
+
+\exercise{Composing \code{can_spi_node}}{VHDL}
+\label{c19:ex:node}
+Write the top level from \secref{c19:sec:node}: \code{spi_slave}, \code{spi_reg_bridge},
+\code{register_bank} and \code{can_controller}, plus a \code{meta_prev} for the reset.
+
+\xpart{a} Write it, and run \code{can_spi_node_tb} against it. Four testbenches handed out already
+cover everything \emph{inside} the file; say which four, and then say the one kind of fault
+\code{can_spi_node_tb} can fail that none of the four can. (The clue is the positional port binding.)
+
+\xpart{b} \code{can_spi_node_tb} holds 200~ns of quiet around every \code{SS} edge, where
+appendix~\ref{app:protocol} requires at least 60~ns. It is therefore deliberately kind to the timing
+requirements, and no testbench handed out presses them. Copy it, shrink the quiet period step by step
+towards 60~ns, and find out at what value your node stops answering.
+
+Then say \textbf{why} exactly there, counted in clock cycles, and where in \code{spi_slave} the limit
+sits. Compare the measured value with the 60~ns the specification promises: do you have margin, or is
+your node right at the edge? This is the one place in the book where you \emph{measure} a margin
+rather than read one, and it is worth doing carefully.
+
+\xpart{c} Count the \code{meta_prev} instances in the finished design and say what each one
+synchronises. Then say why \code{can_spi_node} hands \code{can_controller} the \emph{raw}
+\code{reset_n} rather than the \code{reset_s2_n} it gives every other block, and what would go wrong
+if it synchronised it twice.
+
+\xpart{d} \code{tx_bus} and \code{bus_en} leave the design as two separate ports rather than one wire.
+Explain what has to happen between them and a physical wire shared with a second board, and what would
+fail if you assigned \code{tx_bus} straight to a pin and tied two boards together.
+
+\exercise{What the board showed}{Reasoning}
+\label{c19:ex:board}
+The bring-up ran in eight steps, in two halves: three on two DE0-CVs and five with the hat as master.
+This exercise is about what they established and what they did not. It needs no hardware of your own.
+
+\xpart{a} The steps are ordered so that each rules out a class of faults before the next depends on
+it. For each of steps 1, 4 and 5 (single board, loopback on the hat, register echo), say the one thing
+it proves that the step before did not. Then say which of the eight steps \code{can_spi_node_tb} had
+\textbf{already} established in simulation, and which only hardware can establish.
+
+\xpart{b} Two wiring faults to tell apart. Say which step fails first if MISO and MOSI are swapped,
+and which fails first if \code{VDDIO2} was never connected, leaving \code{PORTC} unsupplied. Explain
+why they fail at different steps, and what that difference lets you conclude without touching a meter.
+Also say what \code{MVIO.STATUS} would have answered in the second case, and why that answer is faster
+than the meter.
+
+\xpart{c} The test program handed out is written to succeed: it holds \code{SS} low in good time,
+never sends a sixth byte and never aborts mid-transaction. Say which of the protocol specification's
+rules \textemdash{} the 60~ns around \code{SS}, \code{MISO} during the command byte, or the abort rule
+\textemdash{} \textbf{none} of the eight steps would have revealed as broken, and why that one is
+therefore the most expensive to have wrong when a driver you did not write meets the node.
+
+\xpart{d} A single node can never make \code{rx_valid} pulse, however its pins are wired, which is why
+the session put a frame across \textbf{two} boards. Say why a node can never receive its own frame
+(the reason is \chapref{c17:ch}'s \code{role}), and what the second board therefore proves that
+neither a loopback nor \code{can_controller_tb} can.
+
+\xpart{e} The two boards run on two independent 50 MHz oscillators. \Secref{c19:sub:gaps-tb} calls the
+shared clock in \code{can_controller_tb} the testbench's \textbf{largest} gap for exactly that reason.
+Be precise about what changes: \code{bit_timer.resync} already does real work in simulation, so say
+what the two independent clocks add that no shared-clock simulation can show, and roughly how far
+apart the two oscillators could drift before a frame stopped arriving intact
+(Exercise~\ref{c12:ex:drift} did that calculation; reuse it). Compare that limit with a typical
+crystal's tolerance and say whether the demonstration really puts it to the test.
+
+\xpart{f} \code{rx_bus} comes from outside the FPGA, and \code{can_spi_node} passes it on
+unsynchronised to \code{can_controller} deliberately, since \code{can_controller} contains its own
+\code{meta_prev} (\chapref{c12:ch}). Explain what could go wrong if that instance were removed, why
+the failure would be considerably harder to diagnose than a miswired line, and why no amount of
+simulation in this book would ever reproduce it.
+
+\exercise{Following a \code{send()} end to end}{Reasoning}
+\label{c19:ex:endtoend}
+\xpart{a} Follow a single frame request all the way down. Start from the five bytes on MOSI writing
+\code{0x1} to \code{TX_SEND}, and follow them through \code{spi_slave} (bytes),
+\code{spi_reg_bridge} (a register write) and \code{register_bank} (a one-cycle \code{tx_req}) to
+\code{can_controller}'s ports. Name what every layer hands on to the next. Then do the same upwards,
+for how the driver finds out that the frame is done.
+
+\xpart{b} Four layers are three more than \code{can_controller_tb} needs. For every boundary, name the
+testbench handed out that pins it down, and say what would be untested if that testbench did not
+exist.
+
+\xpart{c} Polling is all this design offers: there is no interrupt output anywhere. Say what would
+have to be added to give the driver one, from which existing signal it would be derived, and in which
+layer it would have to live. Then explain why it would have been hopeless for a driver to poll a
+\code{tx_done} lasting one cycle, and which module made sure it is not.
+
+\xpart{d} A driver writes \code{TX_ID}, then \code{TX_DLC}, then \code{TX_SEND}, as three separate
+transactions. Between the second and the third the bus goes idle and another node transmits. Say
+whether anything the driver has written is at risk, and which rule in the register map makes your
+answer true.
+
+\exercise{Life after an abort}{Simulation}
+\label{c19:ex:afterabort}
+\Secref{c19:sub:gaps-tb} lists ``no node ever transmits again after an abort'' as something the system
+testbench does not cover. This exercise covers it, and shows what \code{crc15}'s \code{clear} input
+was for.
+
+\xpart{a} Extend \file{can_controller_tb.vhd} with a third case. Give both nodes time to return to
+idle after case 2 has run, that is, after node B has lost arbitration and abandoned its frame
+mid-identifier, and then have \textbf{B} send a frame of its own (ID \code{0x123}, DLC 2, any payload)
+with A receiving. Confirm in simulation that A receives it: A's \code{rx_valid} pulses, A's
+\code{error} stays low, and the ID comes back correctly.
+
+\xpart{b} Now remove the clear: change \code{crc_clear} to a constant \code{'0'} and rerun. Cases 1
+and 2 still pass. Case 3 does not. Say which node raises \code{error}, at which state, and explain why
+it is \emph{not} that node that has the bug.
+
+\xpart{c} Work out what B's \code{crc15} register holds at the moment it aborts in case 2, and why no
+amount of correct behaviour afterwards ever returns it to zero. (The clue is \chapref{c13:ch}'s
+property that generating and checking are the same operation: what does it assume about the register
+at a frame's \emph{beginning}?)
+
+\xpart{d} How many frames must node B send before it works again, with the clear still removed?
+Explain your answer, and say what a driver polling \code{STATUS} and \code{ERROR_FLAGS} over SPI would
+observe each time, using \chapref{c18:ch}'s rule for how the error bit is latched.
+
+\xpart{e} \Chapref{c16:ch} puts the clear in \code{STATE_START} rather than in \code{STATE_CRC_WAIT} or
+on the way out of an abort. Give one reason each why the other two placements are worse.

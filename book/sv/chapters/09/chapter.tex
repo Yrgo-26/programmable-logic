@@ -1,0 +1,103 @@
+% Kapitel 9, satt ur lectures/L09/README.md.
+
+\chapter{Praktisk tentamen 1: sekvensnät}
+\label{c9:ch}
+
+{\large\itshape Tre timmar, individuellt, vid datorn. Omfattar del~\ref{part:vhdl} i sin helhet, med
+tyngdpunkt på sekvensnät.\par}
+
+\begin{chapterbox}{I det här kapitlet}
+\begin{itemize}
+  \item Tentamens form: fristående uppgifter, var och en med en utdelad självkontrollerande
+    testbänk.
+  \item Vad som är tillåtet att använda, och vad som inte är det.
+  \item Hur man förbereder sig, och vad som är den bästa förberedelsen som finns.
+  \item Vad tentamen faktiskt mäter.
+\end{itemize}
+\end{chapterbox}
+
+Det här är kursens första examinationstillfälle. Det innehåller ingen ny teori; kapitlet säger vad
+tentamen mäter, vilken form uppgifterna har och hur man förbereder sig, och det är värt att läsa i
+förväg snarare än dagen innan. Poäng och betygsgränser står i bilaga~\ref{app:project}.
+
+Tentamen omfattar \chapref{c1:ch} till \ref{c8:ch} i sin helhet, med tyngdpunkt på sekvensnät:
+register, räknare, skiftregister, timers, synkroniserare och enkla Mooremaskiner.
+
+% ------------------------------------------------------------------------------------------
+\section{Upplägg}
+\label{c9:sec:format}
+
+Tentamen består av ett antal fristående uppgifter. Varje uppgift ger dig en \textbf{utdelad,
+självkontrollerande testbänk} och en beskrivning av den modul den driver: portordning, typer och
+beteende. Din uppgift är att skriva modulen så att testbänken passerar.
+
+\begin{itemize}
+  \item Uppgifterna är oberoende av varandra. En modul du inte får att fungera stoppar ingen annan.
+  \item Uppgifterna är ordnade ungefär efter stigande svårighet, men läs igenom alla innan du
+    börjar.
+  \item En modul som inte är helt klar rättas på det som finns. Delvis korrekt logik ger delpoäng,
+    så lämna aldrig in en tom fil för att den inte blev färdig.
+  \item Testbänken är facit under skrivningen, inte efter den. \code{all checks passed!} betyder att
+    den uppgiften är klar; rättningen läser dessutom koden.
+\end{itemize}
+
+Ett övningsprov med uppgifter av samma slag och samma omfattning delas ut i förväg.
+
+% ------------------------------------------------------------------------------------------
+\section{Hjälpmedel}
+\label{c9:sec:aids}
+
+\textbf{Tillåtet:}
+\begin{itemize}
+  \item Allt kursmaterial: den här boken, föreläsningarnas README, samtliga appendix, och all VHDL
+    du själv skrivit under del~\ref{part:vhdl}, inklusive dina lösningar på övningarna.
+  \item Din egen dator, med GHDL. Se \secref{c2:sec:testbenches} om du behöver påminna dig om hur en
+    testbänk körs.
+  \item CircuitVerse, om du vill rita en krets innan du skriver den. Det är ofta snabbare, inte
+    långsammare.
+\end{itemize}
+
+\textbf{Inte tillåtet:} kommunikation med andra i någon form; språkmodeller och andra verktyg som
+genererar eller förklarar VHDL åt dig; och sökning på nätet efter färdiga lösningar. Gränsen går
+inte vid vem som trycker på tangenterna utan vid vems förståelse som prövas. Att slå upp GHDL:s
+eller VHDL:s dokumentation är tillåtet; att söka efter en färdig modul är det inte.
+
+Den fullständiga och auktoritativa hjälpmedelslistan står i bilaga~\ref{app:project}; står något
+annat här gäller den.
+
+% ------------------------------------------------------------------------------------------
+\section{Före tentamen}
+\label{c9:sec:prep}
+
+\begin{itemize}
+  \item Gå igenom övningsprovet, under tidspress och utan att titta i lösningarna först.
+  \item Övning~\ref{c8:ex:rx} och \ref{c8:ex:tx}, bokens två capstones, är den bästa förberedelsen
+    som finns: de tvingar dig att konstruera ett tillståndsdiagram själv och komponera tidigare
+    moduler runt det, vilket är precis vad tentamen mäter.
+  \item Se till att GHDL fungerar på din maskin \emph{innan} du kommer. En trasig verktygskedja är
+    inget skäl till förlängd skrivtid.
+\end{itemize}
+
+% ------------------------------------------------------------------------------------------
+\section{Det här mäter tentamen}
+\label{c9:sec:measures}
+
+\begin{itemize}
+  \item Att du kan skriva den synkrona processmallen korrekt, utan att slå upp den.
+  \item Att du kan bygga en räknare, en timer och ett skiftregister och veta vad som skiljer dem.
+  \item Att du synkroniserar varje asynkron ingång, utan att bli påmind.
+  \item Att du kan konstruera en liten Mooremaskin ur en specifikation i ord, och skriva den som en
+    uppräknad typ och ett \code{case}.
+  \item Att du kan läsa en testbänks felutskrift och hitta tillbaka till raden som orsakade den.
+\end{itemize}
+
+% ------------------------------------------------------------------------------------------
+\section{Efter tentamen}
+\label{c9:sec:after}
+
+Nästa kapitel startar \textbf{grupprojektet}, som löper över \chapref{c10:ch} till \ref{c19:ch} och
+står för halva kursens poäng. Läs projektspecifikationen i bilaga~\ref{app:project} före
+\chapref{c10:ch}; grupperna sätts samman där.
+
+\Chapref{c10:ch} tar upp projektstarten: CAN-bussen, ramen och arbitreringen, och projektets första
+VHDL, det delade paketet \code{can_def}.

@@ -1,0 +1,425 @@
+% Avsnitt 8.1-8.6, ur lectures/L08/appendix/a_state_machines.md (A.1-A.6).
+
+\section{Vad en ändlig tillståndsmaskin är}
+\label{c8:sec:what}
+
+En ändlig tillståndsmaskin (FSM) är en krets vars beteende inte bara beror på dess aktuella ingångar
+utan på en ändlig mängd \emph{historik}, sammanfattad i ett enda värde som kallas dess
+\textbf{tillstånd}. I varje ögonblick befinner sig maskinen i exakt ett tillstånd; vid varje
+klockflank kan den gå vidare till ett nytt, bestämt av dess aktuella tillstånd och ingångar; och
+dess utgång beräknas ur det tillståndet.
+
+Inget av det här är ny hårdvara. En tillståndsmaskin kombinerar två saker du redan kan: ett
+\textbf{register} (\chapref{c3:ch}) som håller det aktuella tillståndet, en vippa per tillståndsbit,
+och \textbf{kombinatorik} som beräknar nästa tillstånd och utgången ur det aktuella tillståndet och
+ingångarna.
+
+Det nya är disciplinen. I stället för ad hoc-logik som matar en ad hoc-uppsättning vippor arbetar du
+i en fast ordning: rita först ett \textbf{tillståndsdiagram}, några namngivna tillstånd med märkta
+övergångar mellan sig, och härled tillståndstabellen först när det är rätt, sedan logiken för nästa
+tillstånd, sedan grindnätet eller VHDL-koden.
+
+Varje synkron krets hittills är tekniskt sett en trivial tillståndsmaskin: en räknares tillstånd är
+dess räkning, ett skiftregisters är dess bitmönster. Det som skiljer en tillståndsmaskin är att
+tillståndet varken är en räkning eller ett skiftat mönster utan en godtycklig etikett
+(\code{STATE_OFF}, \code{STATE_BLINK}, \dots) vars innebörd du väljer och vars nästa värde får bero
+på ingången hur du vill.
+
+Det finns två varianter, och skillnaden avgör vad en utgång får titta på:
+\begin{itemize}
+  \item \textbf{Mooremaskiner}: utgången beror \emph{bara} på det aktuella tillståndet. Det är den
+    sorten som konstrueras för hand här.
+  \item \textbf{Mealymaskiner}: utgången beror på det aktuella tillståndet \emph{och} den aktuella
+    ingången. \Secref{c8:sec:mealy} går kort igenom dem, bara i VHDL, så att du känner igen en när
+    du möter den och kan skillnaden på en klockcykel.
+\end{itemize}
+
+% ------------------------------------------------------------------------------------------
+\section{Att konstruera en Mooremaskin för hand}
+\label{c8:sec:byhand}
+
+Samma process som för varje grindnät i \chapref{c1:ch} och \ref{c2:ch}, tillämpad på en krets med
+minne. Det genomarbetade exemplet är en liten, sluten Mooremaskin med fyra tillstånd: en cirkulär
+räknare genom en Graykodssekvens, som stegas ett steg per knapptryck.
+
+\subsection*{Specifikation}
+\begin{itemize}
+  \item Fyra tillstånd, vart och ett representerat av två vippor $\{Q_1, Q_2\}$:
+
+  \begin{narrowtable}{lc}
+    \thead{Tillstånd} & \thead{$\{Q_1, Q_2\}$} \\
+    \midrule
+    \code{STATE_0} & \code{00} \\
+    \code{STATE_1} & \code{01} \\
+    \code{STATE_2} & \code{11} \\
+    \code{STATE_3} & \code{10} \\
+  \end{narrowtable}
+
+  \item En systemklocka \code{clock}, och en aktiv låg reset \code{reset_n} som återför maskinen
+    till \code{STATE_0}.
+  \item En aktiv låg tryckknapp \code{button_n}, ur vilken en synkroniserad, flankdetekterad puls
+    \code{X} härleds på exakt det sätt \chapref{c4:ch}:s dubbelvippsynkroniserare gör. \code{X} är
+    hög i exakt en klockcykel vid en fallande flank på \code{button_n}.
+  \item En utgång \code{Y}, kopplad till en lysdiod, hög bara i \code{STATE_3}.
+  \item Maskinen är \textbf{sluten}: tillståndet efter \code{STATE_3} är \code{STATE_0}.
+  \item Det är en \textbf{Moore}-maskin: \code{Y} beror bara på $\{Q_1, Q_2\}$, aldrig på \code{X}.
+\end{itemize}
+
+Kodningen är en Graykod ($00 \to 01 \to 11 \to 10 \to 00$), där tillstånd som följer på varandra
+skiljer sig i exakt en bit. Det är ett medvetet val, inte en slump:
+\begin{itemize}
+  \item Med en vanlig binärräkning ($00 \to 01 \to 10 \to 11$) vänder en övergång som
+    $01 \to 10$ två bitar på en gång, och de två vipporna kommer inte att slå om vid \emph{exakt}
+    samma ögonblick.
+  \item Den skevheten är harmlös för maskinen själv. Båda vipporna uppdateras vid samma klockflank,
+    och ingenting samplar tillståndsregistret däremellan, så maskinen agerar aldrig på
+    mellanvärdet. Det är samma argument som \secref{c5:sec:fmax}:s kritiska väg: så länge allt
+    hinner stabilisera sig före nästa flank spelar det ingen roll vad som händer under tiden.
+  \item Vad skevheten \emph{kan} störa är allt som läser tillståndet kombinatoriskt. En utgång som
+    avkodas direkt ur tillståndsbitarna, som \code{Y} nedan, kan glitcha kort medan de är skeva.
+    Detsamma gäller ett värde som samplas av en \emph{annan} klockdomän, vilket är fallet
+    \secref{c4:sec:sync} varnade för.
+  \item En Graykod tar bort båda, eftersom bara en bit någonsin ändras per övergång. Därför spelar
+    den störst roll för en räknare som korsar klockdomäner, och minst för en maskin vars utgång är
+    registrerad.
+\end{itemize}
+
+Kodning är i allmänhet ett designbeslut, och det här är det enda stället i boken där du fattar det
+för hand. Binärt använder färrest vippor; Gray minimerar antalet bitar som ändras per övergång;
+\textbf{one-hot} lägger en vippa per tillstånd så att logiken för nästa tillstånd blir en enda bred
+OR-grind per tillstånd, vilket ofta är snabbast på en FPGA där vippor finns i överflöd. Så snart du
+skriver maskinen i VHDL som en uppräknad typ (\secref{c8:sec:vhdl}) lämnar du beslutet till
+syntesverktyget, som väljer en kodning åt dig och omkodar fritt om du inte säger något annat.
+
+\subsection*{Tillståndsdiagram}
+
+\lecfig[0.66]{lectures/L08/appendix/images/fsm_state_diagram.png}{Tillståndsdiagram för
+Mooremaskinen med fyra tillstånd och Graykod.}{c8:fig:statediagram}
+
+Varje tillståndsbubbla visar det aktuella tillståndet och utgången som \code{Q1Q2/Y}, och varje pil
+är märkt med den ingång \code{X} som utlöser den. Varje tillstånd går tillbaka till sig självt så
+länge \code{X=0}, och en synkroniserad puls från knappen (\code{X=1}) stegar vidare till nästa
+tillstånd och slår runt från \code{STATE_3} tillbaka till \code{STATE_0}.
+
+\subsection*{Tillståndstabell}
+Varje kombination av aktuellt tillstånd och ingång, med nästa tillstånd $\{Q_1^{+}, Q_2^{+}\}$ och
+utgången \code{Y}:
+
+\begin{narrowtable}{cccccc}
+  \thead{$Q_1$} & \thead{$Q_2$} & \thead{$X$} & \thead{$Q_1^{+}$} & \thead{$Q_2^{+}$} &
+    \thead{$Y$} \\
+  \midrule
+  0 & 0 & 0 & 0 & 0 & 0 \\
+  0 & 0 & 1 & 0 & 1 & 0 \\
+  0 & 1 & 0 & 0 & 1 & 0 \\
+  0 & 1 & 1 & 1 & 1 & 0 \\
+  1 & 0 & 0 & 1 & 0 & 1 \\
+  1 & 0 & 1 & 0 & 0 & 1 \\
+  1 & 1 & 0 & 1 & 1 & 0 \\
+  1 & 1 & 1 & 1 & 0 & 0 \\
+\end{narrowtable}
+
+\subsection*{Karnaughhärledd logik}
+Om $Q_1^{+}$ och $Q_2^{+}$ var för sig behandlas som en boolesk funktion av $\{Q_1, Q_2, X\}$ och
+körs genom ett Karnaughdiagram, samma teknik som i \chapref{c2:ch}:
+
+\[ Q_1^{+} = Q_1 X' + Q_2 X \qquad Q_2^{+} = Q_2 X' + Q_1' X \]
+
+Lägg märke till formen på båda:
+\begin{itemize}
+  \item var och en är ”håll kvar när \code{X} är \code{0}, ta något från den andra biten när
+    \code{X} är \code{1}”.
+  \item hållhalvorna, $Q_1 X'$ och $Q_2 X'$, är verkligen spegelbilder av varandra.
+  \item stegningshalvorna är $Q_2 X$ och $Q_1' X$, och komplementet på den andra är inte ett
+    skrivfel: det är det som gör sekvensen till en Graykod i stället för en enkel rotation.
+\end{itemize}
+
+Utgången \code{Y} förenklas ytterligare, direkt ur tillståndstabellen, utan något beroende av
+\code{X} alls, vilket bekräftar att det här är en giltig Mooremaskin:
+
+\[ Y = Q_1 Q_2' \]
+
+\subsection*{Att realisera den som ett grindnät}
+$\{Q_1, Q_2\}$ är var sin D-vippa, precis som \chapref{c3:ch}:s register: $Q_1^{+}$ och $Q_2^{+}$
+matar D-ingångarna och $Q_1$, $Q_2$ läses tillbaka från Q-utgångarna. \code{Y} är en enda AND-grind
+med två ingångar där den ena är inverterad, och den läser det aktuella tillståndet. Det är hela
+maskinen: två vippor och en handfull grindar som beräknar $Q_1^{+}$, $Q_2^{+}$ och \code{Y} ur
+$\{Q_1, Q_2, X\}$.
+
+% ------------------------------------------------------------------------------------------
+\section{Från grindnät till CircuitVerse}
+\label{c8:sec:cv}
+
+Innan något av det här skrivs i VHDL, realisera det för hand i CircuitVerse, precis som varje
+grindnät i \chapref{c1:ch}: dubbelvippsynkronisera \code{button_n} och \code{reset_n},
+flankdetektera den synkroniserade knappen för att producera \code{X}, koppla $Q_1^{+}$ och
+$Q_2^{+}$ till ett par D-vippor, och koppla \code{Y} rakt in i lysdioden.
+
+\lecfig[1.0]{lectures/L08/appendix/images/fsm_gate_network.png}{Grindnät som realiserar
+Mooremaskinen med fyra tillstånd, inklusive dubbelvippsynkronisering och flankdetektering för
+\code{button_n}.}{c8:fig:gatenet}
+
+Läst från vänster till höger:
+\begin{itemize}
+  \item \code{button_n} går genom tre synkroniseringsvippor
+    (\code{button_s1_n}, \code{button_s2_n}, \code{button_s3_n}).
+  \item En AND-grind härleder \code{button_edge_s2} (den här kretsens \code{X}) ur andra och tredje
+    steget.
+  \item De fyra lodräta ledningarna märkta \code{Q1Q2XX'} bär tillståndsbitarna och flankpulsen
+    vidare till grindarna till höger, som implementerar \secref{c8:sec:byhand}:s ekvationer för
+    $Q_1^{+}$ och $Q_2^{+}$.
+  \item De två märkta vipporna lagrar $Q_1$ och $Q_2$ och matar de avslutande AND- och NOT-grindar
+    som producerar \code{Y}, kopplad till \code{led}.
+  \item \code{reset_n} synkroniseras av sitt eget vippapar nere till vänster, precis som varje annan
+    synkroniserad reset i den här boken.
+\end{itemize}
+
+Öppna den körbara kretsen själv: \file{lectures/L08/appendix/images/fsm_gate_network.cv}. Stega den
+för hand, ett knapptryck i taget, och bekräfta att den besöker
+\code{STATE_0} $\to$ \code{STATE_1} $\to$ \code{STATE_2} $\to$ \code{STATE_3} $\to$
+\code{STATE_0} i
+ordning, med lysdioden tänd bara i \code{STATE_3}.
+
+% ------------------------------------------------------------------------------------------
+\section{Samma maskin i VHDL}
+\label{c8:sec:vhdl}
+
+Det var sista gången i den här boken du konstruerar en maskin för hand. Allt härifrån skriver den
+direkt i VHDL, vilket är värt att ha förtjänat snarare än att ha börjat med: syntesverktyget gör
+exakt det du just gjorde på papper, och när en tillståndsmaskin beter sig fel är det diagrammet du
+felsöker, inte VHDL-koden.
+
+Översättningen ersätter den explicita tillståndstabellen och Karnaughekvationerna med en
+\textbf{uppräknad typ} som namnger varje tillstånd, en \textbf{case-sats} som beskriver varje
+tillstånds övergångar, och ett syntesverktyg som lämnas att lista ut vippkodningen och logiken på
+grindnivå.
+
+\subsection*{Den uppräknade tillståndstypen}
+Anta en maskin med tre tillstånd som styr en lysdiod: \code{STATE_OFF}, \code{STATE_BLINK} (blinkar
+i en fast takt) och \code{STATE_ON}. VHDL deklarerar exakt de tre värdena som en ny typ:
+
+\begin{vhdlcode}
+type state_t is (STATE_OFF, STATE_BLINK, STATE_ON);
+signal state: state_t;
+...
+state <= STATE_ON;
+\end{vhdlcode}
+
+\subsection*{Mönstret med case-satsen}
+Maskinen är nästan alltid en synkron process som uppdaterar \code{state} vid stigande flank via ett
+\code{case}, en gren per tillstånd, med en asynkron reset som återför den till ett känt
+starttillstånd. Antag att \code{to_next_state} och \code{to_prev_state} är synkroniserade,
+flankdetekterade pulser producerade på exakt samma sätt som \code{X} i \secref{c8:sec:byhand} och
+\ref{c8:sec:cv}:
+
+\begin{vhdlcode}
+process(clock, reset_s2_n) is
+begin
+    if (reset_s2_n = '0') then
+        -- On reset, go to STATE_OFF.
+        state <= STATE_OFF;
+    elsif (rising_edge(clock)) then
+        case (state) is
+            when STATE_OFF =>
+                if (to_next_state = '1') then
+                    state <= STATE_BLINK;
+                elsif (to_prev_state = '1') then
+                    state <= STATE_ON;
+                end if;
+            -- STATE_BLINK and STATE_ON follow the same shape.
+            when others =>
+                state <= STATE_OFF;
+        end case;
+    end if;
+end process;
+\end{vhdlcode}
+
+\code{case (state) is ... end case;} måste täcka varje värde \code{state_t} kan anta, och
+\code{when others} håller det uttömmande om du lägger till ett tillstånd senare och glömmer en gren.
+
+Vad \code{when others} \emph{inte} är, är ett skyddsnät mot ett korrumperat tillståndsregister.
+Varje värde \code{state_t} kan anta är redan namngivet ovanför den, så grenen är onåbar i källkoden
+och syntesen optimerar normalt bort den i stället för att bygga återhämtningslogik. När Quartus väl
+har omkodat maskinen är de flesta bitmönster otillåtna, och att ta sig ur ett av dem kräver Quartus
+inställning Safe State Machine snarare än något du kan skriva i VHDL.
+
+\subsection*{Genomarbetat exempel: \code{fsm_led}}
+\file{fsm_led.vhd} implementerar exakt den maskinen med tre tillstånd, utökad till två knappar:
+\code{button_n(0)} stegar framåt, \code{button_n(1)} går bakåt, tillstånden är slutna i en loop, och
+\code{STATE_BLINK} växlar lysdioden var 100:e ms.
+
+Tre delblock återanvänds, alla moduler du skrivit själv:
+\begin{itemize}
+  \item \code{reset_sync}: \chapref{c4:ch}:s resetsynkroniserare, oförändrad
+    (Övning~\ref{c4:ex:resetsync}).
+  \item \code{button_sync}: \chapref{c4:ch}:s knappsynkroniserare, också oförändrad, men
+    instansierad med \code{generic map(2)} så att den hanterar båda knapparna på en gång och
+    producerar en pulsvektor på två bitar. Det är utdelningen från den generic:en: filen är
+    identisk med den \chapref{c4:ch} och \ref{c7:ch} instansierar med \code{1}
+    (Övning~\ref{c4:ex:buttonsync}).
+  \item \code{timer}: \chapref{c7:ch}:s timer, oförändrad (Övning~\ref{c7:ex:timer}).
+    \code{fsm_led} deklarerar en egen generic \code{TIMER_TICK_COUNT} och skickar den rakt vidare,
+    med förvalet \code{5_000_000} för 100~ms vid \code{50 MHz}, och aktiverar timern bara i
+    \code{STATE_BLINK}.
+\end{itemize}
+
+Ingen av de tre är utdelad i \file{fsm_led/}: kopiera in dina egna innan du bygger exemplet. Vid det
+här laget i boken är det fyra kapitels egna moduler komponerade till en enda design, vilket är det
+som är värt att lägga märke till.
+
+\vhdlfile{lectures/L08/fsm_led/fsm_led.vhd}
+
+Två synkrona processer implementerar maskinen:
+\begin{itemize}
+  \item \code{STATE_PROCESS} är övergångslogiken med \code{case} ovan, driven av
+    \code{to_next_state} och \code{to_prev_state}, som härleds kombinatoriskt ur
+    \code{button_edge_s2}. Var och en kräver att den \emph{andra} knappens puls är \code{'0'} i
+    samma cykel, så att trycka ned båda så nära i tid att deras pulser hamnar på samma klockcykel
+    flyttar maskinen ingenstans i stället för att godtyckligt utse en vinnare. En tvetydig ingång
+    förtjänar ett definierat svar, och ”gör ingenting” är det som inte kan överraska dig.
+  \item \code{LED_PROCESS} driver \code{led_s} enbart ur det aktuella tillståndet: släckt i
+    \code{STATE_OFF}, tänd i \code{STATE_ON}, växlande vid varje timeout från timern i
+    \code{STATE_BLINK}. Eftersom den aldrig läser \code{button_n} eller \code{button_edge_s2}
+    direkt, bara \code{state}, är det här en äkta Mooremaskin: lysdioden reagerar på ett tryck bara
+    indirekt, genom det tillstånd trycket orsakade.
+\end{itemize}
+
+% ------------------------------------------------------------------------------------------
+\section{Mealymaskiner: skillnaden på en klockcykel}
+\label{c8:sec:mealy}
+
+Allt hittills har varit en \textbf{Moore}-maskin, med flit: Moore är det säkrare standardvalet och
+den form du konstruerar för hand. En \textbf{Mealy}-maskin luckrar upp regeln som definierar en
+Mooremaskin: utgången får bero på det aktuella tillståndet \emph{och} den aktuella ingången,
+beräknad kombinatoriskt. Den lagras inte i ett register, och den ändras inom samma klockcykel som
+ingången gör.
+
+\subsection*{Beteendet: detektera två \code{1}-bitar i följd}
+En seriell ingång \code{din} bär en bit per klockcykel, och \code{y} ska indikera att de två senaste
+bitarna båda var \code{1}, där överlappande träffar räknas, så \code{111} rapporterar en träff två
+gånger.
+
+Som Mealymaskin behöver det här bara två tillstånd, eftersom utgången kan reagera på ingången
+\emph{innan} den syns i nästa tillstånd: \code{STATE_IDLE} (föregående bit var \code{0}, eller det
+här är den första) och \code{STATE_ONE} (föregående bit var \code{1}).
+
+\begin{narrowtable}{lccc}
+  \thead{Tillstånd} & \thead{\code{din}} & \thead{Nästa tillstånd} & \thead{\code{y}} \\
+  \midrule
+  \code{STATE_IDLE} & 0 & \code{STATE_IDLE} & 0 \\
+  \code{STATE_IDLE} & 1 & \code{STATE_ONE}  & 0 \\
+  \code{STATE_ONE}  & 0 & \code{STATE_IDLE} & 0 \\
+  \code{STATE_ONE}  & 1 & \code{STATE_ONE}  & \textbf{1} \\
+\end{narrowtable}
+
+Tillståndsprocessen är \secref{c8:sec:vhdl}:s \code{case}-mönster; bara utgången skiljer sig:
+
+\vhdlfile{lectures/L08/seq_detect_mealy/seq_detect_mealy.vhd}
+
+Tilldelningen av utgången är en enda konkurrent sats, helt utanför varje klockad process:
+
+\begin{vhdlcode}
+y <= '1' when (state = STATE_ONE and din = '1') else '0';
+\end{vhdlcode}
+
+Det är en \textbf{villkorlig signaltilldelning}, och det är den sista biten VHDL-syntax den här
+boken introducerar. Den är en konkurrent sats, så den hör hemma i arkitekturkroppen snarare än inuti
+en process, och den beskriver en multiplexer: välj det första värde vars villkor gäller, annars
+värdet efter \code{else}. Det är samma hårdvara du skulle få ur ett \code{if}/\code{else} inuti en
+kombinatorisk process, skriven på en rad i stället för fem, och den är värd att ha eftersom en
+tilldelning av utgången på en rad gör det uppenbart vid en blick vad utgången beror på.
+
+\begin{vhdlcode}
+-- These two describe exactly the same multiplexer.
+x <= a when sel = '1' else b;
+
+process(sel, a, b) is
+begin
+    if (sel = '1') then
+        x <= a;
+    else
+        x <= b;
+    end if;
+end process;
+\end{vhdlcode}
+
+Ge den alltid ett \code{else}. Utelämnar du ett har du beskrivit en signal som behåller sitt gamla
+värde när inget villkor gäller, vilket är ett lås, precis som i \secref{c5:sec:latch}.
+\code{fsm_led} använder den här formen tre gånger, och Övning~\ref{c8:ex:mealy101} ber dig använda
+den.
+
+\textbf{Den enda raden är hela skillnaden.} Den läser \code{din}, alltså är den Mealy. Flytta samma
+villkor in i den klockade processen, eller ta bort \code{din} ur det, så har du en Mooremaskin i
+stället.
+
+\subsection*{Vad den kostar och vad den köper}
+Mooreversionen av den här detektorn behöver ett \textbf{tredje} tillstånd, \code{M_TWO}, som finns
+enbart för att i en cykel minnas att träffen inträffade, så att utgången har något att läsa som inte
+beror på ingången. Mata båda maskinerna med \code{1, 1, 0, 1, 1, 1}:
+
+\begin{narrowtable}{cclcll}
+  \thead{Cykel} & \thead{\code{din}} & \thead{Mealytillstånd (före)} & \thead{Mealy \code{y}} &
+    \thead{Mooretillstånd (före)} & \thead{Moore \code{y}} \\
+  \midrule
+  1 & 1 & \code{STATE_IDLE} & 0 & \code{M_IDLE} & 0 \\
+  2 & 1 & \code{STATE_ONE}  & \textbf{1} & \code{M_ONE}  & 0 \\
+  3 & 0 & \code{STATE_ONE}  & 0 & \code{M_TWO}  & \textbf{1} \\
+  4 & 1 & \code{STATE_IDLE} & 0 & \code{M_IDLE} & 0 \\
+  5 & 1 & \code{STATE_ONE}  & \textbf{1} & \code{M_ONE}  & 0 \\
+  6 & 1 & \code{STATE_ONE}  & \textbf{1} & \code{M_TWO}  & \textbf{1} \\
+\end{narrowtable}
+
+Moores \code{y}-kolumn är exakt Mealys \code{y}-kolumn förskjuten en rad nedåt. Det är hela
+avvägningen: Mealy rapporterar träffen \emph{samma} cykel som den andra \code{1}:an kommer där Moore
+tar en till, och Mealy behöver 2 tillstånd där Moore behöver 3.
+
+\subsection*{Vilken du ska välja}
+Moore, nästan alltid, och det är den resten av boken använder, grupprojektet inräknat:
+\begin{itemize}
+  \item dess utgång beror inte på någon primär ingång, så den kan inte följa en brusig sådan.
+  \item en Mealyutgång kan i princip glitcha kombinatoriskt om dess ingångar inte redan är rena.
+  \item observera att ”Moore” i sig inte betyder glitchfri. En utgång som avkodas kombinatoriskt ur
+    flera tillståndsbitar, som \secref{c8:sec:byhand}:s $Y = Q_1 Q_2'$, kan fortfarande glitcha
+    medan de bitarna är skeva vid en övergång. Det som gör en utgång glitchfri är att
+    \emph{registrera} den, så som \code{fsm_led}:s \code{LED_PROCESS} gör, och det är vad du vill ha
+    på allt som driver en ledning ut från kretsen. En seriell \code{tx}-ledning som avkodas direkt
+    ur tillståndsbitarna kommer att sända ut falska flanker.
+  \item en maskin vars utgång beror på färre saker är en maskin med färre sätt att bli fel på.
+\end{itemize}
+
+Ta till Mealy bara när du specifikt behöver den lägre latensen eller det mindre antalet tillstånd,
+och var medveten om att du då byter en synkron utgång mot en kombinatorisk.
+
+% ------------------------------------------------------------------------------------------
+\section{På kortet}
+\label{c8:sec:board}
+
+\code{fsm_led} syntetiseras och körs precis som varje VHDL-design gjort sedan \chapref{c1:ch}: skapa
+ett Quartus Prime Lite-projekt med DE0-CV:s \code{5CEBA4F23C7N} som målkrets, lägg till
+\file{.vhd}-filerna för exemplet och dess delblock, kompilera, tilldela varje port en fysisk pinne i
+Pin Planner, och kompilera sedan om och programmera kortet.
+
+För \code{fsm_led}, tilldela \code{clock} pinnen för 50 MHz-oscillatorn, \code{reset_n} och
+\code{button_n(1 downto 0)} tre tryckknappar, och \code{led} en lysdiod på kortet. Bekräfta sedan att
+upprepade tryck på ”nästa” får lysdioden att cykla släckt $\to$ blinkande $\to$ tänd $\to$ släckt,
+att ”föregående” går åt andra hållet, och att reset återför den till släckt.
+
+\code{seq_detect_mealy} demonstreras med flit \textbf{inte} på kortet. Den konsumerar en bit per
+klockcykel, och en omkopplare som slås om för hand håller sitt värde i miljontals cykler, så det
+enda en lysdiod kan visa är det degenererade fallet: \code{din} hållen hög, \code{y} hög från andra
+cykeln och framåt. Skillnaden på en klockcykel som hela \secref{c8:sec:mealy} handlar om sker
+alldeles för fort för att se. Kör dess testbänk i stället, vilket är den allmänna lärdomen snarare
+än ett undantag:
+
+\begin{shell}
+cd lectures/L08/seq_detect_mealy
+cp ../../L04/exercises/reset_sync/reset_sync.vhd .     # the one you wrote in L04
+ghdl -a --std=93 reset_sync.vhd seq_detect_mealy.vhd seq_detect_mealy_tb.vhd
+ghdl -e --std=93 seq_detect_mealy_tb
+ghdl -r --std=93 seq_detect_mealy_tb --assert-level=error --stop-time=10ms
+\end{shell}
+
+Exakta pinnummer beror på vilka knappar och lysdioder på DE0-CV du väljer, tilldelade på samma sätt
+som för varje design sedan \chapref{c1:ch}. Slå upp DE0-CV:s egen dokumentation för dess fysiska
+pinnkonfiguration om du behöver bekräfta vilken headerpinne som motsvarar vilken märkt knapp,
+omkopplare eller lysdiod.

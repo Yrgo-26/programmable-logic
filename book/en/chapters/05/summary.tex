@@ -1,0 +1,48 @@
+% Section 5.6, from lectures/L05/README.md and appendix A.4.
+
+\section{Summary}
+\label{c5:sec:review}
+
+\needspace{6\baselineskip}
+\subsection*{What you should be able to do now}
+\begin{itemize}
+  \item Say what separates a \code{signal} from a \code{variable}, predict the different result
+    each gives from the same code, and choose between them deliberately.
+  \item Explain what an FPGA physically consists of, why two differently written descriptions of
+    the same circuit give the same hardware, and why a Karnaugh map buys less here than on discrete
+    logic.
+  \item Explain what limits a design's clock frequency, and why more registers can make a design
+    faster rather than slower.
+  \item Recognise an unintended latch from its warning, say what caused it and fix it, and say why
+    ``it compiled without errors'' promises less for an FPGA design than for a C program.
+\end{itemize}
+
+\needspace{6\baselineskip}
+\subsection*{Questions to test yourself with}
+\begin{enumerate}
+  \item A \code{signal} is assigned twice, with different values, in one round through a
+    \code{process}. What ends up on it, and when does that update actually happen?
+  \item The same question for a \code{variable}.
+  \item Why does accumulating over a loop with a \code{signal} give a different, usually incorrect,
+    result?
+  \item Nothing on an FPGA becomes a gate. What does a Boolean function become instead, and why
+    does a function of four variables cost the same whether or not you minimised it first?
+  \item What is the critical path, and why can more flip-flops make a design run faster?
+  \item A combinational \code{case} assigns its output in three branches out of four. What does the
+    synthesis tool build for the fourth, and why is that the only thing it \emph{can} build?
+  \item Why is an unintended latch a warning and not an error, and why does that make it more
+    dangerous rather than less?
+\end{enumerate}
+
+\needspace{6\baselineskip}
+\subsection*{Looking ahead}
+Nothing in \chapref{c6:ch} to \ref{c8:ch} introduces a new idiom. Counters, shift registers and
+timers all hold state across clock edges using \chapref{c3:ch}'s clocked process and the scheduling
+rule above, and \chapref{c8:ch}'s state machines merely add an enumerated type and a \code{case} on
+it. What changes is what the state is used for.
+
+Two things to watch for. \Chapref{c6:ch}'s \code{serial_rx8} is the first design whose correctness
+you cannot check by eye on an LED, which is where the testbenches handed out stop being a
+formality. And \secref{c4:sec:generics}'s generic is put to work straight away: \chapref{c7:ch}'s
+\code{timer} uses one for its tick count, and \code{walking_led} instantiates that timer alongside
+\code{reset_sync} and \code{button_sync}, writing almost no logic of its own.

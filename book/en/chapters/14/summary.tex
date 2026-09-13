@@ -1,0 +1,40 @@
+% Section 14.7, from lectures/L14/README.md.
+
+\section{Summary}
+\label{c14:sec:review}
+
+\needspace{6\baselineskip}
+\subsection*{What you should be able to do now}
+\begin{itemize}
+  \item Implement a shift register serialising MSB first and inserting stuff bits per the five rule.
+  \item Explain why the stuffing counter must not be cleared when a new group is loaded.
+  \item Distinguish \code{bit_valid} from \code{bit_done}, and say which of them the CRC engine
+    should be gated on.
+  \item Say what \code{stuff} is for, and why it is needed outside the module.
+\end{itemize}
+
+\needspace{6\baselineskip}
+\subsection*{Questions to test yourself with}
+\begin{enumerate}
+  \item Why must the first bit of a newly loaded group be out straight away, instead of at the next
+    \code{shift}?
+  \item Why is the stuffing counter not cleared on reload?
+  \item What would go wrong if \code{can_controller} fed the CRC engine on \code{bit_done} instead of
+    on \code{bit_valid and not stuff}?
+  \item A stuff bit always has the opposite value to the five preceding ones. Why is ``insert a
+    zero'' not enough?
+  \item Why does \code{done} wait one extra shift instead of going high straight away when the last
+    data bit has been shifted out?
+\end{enumerate}
+
+\needspace{6\baselineskip}
+\subsection*{Target}
+About halfway through the project. Three of the four leaf modules are usually finished here, and it
+is also about now that it becomes clear which group actually reviews each other's code and which one
+just clicks ``Approve''.
+
+\needspace{6\baselineskip}
+\subsection*{Looking ahead}
+\Chapref{c15:ch} builds \code{rx_shift_reg}, the receive side's mirror image: deserialisation,
+destuffing and flagging violations of the bit stuffing rule. \Chapref{c16:ch} then puts both
+registers to work inside \code{can_controller}.

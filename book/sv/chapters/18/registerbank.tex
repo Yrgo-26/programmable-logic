@@ -1,0 +1,275 @@
+% Avsnitt 18.1-18.8, ur lectures/L18/appendix/a_register_bank.md.
+
+\section{Varför det här lagret finns}
+\label{c18:sec:why}
+
+\code{can_controller}s statusutgångar är gjorda för en anropare i samma klockdomän som ser varje
+cykel: \code{tx_done} och \code{rx_valid} är \textbf{encykelspulser}, 20~ns vid 50~MHz
+(\chapref{c11:ch}). En drivrutin som pollar över SPI samplar systemet några \emph{mikrosekunder} i
+taget i bästa fall \textemdash{} en puls är borta tusentals cykler innan nästa pollning kommer.
+Registerkartan (bilaga~\ref{app:protocol}) lovar därför något annat: \textbf{klibbiga, pollbara
+nivåer} med uttryckliga nollställningar (\code{RX_ACK}, \code{ERROR_FLAGS}), och skrivutlösta
+händelser (\code{TX_SEND}).
+
+Att konvertera mellan de två världarna är hela den här modulens uppgift. Den innehåller ingen
+protokollkunskap i någon riktning: ingenting om CAN-ramar (det stannar i \code{can_controller}) och
+ingenting om SPI (det kommer senare i det här kapitlet, och i \chapref{c19:ch}). Det är register,
+låsningar och en pulsgenerator \textemdash{} vilket är precis därför den kan verifieras fullständigt
+under ett enda pass, innan det finns någon SPI alls.
+
+Du har sett båda dess kärntrick förut, i \chapref{c3:ch} och \ref{c4:ch}. En klibbig statusbit är
+\chapref{c3:ch}:s vippa med de två frågorna uttryckligen besvarade: vad som sätter den, och vad som
+nollställer den. Och att göra om en hållen nivå till en encykelspuls är precis vad
+\code{button_sync}s flankdetektering gjorde i \chapref{c4:ch} \textemdash{} här går den åt samma håll
+för \code{TX_SEND} (en skrivning blir en puls) och åt motsatt håll för \code{tx_done} (en puls blir
+en nivå som ligger kvar). Det här kapitlet befordrar båda från en övning till ett riktigt
+arkitekturlager med ett dokumenterat kontrakt.
+
+% ------------------------------------------------------------------------------------------
+\section{Gränssnittet}
+\label{c18:sec:iface}
+
+Sexton portar, \textbf{alla ingångar först, sedan alla utgångar}, samma konvention som varje modul i
+projektet \textemdash{} och, som överallt annars i det, är bindningen \emph{positionell}, så
+ordningen nedan är det kontrakt \code{register_bank_tb} håller dig till:
+
+\begin{textdrawing}
+ 1 clock        5 reg_wdata    9 rx_data     13 tx_id
+ 2 reset_s2_n   6 tx_done     10 rx_valid    14 tx_dlc
+ 3 reg_index    7 rx_id       11 error       15 tx_data
+ 4 reg_write    8 rx_dlc      12 reg_rdata   16 tx_req
+\end{textdrawing}
+
+Typerna kommer från \code{can_def} (\code{use work.can_def.all;}), så portarna mot kontrollern har
+exakt samma typer som \code{can_controller}s egna. Vid sidan av \code{clock} och \code{reset_s2_n}
+(portarna 1 och 2) faller de fjorton övriga i två grupper.
+
+\paragraph{Sidan mot bryggan (portarna 3--5 och 12)}
+En medvetet minimal registeråtkomstport \textemdash{} det som \chapref{c19:ch}:s brygga kommer att
+driva, och det som testbänken driver direkt i dag:
+\begin{itemize}
+  \item \code{reg_index : std_logic_vector(3 downto 0)} \textemdash{} vilket register, protokollets
+    index (offset delat med 4).
+  \item \code{reg_write : std_logic} \textemdash{} en \textbf{encykelsstrob}; på dess stigande
+    klockflank verkställs \code{reg_wdata} i det adresserade registret.
+  \item \code{reg_wdata : std_logic_vector(31 downto 0)} \textemdash{} värdet som ska skrivas.
+  \item \code{reg_rdata : std_logic_vector(31 downto 0)} \textemdash{} det adresserade registrets
+    aktuella värde, \textbf{kombinatoriskt}: det följer \code{reg_index} utan att någon klockflank är
+    inblandad. Regeln om att låsa en gång vid läsning ur protokollspecifikationen är \emph{bryggans}
+    uppgift (\chapref{c19:ch}), inte den här modulens \textemdash{} banken berättar alltid den
+    nuvarande sanningen, och bryggan avgör när den tar sitt enda atomära sampel.
+\end{itemize}
+
+\paragraph{Sidan mot kontrollern (portarna 6--11 och 13--16)}
+Speglar \code{can_controller}s portar på registersidan en mot en: \code{tx_id}, \code{tx_dlc},
+\code{tx_data} och \code{tx_req} ut till kontrollern, och \code{tx_done}, \code{rx_id},
+\code{rx_dlc}, \code{rx_data}, \code{rx_valid} och \code{error} tillbaka från den. I
+\chapref{c19:ch}:s toppnivå kopplas de rakt över, port till port, ingenting emellan.
+
+\code{reset_s2_n} är den \emph{synkroniserade} reseten, som för varje delblock i projektet.
+\Chapref{c19:ch}:s toppnivå äger en \code{meta_prev} för den, precis som \code{can_controller} äger
+sin egen internt.
+
+% ------------------------------------------------------------------------------------------
+\section{De tre STATUS-bitarna: en låsning var}
+\label{c18:sec:status}
+
+Varje \code{STATUS}-bit är en vippa med ett namngivet sättvillkor och ett namngivet
+nollställningsvillkor, och ingenting mer:
+
+\begin{booktable}{@{}p{2.2em}p{5em}L>{\raggedright\arraybackslash}p{9em}@{}}
+  \thead{Bit} & \thead{Betydelse} & \thead{Sätts av} & \thead{Nollställs av} \\
+  \midrule
+  0 & TX klar & reset; kontrollerns puls \code{tx_done}; \textbf{en stigande flank på \code{error}
+    medan den här biten är låg}; \textbf{en accepterad skrivning till \code{TX_ABORT}} & en
+    accepterad skrivning till \code{TX_SEND} \\
+  1 & RX giltig & kontrollerns puls \code{rx_valid} & en skrivning av \code{0x1} till
+    \code{RX_ACK} \\
+  2 & Fel & en \textbf{stigande flank} på kontrollerns nivå \code{error} & en skrivning av
+    \code{0x0} till \code{ERROR_FLAGS} \\
+\end{booktable}
+
+Tre av dem förtjänar en andra blick:
+\begin{itemize}
+  \item \textbf{Bit 0 börjar på \code{'1'}.} Ur reset är kontrollern i vila, så banken är redo att ta
+    emot en ram \textemdash{} en drivrutin som pollar innan den någonsin sänt måste se ”klar”, annars
+    skulle \code{send()} misslyckas för alltid på ett nyss spänningssatt system.
+  \item \textbf{Bit 2 låser en flank, inte en nivå.} Kontrollern håller \code{error} hög tills nästa
+    ram börjar (\chapref{c11:ch}), på sitt eget schema. Att låsa den stigande flanken ger
+    \emph{drivrutinen} en egen livscykel för flaggan: en nollställning tar bort den även medan
+    kontrollerns nivå fortfarande är hög, och låsningen sätts inte igen förrän ett genuint \emph{nytt}
+    fel producerar en ny stigande flank. Att i stället låsa på nivån skulle få nollställningen att
+    verka trasig \textemdash{} nollställd och omedelbart satt igen \textemdash{} så länge kontrollern
+    håller ledningen.
+  \item \textbf{Bit 0 har tre vägar tillbaka upp, och det är avsiktligt.} Läs de två extra som
+    livrem och hängslen kring det enda fel som kan slå ut hela noden.
+\end{itemize}
+
+\begin{aside}
+En sändning som förlorar arbitreringen slutar utan att någonsin nå EOF. \Chapref{c17:ch} låter
+kontrollern pulsa \code{tx_done} också på den vägen, just för att den här biten ska komma tillbaka
+\textemdash{} men kontrollern är \emph{din}, och en version som glömmer det lämnar biten låg för
+alltid, så varje senare \code{TX_SEND} kastas och noden kan inte sända igen förrän den resettas.
+Banken förlitar sig därför inte på att kontrollern gör rätt. \textbf{En stigande flank på
+\code{error} medan bit 0 redan är låg kan bara betyda att en sändning slutade illa}, eftersom en nod
+antingen sänder eller tar emot, och ett mottagningsfel inte kan inträffa medan en sändning pågår. Så
+den flanken sätter biten också, och det behövs ingen \code{role}-port för att veta det.
+
+\code{TX_ABORT} är den tredje vägen: en uttrycklig nödutgång som drivrutinen kan dra i om den bedömer
+att den väntat länge nog. Ingenting i konstruktionen ska någonsin behöva den. Bygg in den ändå
+\textemdash{} kostnaden är ett enda register som bara går att skriva till, och alternativet är en nod
+som en drivrutin inte har någon möjlighet att få loss.
+\end{aside}
+
+En enda ordningsregel binder ihop låsningarna: i den klockade processen \textbf{tillämpas
+kontrollerns händelser efter bryggans skrivningar}, så om en \code{TX_SEND}-skrivning och en
+\code{tx_done}-puls någonsin landade på samma flank vinner hårdvaran och banken förblir klar. En så
+sällsynt konflikt bör lösas åt det håll som inte kan köra fast systemet, och det är samma princip som
+stycket ovan tillämpar tre gånger om.
+
+% ------------------------------------------------------------------------------------------
+\section{\code{TX_SEND}: en skrivning blir en puls}
+\label{c18:sec:txsend}
+
+En \code{TX_SEND}-skrivning med \code{reg_wdata(0) = '1'}, som anländer medan TX klar är satt, gör
+exakt två saker på den klockflanken: höjer \code{tx_req} \textbf{under en cykel}, och nollställer TX
+klar. Mer precist: \code{tx_req} är hög under den enda cykeln \emph{efter} skrivningens klockflank,
+och låg igen på nästa \textemdash{} testbänken kontrollerar båda ändarna av det påståendet.
+
+Allt annat med det här registret är vad det \emph{ignorerar}:
+\begin{itemize}
+  \item En skrivning medan TX klar är låg (en sändning pågår) kastas helt \textemdash{} ingen puls,
+    ingen tillståndsändring. Att skriva över \code{tx_id}, \code{tx_dlc} eller \code{tx_data} mitt i
+    en sändning är den korruption som drivrutinens egen klar-kontroll skyddar mot från
+    mjukvarusidan; det här är samma skydd på hårdvarusidan, och ingendera sidan får anta att den
+    andra finns där.
+  \item En skrivning med \code{reg_wdata(0) = '0'} gör ingenting: registerkartan säger ”skriv
+    \code{0x1} för att utlösa”, och banken håller den till det.
+  \item Läsningar ger noll \textemdash{} \code{TX_SEND} lagrar ingenting, det \emph{gör} något.
+\end{itemize}
+
+Varför pulsdisciplinen spelar roll syns tydligast i felet den förhindrar. \code{can_controller} agerar
+på \code{tx_req} så fort den är hög och bussen är ledig (\chapref{c16:ch}), så en \code{tx_req} som
+lämnas \emph{hållen} begär på nytt i samma ögonblick som en ram tar slut, för alltid, och suddar
+\code{error} vid varje passage tillbaka genom starttillståndet. Begäran måste vara en händelse, och
+något måste göra den till en. På det här lagret är det enklare \textemdash{} en skrivstrob är redan
+en händelse, inte en nivå \textemdash{} men det måste ändå \emph{upprätthållas}: en skrivning, en
+puls, oavsett vad mastern gör härnäst.
+
+% ------------------------------------------------------------------------------------------
+\section{\code{TX_ABORT}: nödutgången}
+\label{c18:sec:txabort}
+
+Index 12, bara skrivbart, och spegelbilden av \code{TX_SEND}: en skrivning av \code{0x1} sätter TX
+klar tillbaka till \code{'1'}. En skrivning av något annat gör ingenting, och en läsning ger
+\code{0x00000000}.
+
+Det rör ingenting annat. Det når inte \code{can_controller} \textemdash{} kontrollern har ingen
+ingång för att avbryta, dess femton portar spikades i \chapref{c11:ch} och \code{can_controller_tb}
+binder dem positionellt \textemdash{} och den behöver ingen. En kontroller som avbrutit en sändning
+är redan tillbaka i \code{STATE_IDLE} och fullt kapabel att sända igen; det enda som sitter fast är
+den här bankens klibbiga bit. \code{TX_ABORT} lossar den, och det är hela modulen.
+
+Det är värt att stanna vid ett ögonblick, eftersom det är buggens allmänna form. Ingenting i
+\emph{hårdvaran} hade kört fast. Det som kört fast var en \textbf{statusbit vars enda sättvillkor
+hängde på en händelse som inte längre inträffade}. Varje klibbig flagga med en väg upp och en väg ner
+är en missad händelse från samma fel, och lösningen är alltid densamma: se till att varje väg ut ur
+upptagettillståndet också höjer flaggan, och ge anroparen ett sätt att tvinga fram den ifall du har
+fel om ”varje”.
+
+% ------------------------------------------------------------------------------------------
+\section{RX-sidan: infångning vid pulsen}
+\label{c18:sec:rx}
+
+När \code{rx_valid} pulsar gör banken två saker på samma flank: sätter STATUS bit 1, och
+\textbf{fångar in} \code{rx_id}, \code{rx_dlc} och \code{rx_data} i de fyra \code{RX_*}-registren
+\textemdash{} \code{rx_data}s övre ord (bitarna 63--32, databyte 0--3, byte 0 i den mest signifikanta
+positionen) i \code{RX_DATA_LO}, dess undre ord i \code{RX_DATA_HI}.
+
+Att fånga in, i stället för att koppla kontrollerns portar rakt till läsmuxen, är det som ger
+drivrutinen en stabil ram att läsa: \code{RX_*}-registren håller sina värden medan drivrutinen
+arbetar sig igenom fyra separata SPI-lästransaktioner, oavsett vad kontrollerns portar gör under
+tiden. En skrivning till \code{RX_ACK} nollställer \emph{bara flaggan} \textemdash{} dataregistren
+behåller sitt innehåll till nästa infångning, vilket är ofarligt: registerkartans kontrakt är att
+\code{RX_*} är meningsfullt \emph{medan RX giltig är satt}.
+
+Vad infångningen \textbf{inte} ger drivrutinen är buffring. En ny ram som fullbordas innan den förra
+kvitterats fångas helt enkelt in ovanpå den \textemdash{} en ram hålls, den nyaste vinner. Det är
+inte den här modulen som är lat; det är en dokumenterad lucka som ärvts från kontrollern själv, som
+håller exakt en mottagen ram och skriver över den vid nästa (\chapref{c11:ch}). Banken gör den luckan
+synlig på registernivå i stället för att dölja den, och \chapref{c19:ch} återkommer till vad den
+kostar en drivrutin.
+
+% ------------------------------------------------------------------------------------------
+\section{Maskning vid skrivning}
+\label{c18:sec:mask}
+
+Skrivbara register lagrar bara de bitar som finns i hårdvaran, och läses tillbaka som nollor ovanför
+dem:
+
+\begin{booktable}{@{}p{9em}p{9em}L@{}}
+  \thead{Register} & \thead{Lagrade bitar} & \thead{En skrivning av \code{0xFFFFFFFF} läses tillbaka
+    som} \\
+  \midrule
+  \code{TX_ID} & 10--0 (\code{id_t}) & \code{0x000007FF} \\
+  \code{TX_DLC} & 3--0 (\code{dlc_t}) & \code{0x0000000F} \\
+  \code{TX_DATA_LO}/\code{HI} & alla 32 & \code{0xFFFFFFFF} \\
+\end{booktable}
+
+Lägg märke till vad banken \emph{inte} gör: validerar. En \code{TX_DLC} på \code{0xF} lagras och
+lämnas vidare till kontrollern som den är \textemdash{} att avvisa \code{dlc > 8} är drivrutinens
+ansvar, i den parallella mjukvaruklassen, och att göra det två gånger på två språk är precis så de
+två kopiorna glider isär. Banken maskar till de bitar som fysiskt finns; drivrutinen upprätthåller
+betydelsen. \code{STATUS} och \code{RX_*}-registren ignorerar skrivningar helt, och de reserverade
+indexen 13--15 läses som noll och ignorerar skrivningar, precis som protokollspecifikationen kräver.
+
+Utgångarna mot kontrollern kommer direkt från TX-registren:
+\code{tx_data <= TX_DATA_LO & TX_DATA_HI} \textemdash{} 64 bitar med databyte 0 i den mest
+signifikanta positionen, den layout \code{can_controller} väntar sig (\chapref{c16:ch}) och samma
+packning som drivrutinen utför på andra sidan kartan (se diagrammet över databyteordningen i
+bilaga~\ref{app:protocol}).
+
+% ------------------------------------------------------------------------------------------
+\section{Att skriva \code{register_bank.vhd}}
+\label{c18:sec:write}
+
+Filen hamnar i \file{bridge/}, bredvid dina kopierade kontrollermoduler. Formen är två processer och
+en handfull konkurrenta tilldelningar:
+\begin{itemize}
+  \item \textbf{En klockad process} som äger varje register och låsning: resetvärdena (TX klar
+    \code{'1'}, allt annat noll), skriv-\code{case}:et över \code{reg_index}, och sedan de tre
+    uppdateringarna från kontrollerns händelser, i den ordningen.
+  \item \textbf{En kombinatorisk process} för läsmuxen: ge \code{reg_rdata} förvalet idel nollor, och
+    skriv sedan över de bitar varje register faktiskt har \textemdash{} samma stil med ”tilldela ett
+    förval, skriv över i specifika grenar” som varje räknare och tillståndsmaskin från
+    \chapref{c6:ch} och framåt.
+  \item Konkurrenta tilldelningar som kopplar ut \code{tx_id}, \code{tx_dlc}, \code{tx_data} och
+    \code{tx_req} från TX-registren och pulsvippan.
+\end{itemize}
+
+Analysera den och kör sedan den utdelade testbänken. \file{can_def.vhd} ligger en katalog bort, i
+\file{controller/}: banken läser \code{can_def} för sina typer mot kontrollern men hör hemma på
+SPI-sidan av protokollgränsen.
+
+\begin{shell}
+cd bridge
+ghdl -a --std=93 ../controller/can_def.vhd register_bank.vhd register_bank_tb.vhd
+ghdl -e --std=93 register_bank_tb
+ghdl -r --std=93 register_bank_tb --assert-level=error
+\end{shell}
+
+\paragraph{Vad testbänken kontrollerar}
+\file{register_bank_tb.vhd} går igenom kontraktet i elva fall, i tur och ordning: reset-tillståndet
+(bit 0 satt, allt annat noll); skrivning och återläsning med maskning på varje skrivbart register,
+och utgångarna mot kontrollern som följer dem; \code{TX_SEND}s encykelspuls och nollställningen av
+klar; skrivningen som kastas medan sändning pågår; \code{tx_done} som återställer klar; en
+\code{TX_SEND}-skrivning av \code{0x0} som inte gör något; infångning av mottagen ram, att den håller
+trots att ingångarna ändras, att den är skrivskyddad, och \code{RX_ACK}; fellåsningens flanksemantik,
+inklusive regeln om skrivning av noll och en nollställning medan nivån fortfarande är hög; de
+reserverade indexen; och sist de två återhämtningsvägar som ger tillbaka TX klar efter en förlorad
+arbitrering, en automatisk och en driven av \code{TX_ABORT}.
+
+Varje fallkommentar i filen säger vad ett underkänt fall betyder, så läs testbänken innan du skriver
+modulen \textemdash{} den är den körbara formen av det här kapitlet. De två sista fallen är särskilt
+värda att läsa i förväg: utan dem fastnar noden efter sin första förlorade arbitrering, och eftersom
+en tvånodsbuss provocerar det i normal drift är det inte ett hörnfall.

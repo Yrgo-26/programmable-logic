@@ -1,0 +1,422 @@
+% Avsnitt 4.1-4.9, ur lectures/L04/appendix/a_metastability_and_synchronization.md (A.1-A.9).
+
+\section{Problemet: en knapp är inte en testbänkssignal}
+\label{c4:sec:problem}
+
+I \chapref{c3:ch} byggde du flankdetektorer och resonerade om dem mot en ren klocka, där varje
+ingång ändrades prydligt mellan flankerna, precis så som en simulator ritar det. En tryckknapp, en
+extern resetledning, eller vilken signal som helst från en annan klockdomän ändras när omvärlden
+bestämmer sig för det, helt oberoende av din FPGA:s klocka.
+
+Varje D-vippa har två tidskrav kring den aktiva klockflanken:
+\begin{itemize}
+  \item en \textbf{setup-tid}: hur länge \code{D} måste vara stabil \emph{före} flanken.
+  \item en \textbf{hold-tid}: hur länge \code{D} måste förbli stabil \emph{efter} den.
+\end{itemize}
+
+Om en ingång ändras inuti det fönstret är vippan inte garanterad att fånga en ren \code{0} eller
+\code{1}, och du kan aldrig lova att den hamnar utanför, eftersom du inte styr när en extern
+signal ändras. Resten av det här kapitlet löser det inte genom att undvika problemet utan genom
+att innesluta det.
+
+% ------------------------------------------------------------------------------------------
+\section{Metastabilitet: vad som faktiskt händer inuti vippan}
+\label{c4:sec:meta}
+
+En D-vippa är byggd av korskopplade grindar som slår om till \code{0} eller \code{1} i samma
+ögonblick som klockan samplar ingången. Om \code{D} ändras för nära flanken kan den interna
+återkopplingsslingan lämnas i balans mellan de två tillstånden, varken helt hög eller helt låg,
+längre än väntat. Det är \textbf{metastabilitet}.
+
+Tänk dig en kula som balanserar exakt på toppen av en kulle. Med tillräckligt med tid rullar den
+ner åt ena hållet, men exakt när den bestämmer sig, och åt vilket håll, går inte att förutsäga från
+det ögonblick den placerades där, och så länge den fortfarande balanserar är dess position inte
+något giltigt digitalt värde alls.
+
+En metastabil utgång beter sig likadant:
+\begin{itemize}
+  \item den stabiliserar sig nästan alltid till en giltig \code{0} eller \code{1} av sig själv,
+    givet tillräckligt med tid.
+  \item ”tillräckligt med tid” är inte gratis, och är inte densamma varje klockcykel.
+  \item om den ostabiliserade spänningen når logik nedströms innan den lagt sig kan olika grindar
+    med all rätt läsa den olika: en ser \code{0}, en annan \code{1}, i samma ögonblick.
+\end{itemize}
+
+Den oenigheten är där riktiga system beter sig fel: en räknare som räknar upp i en del av kretsen
+men inte i en annan, eller en tillståndsmaskin i ett omöjligt tillstånd. Allt i det här kapitlet
+finns till för att se till att metastabiliteten stabiliserar sig \emph{innan} en signal rör resten
+av din design.
+
+I tid ser hela problemet ut så här:
+
+\lecfig[0.72]{lectures/L04/appendix/images/setup_hold.png}{\code{D} ändras inuti
+setup/hold-fönstret kring en stigande klockflank, vilket lämnar \code{Q} metastabil innan den sent
+lägger sig på endera nivån.}{c4:fig:setuphold}
+
+Läs det från vänster till höger. Det skuggade bandet är fönstret från \secref{c4:sec:problem},
+$t_{su}$ före flanken och $t_h$ efter den. \code{D} ändras inuti det, vilket är precis vad en
+ingång du inte styr står fritt att göra. \code{Q} är sedan varken \code{0} eller \code{1} under en
+stund, och när den väl lägger sig är både \emph{när} den lägger sig och \emph{vilken nivå} den
+lägger sig på utanför din kontroll. Båda de streckade fortsättningarna är legitima utfall av samma
+ingång.
+
+Lägg märke till vad diagrammet inte visar: ett felaktigt svar. Att sampla en signal mitt i en
+övergång får ge dig endera nivån, och det är i sig harmlöst, eftersom ingången faktiskt höll på att
+ändras i det ögonblicket. Problemet är fördröjningen innan du får ett svar över huvud taget, och
+det är den nästa avsnitt köper tid för.
+
+% ------------------------------------------------------------------------------------------
+\section{Dubbelvippsynkroniseraren}
+\label{c4:sec:sync}
+
+Standardlösningen är \textbf{dubbelvippsynkroniseraren}:
+\begin{itemize}
+  \item Placera två D-vippor i serie på varje asynkron ingång: varje ingång som ändras utan någon
+    fast relation till din klocka. En tryckknapp, en resetledning, en signal som anländer från en
+    annan klockdomän.
+  \item En ingång som redan klockas av \emph{denna} klocka är inte asynkron, och får \textbf{inte}
+    synkroniseras. Att göra det fördröjer den bara, och förskjuter dess tidsläge relativt allt runt
+    omkring. \code{seq_detect_mealy} i \chapref{c8:ch} är precis det fallet: dess \code{din} är
+    synkron seriell data, så den går rakt in i maskinen medan \code{reset_n} fortfarande får en
+    synkroniserare.
+  \item Använd aldrig något annat än den \emph{andra} vippans utgång på andra ställen i designen.
+\end{itemize}
+
+\begin{textdrawing}
+async_in
+   │
+   ▼
+ [FF1] ──────► [FF2] ──────► synkroniserad, säker att använda
+   (kan bli       (extremt sannolikt
+   metastabil)     stabil)
+\end{textdrawing}
+
+Samma två vippor, i tid:
+
+\lecfig[0.72]{lectures/L04/appendix/images/synchronizer_waveform.png}{\code{async_in} ändras strax
+före en klockflank, \code{s1} blir metastabil under en klockperiod, och \code{s2} kommer ut ren en
+flank senare.}{c4:fig:syncwave}
+
+\code{FF1} är den som är exponerad för den asynkrona ingången, så den är den som kan bli
+metastabil. Dess utgång behöver bara nå \code{FF2}, och den har en hel klockperiod på sig.
+Sannolikheten att en metastabil nod fortfarande är ostabiliserad efter en hel period är liten, och
+krymper ju längre tid den får, så när \code{FF2} samplar på nästa flank har \code{FF1} nästan
+alltid lagt sig. \code{FF2}:s utgång är det du bygger resten av din synkrona logik på.
+
+Det här är sannolikhetsbaserat, inte absolut, och \secref{c4:sec:mtbf} säger vad det innebär. Vid
+de hastigheter som används i den här boken, tiotals MHz, är två steg det gängse,
+industriaccepterade svaret.
+
+En regel knyter ihop det: \textbf{varje asynkron ingång får sin egen dubbelvippkedja innan den
+används någon annanstans.} Externa resetknappar, tryckknappar, och senare varje
+\textbf{enbitssignal} som korsar från en annan klockdomän.
+
+\begin{warning}
+Det sista ordet är bärande, och det är den enda begränsning som är värd att lära sig innan du
+överanvänder regeln. En dubbelvippkedja synkroniserar \textbf{en bit}. Kör en flerbitsbuss genom
+en kedja per bit och varje bit är säker för sig men de är inte säkra \emph{tillsammans}: var och en
+stabiliserar sig oberoende till det gamla eller det nya värdet på samma flank, så mottagaren kan
+sampla en kombination som aldrig fanns på bussen. En räknare som stegar från \code{0111} till
+\code{1000} har alla bitar ändrade på en gång, och en synkroniserare per bit kan ge dig
+\code{1111} eller \code{0000}, värden räknaren aldrig höll.
+
+Bussar som korsar klockdomäner behöver en handskakning, en FIFO, eller Gray-kodning, som ordnar det
+så att bara en bit någonsin ändras åt gången. Ingenting i del~\ref{part:vhdl} korsar klockdomäner
+med en buss, så du kommer inte att behöva dem där; grupprojektet återkommer till begränsningen i
+\chapref{c12:ch}, där samma synkroniserare skrivs en gång och återanvänds. Att veta att
+tvåvippsvaret stannar vid en bit räcker för nu.
+\end{warning}
+
+% ------------------------------------------------------------------------------------------
+\section{Intuition för tidsförhållandena: varför ”nästan säkert” duger}
+\label{c4:sec:mtbf}
+
+En synkroniserare köper inte ”ingen metastabilitet”. Den köper metastabilitet som får en hel
+klockperiod på sig att stabilisera sig innan den kan påverka något annat, och det är ett
+statistiskt argument snarare än ett bevis. Den korrekta hållningen är ”rimligt säker, med stöd av
+en extremt låg, väl karakteriserad felfrekvens”, inte ”bevisbart säker under alla förhållanden”,
+vilket är skälet till att extra steg finns för extremfall i stället för att två förklaras
+tillräckliga av en naturlag.
+
+Sambandet har en standardform, värd att se en gång även om du inte kommer att räkna med den här:
+
+\[ \mathit{MTBF} = \frac{e^{\,t_r / \tau}}{T_w \cdot f_{\mathrm{clock}} \cdot f_{\mathrm{data}}} \]
+
+Läs den för vad den säger snarare än för siffror. $t_r$ är den stabiliseringstid ett steg får,
+ungefär en klockperiod; $\tau$ och $T_w$ är båda egenskaper hos vippan, där $\tau$ är hur snabbt
+ett metastabilt värde avklingar och $T_w$ bredden på det fönster kring klockflanken där ingången
+över huvud taget kan framkalla ett sådant. Att lägga till ett steg köper ytterligare ett $t_r$ i
+exponenten, så \textbf{täljaren växer exponentiellt med varje steg du lägger till}, mot en
+klockcykels ökad latens. Nämnaren växer linjärt med klockfrekvensen och, precis lika viktigt, med
+$f_{\mathrm{data}}$: hur ofta den asynkrona ingången faktiskt ändras. En knapp som trycks en gång i
+sekunden och en dataledning som växlar i 10~MHz skiljer sig sju tiopotenser åt enbart i den termen,
+vilket är skälet till att argumentet för ett tredje steg är en fråga om ingången, inte om klockan.
+
+% ------------------------------------------------------------------------------------------
+\section{Att synkronisera en resetsignal: aktivera asynkront, släpp synkront}
+\label{c4:sec:resetsync}
+
+Reset förtjänar ett eget mönster, som \code{reset_sync} demonstrerar. Det finns ingen
+\file{reset_sync.vhd} att öppna i kursrepot: den är Övning~\ref{c4:ex:resetsync}, och du skriver
+den. Listningen nedan är hela modulens process.
+
+\begin{vhdlcode}
+process(clock, reset_n) is
+begin
+    if (reset_n = '0') then
+        reset_s1_n <= '0';
+        reset_s2_n <= '0';
+    elsif (rising_edge(clock)) then
+        reset_s1_n <= '1';
+        reset_s2_n <= reset_s1_n;
+    end if;
+end process;
+\end{vhdlcode}
+
+\begin{itemize}
+  \item \textbf{Aktivera asynkront.} När \code{reset_n} går låg tvingas båda stegen omedelbart till
+    \code{0}, utan något beroende av klockan. En reset som väntade på en klockflank skulle
+    omintetgöra sitt eget syfte: den måste få verkan i samma ögonblick som den behövs, med eller
+    utan klocka.
+  \item \textbf{Släpp synkront.} När \code{reset_n} återgår till \code{1} försvinner inte
+    resetvillkoret överallt på en gång. Det skiftas ut genom de två stegen som vilken annan
+    asynkron ingång som helst, så \code{reset_s2_n}, den signal designen faktiskt använder, släpper
+    rent på en klockflank tillsammans med allt annat. Utan detta skulle olika vippor kunna lämna
+    reset på olika cykler och för ett ögonblick vara oense om systemets tillstånd, samma sorts fel
+    som metastabilitet orsakar.
+\end{itemize}
+
+Det är därför \code{reset_n} synkroniseras av sin egen kedja innan något annat beror på den,
+inklusive knappsynkroniseraren, vars resetingång är \code{reset_s2_n} snarare än den råa
+\code{reset_n}.
+
+% ------------------------------------------------------------------------------------------
+\section{Att återanvända kedjan för flankdetektering, och studsfiltrering i förbigående}
+\label{c4:sec:buttonsync}
+
+Knappen behöver synkroniseras, och från \chapref{c3:ch} behöver du dessutom detektera \emph{när}
+den trycks ned snarare än dess nivå. \code{button_sync}, som är Övning~\ref{c4:ex:buttonsync} och
+därmed också din att skriva snarare än en fil i kursrepot, får båda ur en enda kedja av \textbf{tre}
+vippor:
+
+\begin{textdrawing}
+button_n
+   │
+   ▼
+[FF1] → [FF2] → [FF3]
+        │        │
+        │        └─ föregående värde
+        └─ nuvarande värde
+\end{textdrawing}
+
+Vippa 1 och 2 är \secref{c4:sec:sync}:s synkroniserare, vilket gör \code{button_s2_n} till det
+stabila nuvarande värdet. Vippa 3 lagrar förra cykelns \code{button_s2_n} som \code{button_s3_n},
+det föregående värdet. Vippa 1 och 2 är värda att lägga märke till för sig:
+Övning~\ref{c5:ex:sync} bryter ut den dubbelvippkedjan till en återanvändbar \code{sync}-modul, och
+lämnar den tredje vippan här som flankdetektorns egen. Att jämföra steg 2 mot steg 3 ger
+flankdetektering gratis:
+
+\begin{vhdlcode}
+button_edge_s2 <= (not button_s2_n) and button_s3_n;
+\end{vhdlcode}
+
+vilket är sant under exakt en klockcykel: den där knappen läses som nedtryckt nu och inte var det
+cykeln före.
+
+\textbf{Synkronisering löser i sig bara metastabilitet.} Den säger ingenting om en mekanisk knapps
+benägenhet att studsa: att sluta och bryta kontakt flera gånger under den första millisekunden
+eller så, där varje studs ser ut som ett eget tryck. Det som håller den här bokens övningar från
+att dränkas i studs är \emph{kombinationen} av kedjan och ett detekteringsfönster som är långsamt i
+förhållande till studsen:
+\begin{itemize}
+  \item I det här kapitlets CircuitVerse-övningar är klockperioden en hel sekund. Studsen lägger
+    sig på långt mindre än så, så vid nästa flank läser \code{button_s2_n} en enda ren nivå. Kedjan
+    ser ut att studsfiltrera, men den samplar egentligen bara för sällan för att se studsen.
+  \item På FPGA:n är klockan \code{50 MHz}, ett sampel var \code{20 ns}, medan studsen varar från
+    under en millisekund till några tiotals millisekunder, många tusen cykler. Vid den hastigheten
+    detekterar \code{button_sync} troget \emph{varje} studsövergång som en egen flank, och
+    lysdioden kan växla flera gånger för ett enda fysiskt tryck.
+\end{itemize}
+
+Så exakt: dubbelvippsynkroniseraren löser metastabilitet tillförlitligt vid de hastigheter som
+används här. Om den dessutom \emph{ser ut} att studsfiltrera beror helt på att klockperioden är
+långsam i förhållande till knappens studstid, vilket stämmer i CircuitVerse och inte automatiskt
+stämmer på FPGA:n.
+
+% ------------------------------------------------------------------------------------------
+\section{Vad en riktig studsfiltrering i hårdvara tillför}
+\label{c4:sec:debounce}
+
+Den här boken har inget eget kapitel om studsfiltrering, och de genomarbetade exemplen fortsätter
+medvetet att använda \secref{c4:sec:buttonsync}:s krets, studs och allt. Den duger för en
+demolysdiod. En produktionsdesign lägger till något av följande \emph{ovanpå}:
+\begin{itemize}
+  \item \textbf{Ett analogt RC-lågpassfilter}, eventuellt med en Schmitt-triggerbuffert, på
+    knappingången innan den når en FPGA-pinne. RC-paret jämnar ut de snabba slut- och
+    brytövergångarna till en enda gradvis flank, och Schmitt-triggern, med sina två omslagströsklar,
+    gör tillbaka det till en enda ren digital övergång. Det löser studsen innan signalen ens är
+    digital, men kostar komponenter på kortet och hjälper inte för ingångar som inte är mekaniska
+    kontakter.
+  \item \textbf{En digital studsfiltreringsräknare.} I stället för att agera på nästa detekterade
+    flank, kräv att ingången håller en ny nivå under någon minsta tid, några millisekunders värde
+    av klockcykler, innan den accepteras. Det bygger ditt eget konstgjort långsamma
+    detekteringsfönster på chippet, samma effekt som CircuitVerses 1-sekundersklocka ger gratis,
+    utan att sakta ner systemklockan. Du möter räknare i \chapref{c6:ch} och timers, som den här
+    tekniken behöver, i \chapref{c7:ch}.
+\end{itemize}
+
+Båda sitter ovanpå synkroniseraren, inte i stället för den: även en perfekt studsfiltrerad signal
+är fortfarande asynkron mot din klocka och behöver fortfarande en dubbelvippkedja.
+
+% ------------------------------------------------------------------------------------------
+\section{Generics: en modul, flera storlekar}
+\label{c4:sec:generics}
+
+\code{reset_sync} och \code{button_sync} är byggda av samma idé, men bara den ena har en fråga att
+besvara. En reset är en bit och kommer alltid att vara det. Hur många \emph{knappar} har en design?
+Det här kapitlets \code{led_toggle_sync} har en, \chapref{c8:ch}:s \code{fsm_led} har två. Att
+skriva ut samma trevippskedja en gång per bredd är precis den dubblering som uppdelningen i moduler
+var till för att undvika.
+
+En \textbf{generic} besvarar den: ett värde som en entitet deklarerar vid sidan av sina portar,
+fastlagt när designen byggs snarare än föränderligt medan den kör.
+
+\begin{vhdlcode}
+entity button_sync is
+    generic(COUNT: natural range 1 to 3 := 1);
+    port(clock, reset_s2_n: in  std_logic;
+         button_n         : in  std_logic_vector(COUNT-1 downto 0);
+         button_edge_s2   : out std_logic_vector(COUNT-1 downto 0));
+end entity;
+\end{vhdlcode}
+
+\begin{itemize}
+  \item \code{COUNT} beter sig som en konstant inuti arkitekturen. Den kan inte ändras medan
+    kretsen kör; den avgörs innan en enda grind placerats.
+  \item \code{:= 1} är dess standardvärde, som används av varje instansiering som inte säger något.
+  \item Portbredderna är skrivna \emph{i termer av den}, och så är varje intern signal som följer.
+\end{itemize}
+
+\subsection*{Att åsidosätta den}
+En instansiering skickar generics med en \code{generic map}, före sin \code{port map}:
+
+\begin{vhdlcode}
+button_sync1: entity work.button_sync
+    generic map(2)
+    port map(clock, reset_s2_n, button_n, button_edge_s2);
+\end{vhdlcode}
+
+Generics matchas \textbf{positionellt}, i deklarationsordning, precis som portar gör i
+\secref{c2:sec:submodules}. Att utelämna \code{generic map} tillämpar standardvärdet; den här boken
+skriver ut den explicit även när den stämmer, eftersom en läsare inte ska behöva öppna modulen för
+att ta reda på hur bred en instans är.
+
+\subsection*{När en generic gör rätt för sig}
+\code{button_sync} har en och \code{reset_sync} har ingen, och den skillnaden är hela regeln:
+\textbf{lägg till en generic när något genuint varierar mellan instanser, inte av princip.}
+
+\code{button_sync} instansieras med \code{COUNT = 1} av \secref{c4:sec:worked}:s
+\code{led_toggle_sync} och med \code{COUNT = 2} av \chapref{c8:ch}:s \code{fsm_led}: två bredder,
+en fil. \code{reset_sync} är en bit överallt, så en \code{WIDTH}-generic på den vore en parameter
+som ingen någonsin skickar något annat än \code{1} till, och en sak till för en läsare att
+kontrollera. Den andra instansieringen är det som gör en generic värd att ha; en parameter med
+exakt ett värde i hela boken vore bara ett extra mellanled. \code{button_sync}s egen testbänk
+instansierar den med \emph{båda} bredderna i samma simulering, just för att bevisa att en fil
+verkligen betjänar båda.
+
+Du möter ytterligare en generic i \chapref{c7:ch}: \code{timer}s \code{TICK_COUNT}, som är ett
+antal snarare än en bredd, och som är det som låter samma fil mäta en femtiondels sekund i en
+design och en hel sekund i en annan.
+
+% ------------------------------------------------------------------------------------------
+\section{Genomarbetat exempel: \code{led_toggle_sync}}
+\label{c4:sec:worked}
+
+Det här knyter ihop \secref{c4:sec:problem}--\ref{c4:sec:buttonsync} till \chapref{c3:ch}:s
+växlingskrets, gjord säker för en riktig, asynkron knapp och reset.
+
+\begin{booktable}{@{}p{5.6em}p{3.4em}L@{}}
+  \thead{Port} & \thead{Riktn.} & \thead{Beskrivning} \\
+  \midrule
+  \code{clock} & in & \code{50 MHz} systemklocka på DE0-CV-kortet. \\
+  \code{reset_n} & in & Aktiv låg asynkron reset, kopplad till en tryckknapp. \\
+  \code{button_n} & in & Aktiv låg tryckknapp; växlar lysdioden på sin fallande flank. \\
+  \code{led} & out & Lysdiod, växlas vid varje synkroniserat, flankdetekterat knapptryck. \\
+\end{booktable}
+
+Interna signaler: \code{led_s} håller lysdiodens tillstånd, \code{reset_s2_n} är reseten efter
+tvåvippsynkroniseraren (suffixet \code{s2} är bokens konvention för ”synkroniserad med två
+vippor”), och \code{button_edge_s2} är den encykelspuls som markerar en synkroniserad fallande
+flank på \code{button_n}.
+
+Liksom \chapref{c2:ch}:s tvåsiffriga display är den här designen byggd av mer än en entitet, med
+instansieringen från \secref{c2:sec:submodules} och genericen från \secref{c4:sec:generics}.
+Skillnaden är vad delarna gör: displayen instansierade en modul två gånger för att göra samma jobb
+på två halvor av sin ingång, medan den här instansierar två \emph{olika} moduler med ett jobb var.
+Båda är samma mekanism. Att komponera en design av moduler är inte en särskild teknik för upprepad
+logik; det är så designer byggs när de vuxit ur en enda fil.
+
+De två kedjorna bor i två subkomponenter:
+\begin{itemize}
+  \item \code{reset_sync} är \secref{c4:sec:resetsync}:s tvåvippsresetsynkroniserare. Den tar den
+    råa \code{reset_n} och returnerar \code{reset_s2_n}.
+  \item \code{button_sync} är \secref{c4:sec:buttonsync}:s trevippssynkroniserare med
+    flankdetektor. Den tar den redan synkroniserade \code{reset_s2_n} och pulsar
+    \code{button_edge_s2} en gång per tryck.
+\end{itemize}
+
+Att hålla dem åtskilda betyder mer än det ser ut. En design utan egen knapp behöver ändå sin reset
+synkroniserad, och med två moduler instansierar den helt enkelt den den vill ha, som
+\chapref{c8:ch}:s \code{seq_detect_mealy} gör. Hopsvetsade till en modul skulle den designen behöva
+instansiera alltihop och koppla bort den halva den inte använder.
+
+\code{button_sync} tar en \emph{vektor} av knappar så att en fil kan betjäna en design med två
+knappar. Den här designen har en, så toppnivån deklarerar ett par enelementsvektorer att koppla
+till den; det är rördragning, inte logik, två ledningar omdöpta. Fullständig källkod:
+
+\vhdlfile{lectures/L04/led_toggle_sync/led_toggle_sync.vhd}
+
+Toppnivåarkitekturen innehåller ingenting annat än själva växlingsprocessen, och den rör aldrig
+annat än de redan synkroniserade \code{reset_s2_n} och \code{button_edge_s2}, aldrig de råa
+ingångarna.
+
+De två subkomponenterna finns inte i kursrepot, eftersom att skriva dem är
+Övning~\ref{c4:ex:resetsync} och \ref{c4:ex:buttonsync}: \code{reset_sync} är
+\secref{c4:sec:resetsync} ovan, och \code{button_sync} är \secref{c4:sec:buttonsync} och
+\secref{c4:sec:generics}, båda utskrivna i sin helhet. Kopiera in dina egna i
+\file{led_toggle_sync/} för att bygga den.
+
+\paragraph{För hand, i CircuitVerse först}
+Innan du rör VHDL, bygg den som ett grindnät: två D-vippor i serie för resetsynkroniseraren; två
+för \code{button_n} plus en tredje som lagrar det föregående synkroniserade värdet; en AND-grind
+som kombinerar det inverterade nuvarande värdet med det föregående för att producera
+\code{button_edge_s2}; och en växlingsvippa för \code{led_s}, med sin inverterade utgång
+återkopplad till sin ingång, aktiverad endast när \code{button_edge_s2 = 1}. Sätt klockperioden
+till \code{1000 ms} så att du hinner följa varje steg med ögat.
+
+\lecfig[0.95]{lectures/L04/appendix/images/led_toggle_sync_circuit.png}{Synkroniserad
+lysdiodsväxlingskrets: dubbelvippsynkroniserare för reset och knapp, flankdetektering, och en
+växlingsvippa för lysdioden.}{c4:fig:circuit}
+
+En sak i ritningen behöver läsas noga: vipporna har en \code{preset}-ingång, och på
+knappsynkroniserarens tre steg är den bunden till \code{1}. Det är ingen dekoration. I CircuitVerse
+är \code{preset} det värde en vippa laddar när dess reset aktiveras, så att binda den till \code{1}
+är det som gör att \code{button_s1_n}, \code{button_s2_n} och \code{button_s3_n} kommer ur reset
+med värdet \code{1} snarare än \code{0}.
+
+Det stämmer med \code{button_sync}, som resettar samma tre steg till \code{(others => '1')}, och
+det spelar roll av samma skäl: knapparna är aktivt låga, så \code{1} betyder ”släppt”. Resetta
+kedjan till \code{0} i stället och den startar med påståendet att knappen redan hålls nedtryckt.
+Resetvipporna lämnar \code{preset} i fred, eftersom en reset till \code{0} där verkligen är allt
+kretsen ber om.
+
+Tryck på knappen i simuleringen och följ hur det fortplantar sig. Lysdioden växlar inte omedelbart:
+den väntar på att den synkroniserade, flankdetekterade pulsen ska nå växlingsvippan, vilket tar ett
+litet, fast antal klockpulser, precis den latens \secref{c4:sec:sync} kallade priset för säkerheten.
+
+\paragraph{På FPGA:n}
+Samma design demonstreras på Terasic DE0-CV (enheten \code{5CEBA4F23C7N}) under passet, med
+\code{clock} på \code{50 MHz}-oscillatorn, \code{reset_n} och \code{button_n} på två tryckknappar,
+och \code{led} på en lysdiod. Lysdioden växlar vid varje tryck, och enligt
+\secref{c4:sec:buttonsync} kan ett riktigt tryck ibland ge mer än en växling på grund av
+kontaktstuds.

@@ -1,0 +1,484 @@
+% Avsnitt 4.11, ur lectures/L04/appendix/b_exercises.md.
+
+\section{Övningar}
+\label{c4:sec:exercises}
+
+\begin{aside}
+\textbf{Så kontrollerar du ditt arbete.} Varje övning nedan som ber dig skriva en VHDL-modul har
+en utdelad självkontrollerande testbänk under \file{lectures/L04/exercises/}. Skriv din modul i
+dess katalog \file{exercises/<module>/}, med det entitetsnamn och den \textbf{portordning}
+övningen anger, och kör den sedan med GHDL \textemdash{} se \secref{c2:sec:testbenches} för de tre
+kommandona.
+\end{aside}
+
+% ------------------------------------------------------------------------------------------
+\exerciseset{Metastabilitetsbegrepp}
+
+\exercise{Metastabilitet med egna ord}{Resonemang}
+\label{c4:ex:meta}
+Förklara metastabilitet med egna ord. Beskriv i din förklaring:
+\begin{itemize}
+  \item Vad som händer inuti en D-vippa när dess ingång ändras för nära den aktiva klockflanken.
+  \item Varför vippans utgång tillfälligt kan bli kvar mellan en giltig logisk \code{0} och logisk
+    \code{1}.
+  \item Varför utgången kan ta en oförutsägbar tid på sig att stabilisera sig.
+  \item Varför två grindar nedströms kan tolka den ostabiliserade utgången olika: den ena som
+    \code{0}, den andra som \code{1}.
+\end{itemize}
+
+Förklara varför den oenigheten kan få olika delar av en digital krets att hamna i inkonsistenta
+tillstånd.
+
+\exercise{Setup, hold, och varför en asynkron ingång inte kan undvikas}{Resonemang}
+\label{c4:ex:setup}
+Setup-tid och hold-tid definierar ett fönster kring den aktiva klockflanken under vilket en vippas
+ingång måste förbli stabil.
+
+Förklara:
+\begin{itemize}
+  \item Varför en synkront genererad signal normalt kan konstrueras så att den uppfyller de här
+    tidskraven.
+  \item Varför en asynkron ingång, till exempel en mekanisk tryckknapp, inte har någon fast
+    relation till systemklockan.
+  \item Varför en asynkron ingång därför kan ändras under setup- och hold-fönstret oavsett hur den
+    omgivande synkrona logiken är konstruerad.
+\end{itemize}
+
+Dra slutsatsen varför metastabilitetsrisken från en asynkron ingång måste hanteras snarare än helt
+enkelt undvikas.
+
+% ------------------------------------------------------------------------------------------
+\exerciseset{Att konstruera en synkroniserare}
+
+\exercise{Kedjan, ritad och förklarad}{Krets}
+\label{c4:ex:chain}
+Rita en dubbelvippsynkroniserare för en asynkron ingång. Kretsen ska innehålla en asynkron ingång,
+två D-vippor kopplade i serie, en gemensam systemklocka, och en synkroniserad utgång tagen från den
+andra vippan.
+
+Förklara med egna ord:
+\begin{itemize}
+  \item Varför den första vippan är direkt exponerad för den asynkrona ingången.
+  \item Varför den första vippan kan bli metastabil.
+  \item Hur intervallet mellan den första och den andra klockflanken ger det första steget tid att
+    stabilisera sig.
+  \item Varför den andra vippans utgång har en mycket lägre sannolikhet att vara metastabil.
+  \item Varför det är det andra steget, och inte det första, som resten av designen ska använda.
+\end{itemize}
+
+En synkroniserare gör inte sannolikheten för metastabilitet exakt noll. Förklara varför den ändå
+sänker risken till en acceptabelt låg nivå i de flesta designer.
+
+\note[Tips]Fundera på hur mycket stabiliseringstid den första vippan får innan dess värde samplas
+av den andra vippan.
+
+\exercise{Ett tredje steg ”för säkerhets skull”}{Resonemang}
+\label{c4:ex:third}
+En kollega föreslår att använda tre synkroniserarvippor på varje asynkron ingång i en långsam
+design som klockas i några megahertz, bara för säkerhets skull.
+
+Ett tredje steg köper ytterligare en klockperiod för ett metastabilt värde att stabilisera sig på,
+och kostar ytterligare en klockcykels latens på varje synkroniserad ingång. Vid några megahertz är
+den extra klockperioden en enorm tid räknat i metastabilitetstermer, vilket är precis därför
+förslaget låter förnuftigt, och också därför det redan kan vara onödigt.
+
+\xpart{a} Resonera igenom avvägningen åt båda hållen. Under vilka omständigheter faller den ut till
+det tredje stegets fördel, och under vilka omständigheter räcker det andra steget redan? Ditt svar
+måste hänga på något annat än klockfrekvensen, eftersom frekvensen ensam inte avgör saken: säg vad
+det hänger på i stället.
+
+\xpart{b} \Secref{c4:sec:mtbf} kom fram till MTBF utifrån den stabiliseringstid som finns per steg.
+Utan att göra om den räkningen, säg åt vilket håll var och en av de här faktorerna drar beslutet,
+och varför:
+\begin{itemize}
+  \item Hur ofta den asynkrona ingången faktiskt ändras.
+  \item Metastabilitetsegenskaperna hos den FPGA-familj du riktar in dig på.
+  \item Vad ett synkroniseringsfel skulle kosta om det inträffade.
+\end{itemize}
+
+\xpart{c} Ge din rekommendation för en vanlig långsam design av det slag som förekommer i den här
+boken. Beskriv sedan en design, verklig eller påhittad, där du i stället skulle argumentera för det
+tredje steget, och säg vilken av faktorerna i \textbf{b)} som gör jobbet i det fallet.
+
+\begin{aside}
+\textbf{Kontrollera att ditt svar täcker} de två saker ett tredje steg ger, ytterligare en
+klockperiods stabiliseringstid och en lägre sannolikhet att ett ostabiliserat värde når den
+funktionella logiken, och de två det kostar, ytterligare en cykels latens och ytterligare vippor.
+Om ditt svar på \textbf{a)} vilar på klockfrekvensen snarare än på den erforderliga medeltiden
+mellan fel, läs \secref{c4:sec:mtbf} en gång till innan du går vidare.
+\end{aside}
+
+\exercise{Aktivera asynkront, släpp synkront}{Resonemang}
+\label{c4:ex:resetpattern}
+Förklara resetmönstret \textbf{aktivera asynkront, släpp synkront} från \secref{c4:sec:resetsync}.
+
+Beskriv de två delarna var för sig:
+\begin{itemize}
+  \item Asynkron aktivering: resetten får verkan omedelbart, och väntar inte på en klockflank.
+  \item Synkront släpp: resetten tas bort bara vid en aktiv klockflank, och all berörd logik lämnar
+    reset i en kontrollerad relation till klockan.
+\end{itemize}
+
+Förklara:
+\begin{itemize}
+  \item Varför omedelbar aktivering av reset kan vara viktig när klockan är stoppad, när klockan är
+    instabil, och när systemet måste gå in i sitt resettillstånd utan fördröjning.
+  \item Varför ett släpp av en asynkron reset nära en klockflank kan bryta mot en vippas tidskrav
+    för recovery eller removal.
+  \item Varför synkronisering av släppet hindrar olika vippor från att lämna reset under olika
+    klockcykler.
+\end{itemize}
+
+% ------------------------------------------------------------------------------------------
+\exerciseset{Att bygga kretsen}
+
+\exercise{\code{led_toggle_sync} för hand}{Krets}
+\label{c4:ex:circuit}
+Bygg kretsen \code{led_toggle_sync} från \secref{c4:sec:worked} för hand i CircuitVerse.
+
+\xpart{a} Lägg till de yttre portarna: ingångarna \code{clock}, \code{reset_n} (asynkron, aktiv
+låg) och \code{button_n} (aktiv låg), samt utgången \code{led}.
+
+\xpart{b} Bygg tvåvippsresetsynkroniseraren:
+\begin{itemize}
+  \item Koppla de två vipporna i serie.
+  \item Aktivera båda stegen asynkront med den råa \code{reset_n}-ingången.
+  \item Låt resetten fortplanta sig ut ur kedjan synkront.
+  \item Använd den synkroniserade resetutgången, \code{reset_s2_n}, i hela resten av kretsen, och
+    använd inte den råa \code{reset_n}-ingången direkt utanför resetsynkroniseraren.
+\end{itemize}
+
+\xpart{c} Bygg trevippsknappsynkroniseraren och flankdetektorn:
+\begin{itemize}
+  \item Använd de två första vipporna som dubbelvippsynkroniserare.
+  \item Använd den tredje vippan för att lagra det föregående synkroniserade knappvärdet.
+  \item Jämför det nuvarande och det föregående synkroniserade värdet, och detektera ett
+    knapptryck när det nuvarande synkroniserade, aktivt låga knappvärdet är \code{0} och det
+    föregående synkroniserade värdet är \code{1}.
+  \item Använd en AND-grind med det nuvarande värdet inverterat för att generera
+    \code{button_edge_s2}. Sambandet är
+    $\mathit{button\_edge\_s2} = \mathit{previous} \cdot \mathit{current}'$.
+\end{itemize}
+
+\xpart{d} Bygg växlingslogiken för lysdioden: lägg till en vippa som lagrar \code{led_s}, resetta
+den med \code{reset_s2_n}, växla den bara när \code{button_edge_s2 = 1}, och koppla utgången
+\code{led} till \code{led_s}.
+
+\xpart{e} Simulera hela designen med klockperioden \code{1000 ms}. Aktivera och släpp
+\code{reset_n}, tryck ned och släpp \code{button_n}, och observera de synkroniserade knappstegen,
+\code{button_edge_s2} och \code{led_s}. Avgör:
+\begin{itemize}
+  \item Om lysdioden växlar vid den första klockflanken efter det fysiska knapptrycket.
+  \item Hur många klockcykler som krävs för att knappvärdet ska fortplanta sig genom
+    synkroniseraren och flankdetektorn.
+  \item Om den observerade latensen stämmer med det beteende det här kapitlet förutsäger.
+\end{itemize}
+
+% ------------------------------------------------------------------------------------------
+\exerciseset{Studsfiltrering och tajming}
+
+\exercise{Vad kedjan gör och inte gör}{Resonemang}
+\label{c4:ex:debounce}
+Du har nu byggt och betraktat kretsen, så det här är en fråga om vad du såg.
+
+Trevippskedjan i Övning~\ref{c4:ex:circuit} gör tre jobb på en gång: den minskar risken för
+metastabilitet, den lagrar det föregående synkroniserade knappvärdet, och den detekterar ett
+knapptryck. Förklara varför den \textbf{inte} i sig garanterar att knappen är studsfiltrerad.
+
+\xpart{a} Skilj på de tre saker som är lätta att blanda ihop:
+\begin{itemize}
+  \item Synkronisering: gör om en asynkron ingång till en signal som går att använda i
+    klockdomänen.
+  \item Flankdetektering: genererar en puls när den samplade signalen ändras.
+  \item Studsfiltrering: hindrar flera fysiska övergångar från att tolkas som flera separata tryck.
+\end{itemize}
+Vilka två av dessa gör din krets faktiskt?
+
+\xpart{b} I din simulering gav ett tryck en enda ren växling. Det är ett starkare påstående än det
+ser ut: det håller bara under ett särskilt villkor om var studsen hamnade i förhållande till
+klockflankerna. Formulera det villkoret exakt, i termer av vad din krets samplade och vad den
+därmed såg. Förklara sedan varför det villkoret är en tillfällighet som beror på din klockperiod
+snarare än en egenskap hos din krets. Var konkret med vilken av de två, studsen eller samplingen,
+din design faktiskt styr.
+
+\xpart{c} Din simulering kördes med klockperioden \code{1000 ms}; FPGA:n går i \code{50 MHz}. En
+tryckknapps kontakter studsar typiskt i storleksordningen 1~ms. Räkna ut konsekvenserna själv:
+\begin{itemize}
+  \item Hur många gånger samplar en klocka med perioden \code{1000 ms} knappen under den
+    millisekunden av studs?
+  \item Hur många gånger samplar en klocka på \code{50 MHz} den?
+  \item Varje samplad övergång ser ut som en ny flank för din flankdetektor. Förutsäg utifrån de
+    två talen vad lysdioden gör på kortet vid ett enda fysiskt tryck, och säg varför exakt samma
+    krets uppförde sig oklanderligt i CircuitVerse.
+\end{itemize}
+
+\xpart{d} Beskriv en åtgärd av vardera slaget: en hårdvaruåtgärd (till exempel ett RC-lågpassfilter
+följt av en Schmitt-triggeringång) och en rent digital åtgärd (till exempel att kräva att den
+synkroniserade signalen håller en ny nivå under ett visst minsta antal klockcykler innan den
+accepteras, eller en räknare som ignorerar ytterligare övergångar under ett fast intervall efter
+ett tryck \textemdash{} vilket är vad \chapref{c7:ch}:s timer skulle ge dig).
+
+\xpart{e} Förklara varför dubbelvippsynkroniseraren måste behållas även när en
+studsfiltreringsmetod lagts till. Vilket problem löser inte studsfiltreringen?
+
+% ------------------------------------------------------------------------------------------
+\exerciseset{Synkroniserarna som egna moduler}
+
+Det genomarbetade exemplet lägger varje synkroniserare i en egen modul, så att varje senare design
+instansierar samma två filer i stället för att härleda dem på nytt. Det är därför både
+\chapref{c7:ch}:s \code{walking_led} och \chapref{c8:ch}:s \code{fsm_led} ber dig kopiera in de här
+två, och därför \chapref{c8:ch}:s \code{seq_detect_mealy}, som inte har någon knapp, tar
+resetsynkroniseraren ensam och lämnar den andra därhän.
+
+De två följande övningarna är du som skriver de modulerna. \Secref{c4:sec:resetsync} och
+\ref{c4:sec:buttonsync} ger dig logiken; vad de inte ger dig är entiteten runt den, och, för den
+andra, steget från en enda knapp till en vektor av dem. Skriv varje modul själv innan du öppnar det
+genomarbetade exemplets kopia, och jämför sedan. Övning~\ref{c4:ex:toggle2} sätter därefter ihop
+båda till en fungerande design.
+
+\exercise{\code{reset_sync}}{VHDL}
+\label{c4:ex:resetsync}
+Skriv resetsynkroniseraren som en modul med namnet \code{reset_sync}.
+
+Entiteten har:
+
+\begin{booktable}{@{}p{6em}p{3.4em}p{5.2em}L@{}}
+  \thead{Port} & \thead{Riktn.} & \thead{Typ} & \thead{Beskrivning} \\
+  \midrule
+  \code{clock} & in & \code{std_logic} & 50 MHz systemklocka. \\
+  \code{reset_n} & in & \code{std_logic} & Aktiv låg asynkron reset, rakt från omvärlden. \\
+  \code{reset_s2_n} & out & \code{std_logic} & Aktiv låg synkroniserad reset, säker för resten av
+    designen att använda. Går låg i samma ögonblick som \code{reset_n} gör det, utan att någon
+    klockflank är inblandad, och återgår till hög två stigande flanker efter att \code{reset_n}
+    gjort det. \\
+\end{booktable}
+
+\xpart{a} Implementera \textbf{aktivera asynkront, släpp synkront} (\secref{c4:sec:resetsync}):
+\begin{itemize}
+  \item En intern signal för det första steget, plus utgången för det andra.
+  \item En process, känslig för både \code{clock} och \code{reset_n}.
+  \item Vid \code{reset_n = '0'}, driv båda stegen låga, utanför den klockade grenen.
+  \item Vid en stigande klockflank, skifta in en konstant \code{'1'} genom de två stegen.
+\end{itemize}
+
+\xpart{b} Värdet som tvingas fram vid reset och värdet som skiftas in på klockan är varandras
+motsatser, \code{'0'} och \code{'1'}. Förklara i en mening varför det inte är någon motsägelse,
+utifrån vad respektive gren är till för.
+
+\xpart{c} Verifiera designen med dess testbänk. Den kontrollerar mönstrets båda halvor var för sig:
+att en låg \code{reset_n} drar \code{reset_s2_n} låg utan någon klockflank däremellan, och att ett
+släpp av \code{reset_n} lämnar \code{reset_s2_n} låg tills två stigande flanker har passerat.
+
+\xpart{d} Svara i löpande text:
+\begin{itemize}
+  \item Utgången heter \code{reset_s2_n} snarare än \code{reset_n_sync}. Vad säger \code{s2}, och
+    vad skulle behöva ändras i den här modulen för att det namnet skulle bli fel?
+  \item Varje annan modul i den här boken tar \code{reset_s2_n} som sin reset. Den här tar den råa
+    \code{reset_n}. Varför måste exakt en modul i en design vara undantaget?
+\end{itemize}
+
+\note[Tips]Släppet är den intressanta halvan. Vid reset bryr sig processen inte om klockan alls, så
+båda stegen går låga tillsammans; på klockan bryr den sig inte om \code{reset_n}, så \code{'1'}:an
+behöver en flank per steg för att nå utgången. Två flankers latens vid släpp är priset för hela
+mönstret.
+
+\modulefig[0.62]{lectures/L04/appendix/images/reset_sync.png}
+
+\begin{selfcheck}
+\textbf{Självkontroll.} Döp din entitet till \code{reset_sync}, med portarna \code{clock},
+\code{reset_n} (in) och \code{reset_s2_n} (out), deklarerade i den ordningen; dess testbänk finns i
+\file{exercises/reset_sync/}.
+\end{selfcheck}
+
+\exercise{\code{button_sync}}{VHDL}
+\label{c4:ex:buttonsync}
+Skriv knappsynkroniseraren och flankdetektorn som en modul med namnet \code{button_sync}.
+
+Övning~\ref{c4:ex:toggle2} hanterar två knappar genom att skriva en tvåbitars synkroniserare. Den
+här är samma krets med bredden lämnad öppen: en generic avgör hur många knappar den betjänar, så
+att \code{led_toggle_sync} kan använda den för en knapp och \code{fsm_led} för två utan att
+någondera filen behöver ändras. Se \secref{c4:sec:generics} för syntaxen och för varför den här
+modulen har en generic där \code{reset_sync} inte har någon.
+
+Entiteten har en generic:
+
+\begin{booktable}{@{}p{4.6em}p{9.4em}p{4em}L@{}}
+  \thead{Generic} & \thead{Typ} & \thead{Förval} & \thead{Beskrivning} \\
+  \midrule
+  \code{COUNT} & \code{natural range 1 to 3} & \code{1} & Antalet knappar, och därmed bredden på
+    båda vektorportarna. \\
+\end{booktable}
+
+och de här portarna:
+
+\begin{booktable}{@{}p{7em}p{3.4em}p{11.4em}L@{}}
+  \thead{Port} & \thead{Riktn.} & \thead{Typ} & \thead{Beskrivning} \\
+  \midrule
+  \code{clock} & in & \code{std_logic} & 50 MHz systemklocka. \\
+  \code{reset_s2_n} & in & \code{std_logic} & Aktiv låg, \textbf{redan synkroniserad} reset. Den
+    här modulen synkroniserar inte sin egen reset; det gjorde modulen i
+    Övning~\ref{c4:ex:resetsync}. \\
+  \code{button_n} & in & \code{std_logic_vector(COUNT - 1 downto 0)} & Aktivt låga asynkrona
+    tryckknappar. \\
+  \code{button_edge_s2} & out & \code{std_logic_vector(COUNT - 1 downto 0)} & En encykelspuls vid
+    varje knapps fallande flank, två klockflanker efter trycket. Varje bit är oberoende av alla
+    andra. \\
+\end{booktable}
+
+\xpart{a} Bygg trestegskedjan från \secref{c4:sec:buttonsync}, nu över vektorer i stället för
+enskilda bitar:
+\begin{itemize}
+  \item Tre interna \code{std_logic_vector(COUNT - 1 downto 0)}-signaler, en per steg.
+  \item Steg 1 och 2 är dubbelvippsynkroniseraren; steg 3 lagrar det föregående värdet av steg 2.
+  \item Vid reset, sätt alla tre stegen till \code{(others => '1')}, inte \code{(others => '0')}.
+  \item Härled utgången med en enda konkurrent tilldelning, och lägg märke till att samma uttryck
+    fungerar oförändrat på vektorer som på bitar.
+\end{itemize}
+
+\textbf{Håll den här i minnet.} De två första vipporna är en synkroniserare i sin helhet och
+ingenting annat, och Övning~\ref{c5:ex:sync} låter dig bryta ut dem igen som en egen modul,
+generisk både i bredd och i det värde de resettar till. Att skriva dem inline här först är vad som
+gör den övningen till en befästning i stället för en ny idé.
+
+\xpart{b} Förklara varför resetvärdet är enbart ettor. Enbart ettor betyder ”släppt”, eftersom
+knapparna är aktivt låga, så en reset till enbart nollor startar kedjan med påståendet att varje
+knapp redan hålls nedtryckt. Följ vad det kostar:
+\begin{itemize}
+  \item Med knapparna släppta och en reset till enbart nollor, ger modulen ifrån sig en falsk puls
+    när det släppta tillståndet fortplantar sig genom de tre stegen? Gå igenom utgångsuttrycket
+    flank för flank innan du svarar, i stället för att gissa.
+  \item Nu fallet som faktiskt går sönder. En användare håller en knapp nedtryckt i det ögonblick
+    resetten släpps. Vad rapporterar modulen med en reset till enbart ettor, och vad rapporterar
+    den med enbart nollor? Vilket av de två är det beteende du vill ha, och varför?
+\end{itemize}
+
+\xpart{c} Verifiera designen med dess testbänk. Den instansierar din modul \textbf{två gånger}, en
+gång med \code{COUNT = 1} och en gång med \code{COUNT = 2}, och kontrollerar att ett tryck ger
+exakt en encykelspuls, att en nedhållen knapp inte ger några ytterligare pulser, att ett släpp inte
+ger någon alls, och att ett tryck på den ena knappen i ett par aldrig pulsar den andra.
+
+\xpart{d} Svara i löpande text:
+\begin{itemize}
+  \item \code{COUNT} är begränsad till \code{1 to 3} snarare än lämnad som en obegränsad
+    \code{natural}. Vad köper den begränsningen, givet att ingenting i arkitekturen beror på den
+    övre gränsen?
+  \item Den här modulen är medvetet inte hopslagen med Övning~\ref{c4:ex:resetsync}:s, trots att en
+    design som har en knapp alltid behöver båda. Ange den design som motiverar uppdelningen, och
+    säg vad den hade behövt göra i stället.
+\end{itemize}
+
+\note[Tips]Skriv arkitekturen för \code{COUNT = 1} i huvudet först, och kontrollera sedan att varje
+rad du skrev redan är korrekt för en vektor. \code{and}, \code{not} och aggregatet
+\code{(others => '1')} fungerar alla elementvis, så generaliseringen ska inte kosta dig någon extra
+kod alls. Gör den det är det värt en extra titt.
+
+\modulefig[0.86]{lectures/L04/appendix/images/button_sync.png}
+
+\begin{selfcheck}
+\textbf{Självkontroll.} Döp din entitet till \code{button_sync}, med genericen \code{COUNT}
+(\code{natural range 1 to 3}, standardvärde \code{1}), ingångarna \code{clock},
+\code{reset_s2_n}, \code{button_n} (\code{std_logic_vector(COUNT - 1 downto 0)}) och utgången
+\code{button_edge_s2} (\code{std_logic_vector(COUNT - 1 downto 0)}), deklarerade i den ordningen;
+dess testbänk finns i \file{exercises/button_sync/}.
+\end{selfcheck}
+
+% ------------------------------------------------------------------------------------------
+\exerciseset{Att sätta ihop dem till en design}
+
+\exercise{\code{led_toggle_sync2}}{VHDL}
+\label{c4:ex:toggle2}
+Gör nu \chapref{c3:ch}:s \code{led_toggle} metastabilitetssäker, i VHDL, som en ny modul med namnet
+\code{led_toggle_sync2}.
+
+\chapref{c3:ch}:s \code{led_toggle} växlade två lysdioder från två tryckknappar, men matade in
+deras råa, asynkrona signaler rakt i flankdetektorn \textemdash{} logiskt korrekt, men osäkert på
+riktig hårdvara. Här bygger du om den med varje asynkron ingång skyddad av det här kapitlets
+dubbelvippsynkroniserare.
+
+Entiteten har:
+
+\begin{booktable}{@{}p{5.4em}p{3.4em}p{11.4em}L@{}}
+  \thead{Port} & \thead{Riktn.} & \thead{Typ} & \thead{Beskrivning} \\
+  \midrule
+  \code{clock} & in & \code{std_logic} & 50 MHz systemklocka. \\
+  \code{reset_n} & in & \code{std_logic} & Aktiv låg asynkron reset. \\
+  \code{button_n} & in & \code{std_logic_vector(1 downto 0)} & Två aktivt låga asynkrona
+    tryckknappar. \\
+  \code{led} & out & \code{std_logic_vector(1 downto 0)} & Två lysdioder; \code{led(i)} växlar en
+    gång per tryck på \code{button_n(i)}. \\
+\end{booktable}
+
+\xpart{a} Synkronisera varje asynkron ingång:
+\begin{itemize}
+  \item Tillämpa tvåvippsresetsynkroniseraren från \secref{c4:sec:resetsync}.
+  \item Ge knapparna en dubbelvippsynkroniserare plus ett tredje steg för flankdetektering, som i
+    \secref{c4:sec:buttonsync} \textemdash{} nu över en \code{std_logic_vector(1 downto 0)}, så att
+    båda knapparna synkroniseras parallellt.
+  \item Låt aldrig den råa \code{reset_n} eller \code{button_n} nå växlingslogiken; använd bara den
+    synkroniserade resetten och flankpulserna per knapp.
+\end{itemize}
+
+\note[Tips]Du kan lägga synkroniseraren inline, eller bryta ut den till en subkomponent som tar en
+tvåbitars \code{button_n}, med instansieringssyntaxen från \secref{c2:sec:submodules}. Att lägga
+den inline är den kortare vägen, och då är bygget en enda fil:
+
+\begin{shell}
+ghdl -a --std=93 led_toggle_sync2.vhd led_toggle_sync2_tb.vhd
+\end{shell}
+
+Om du i stället bryter ut den, kopiera in de \file{reset_sync.vhd} och \file{button_sync.vhd} du
+skrev till Övning~\ref{c4:ex:resetsync} och \ref{c4:ex:buttonsync} (och instansiera
+\code{button_sync} med \code{COUNT = 2}), och namnge dem först på raden \code{ghdl -a}, före din
+egen modul, så att GHDL ser dem före den fil som instansierar dem:
+
+\begin{shell}
+ghdl -a --std=93 reset_sync.vhd button_sync.vhd \
+                 led_toggle_sync2.vhd led_toggle_sync2_tb.vhd
+\end{shell}
+
+Se \secref{c2:sub:multifile}. Ingen av modulerna delas ut någonstans i kursrepot, eftersom att
+skriva dem är Övning~\ref{c4:ex:resetsync} och \ref{c4:ex:buttonsync}.
+
+\xpart{b} Bygg växlingslogiken:
+\begin{itemize}
+  \item En vippa för lysdiodstillstånd per lysdiod.
+  \item Vid den synkroniserade resetten, släck båda lysdioderna.
+  \item Växla \code{led(i)} bara när knapp \code{i}:s synkroniserade puls för fallande flank
+    utlöses.
+  \item Bekräfta att \code{led(i)} svarar på enbart \code{button_n(i)}, aldrig på den andra
+    knappen.
+\end{itemize}
+
+\xpart{c} Verifiera designen med dess testbänk. Testbänken trycker på varje knapp i tur och ordning
+och kontrollerar att reset släcker båda lysdioderna, att inget tryck betyder ingen växling, att ett
+tryck på knapp 0 växlar \textbf{bara} \code{led(0)} när synkroniserarlatensen har förflutit, att
+hålla den knappen nedtryckt inte växlar den igen, och att ett tryck på knapp 1 sedan växlar bara
+\code{led(1)} och lämnar \code{led(0)} som den var.
+
+Var uppmärksam på \textbf{latensen}: testbänken kontrollerar den \emph{exakta} flanken, inte bara
+att lysdioden till slut lägger sig rätt. Ett tryck måste nå växlingslogiken genom två
+synkroniserarvippor, så \code{led} är fortfarande oförändrad efter den första och den andra
+stigande flanken och växlar vid den tredje. Räkna vipporna ett tryck färdas genom och övertyga dig
+om att den tredje flanken är den rätta, och att ett defensivt extra pipelinesteg nu skulle fångas
+snarare än tolereras.
+
+\xpart{d} Svara i löpande text, genom att jämföra den här designen med din \code{led_toggle} från
+\chapref{c3:ch}:
+\begin{itemize}
+  \item Vad ändrar synkroniseraren när det gäller att trycka på en riktig, studsande knapp?
+  \item Varför var den råa versionen osäker att koppla till en fysisk knapp vid \code{50 MHz}?
+  \item Din testbänk driver rena, perfekt tajmade övergångar. Vilket av det här kapitlets två
+    problem, metastabilitet eller kontaktstuds, kan en testbänk därför aldrig demonstrera för dig?
+\end{itemize}
+
+\modulefig[0.68]{lectures/L04/appendix/images/led_toggle_sync2.png}
+
+\begin{selfcheck}
+\textbf{Självkontroll.} Döp din entitet till \code{led_toggle_sync2}, med ingångarna \code{clock},
+\code{reset_n}, \code{button_n} (\code{std_logic_vector(1 downto 0)}) och utgången \code{led}
+(\code{std_logic_vector(1 downto 0)}), deklarerade i den ordningen; dess testbänk finns i
+\file{exercises/led_toggle_sync2/}. Den trycker på varje knapp i tur och ordning och kontrollerar
+att \code{led(i)} växlar på \code{button_n(i)}:s fallande flank, att den gör det vid rätt
+klockflank snarare än bara lägger sig på rätt värde till slut, och att den aldrig utlöser fel
+lysdiod.
+\end{selfcheck}

@@ -1,0 +1,482 @@
+% Section 4.11, from lectures/L04/appendix/b_exercises.md.
+
+\section{Exercises}
+\label{c4:sec:exercises}
+
+\begin{aside}
+\textbf{How to check your work.} Every exercise below that asks you to write a VHDL module comes
+with a self-checking testbench under \file{lectures/L04/exercises/}. Write your module in its
+directory \file{exercises/<module>/}, with the entity name and the \textbf{port order} the exercise
+states, and then run it with GHDL \textemdash{} see \secref{c2:sec:testbenches} for the three
+commands.
+\end{aside}
+
+% ------------------------------------------------------------------------------------------
+\exerciseset{Metastability concepts}
+
+\exercise{Metastability in your own words}{Reasoning}
+\label{c4:ex:meta}
+Explain metastability in your own words. In your explanation, describe:
+\begin{itemize}
+  \item What happens inside a D flip-flop when its input changes too close to the active clock
+    edge.
+  \item Why the flip-flop's output can temporarily remain between a valid logic \code{0} and logic
+    \code{1}.
+  \item Why the output can take an unpredictable amount of time to settle.
+  \item Why two downstream gates can interpret the unsettled output differently: one as \code{0},
+    the other as \code{1}.
+\end{itemize}
+
+Explain why that disagreement can leave different parts of a digital circuit in inconsistent
+states.
+
+\exercise{Setup, hold, and why an asynchronous input cannot be avoided}{Reasoning}
+\label{c4:ex:setup}
+Setup time and hold time define a window around the active clock edge during which a flip-flop's
+input must remain stable.
+
+Explain:
+\begin{itemize}
+  \item Why a synchronously generated signal can normally be designed to meet those timing
+    requirements.
+  \item Why an asynchronous input, for example a mechanical push button, has no fixed relationship
+    to the system clock.
+  \item Why an asynchronous input can therefore change during the setup and hold window regardless
+    of how the surrounding synchronous logic is designed.
+\end{itemize}
+
+Conclude why the metastability risk from an asynchronous input must be managed rather than simply
+avoided.
+
+% ------------------------------------------------------------------------------------------
+\exerciseset{Designing a synchroniser}
+
+\exercise{The chain, drawn and explained}{Circuit}
+\label{c4:ex:chain}
+Draw a two-flip-flop synchroniser for an asynchronous input. The circuit should contain an
+asynchronous input, two D flip-flops connected in series, a shared system clock, and a synchronised
+output taken from the second flip-flop.
+
+Explain in your own words:
+\begin{itemize}
+  \item Why the first flip-flop is directly exposed to the asynchronous input.
+  \item Why the first flip-flop can go metastable.
+  \item How the interval between the first and second clock edges gives the first stage time to
+    settle.
+  \item Why the second flip-flop's output has a much lower probability of being metastable.
+  \item Why it is the second stage, not the first, that the rest of the design should use.
+\end{itemize}
+
+A synchroniser does not make the probability of metastability exactly zero. Explain why it
+nonetheless lowers the risk to an acceptably low level in most designs.
+
+\note[Hint]Think about how much settling time the first flip-flop gets before its value is sampled
+by the second flip-flop.
+
+\exercise{A third stage ``just to be safe''}{Reasoning}
+\label{c4:ex:third}
+A colleague suggests using three synchroniser flip-flops on every asynchronous input in a slow
+design clocked at a few megahertz, just to be safe.
+
+A third stage buys another clock period for a metastable value to settle in, and costs another
+clock cycle of latency on every synchronised input. At a few megahertz that extra clock period is
+an enormous time in metastability terms, which is exactly why the suggestion sounds sensible, and
+also why it may already be unnecessary.
+
+\xpart{a} Reason through the trade-off in both directions. Under what circumstances does it come
+out in favour of the third stage, and under what circumstances is the second stage already enough?
+Your answer must hang on something other than the clock frequency, since frequency alone does not
+settle it: say what it hangs on instead.
+
+\xpart{b} \Secref{c4:sec:mtbf} arrived at MTBF from the settling time available per stage. Without
+redoing that calculation, say which way each of these factors pushes the decision, and why:
+\begin{itemize}
+  \item How often the asynchronous input actually changes.
+  \item The metastability characteristics of the FPGA family you are targeting.
+  \item What a synchronisation failure would cost if it happened.
+\end{itemize}
+
+\xpart{c} Give your recommendation for an ordinary slow design of the kind found in this book. Then
+describe a design, real or invented, where you would argue for the third stage instead, and say
+which of the factors in \textbf{b)} does the work in that case.
+
+\begin{aside}
+\textbf{Check that your answer covers} the two things a third stage gives, another clock period of
+settling time and a lower probability of an unsettled value reaching the functional logic, and the
+two it costs, another cycle of latency and more flip-flops. If your answer to \textbf{a)} rests on
+the clock frequency rather than on the required mean time between failures, read \secref{c4:sec:mtbf}
+once more before you move on.
+\end{aside}
+
+\exercise{Assert asynchronously, release synchronously}{Reasoning}
+\label{c4:ex:resetpattern}
+Explain the reset pattern \textbf{assert asynchronously, release synchronously} from
+\secref{c4:sec:resetsync}.
+
+Describe the two halves separately:
+\begin{itemize}
+  \item Asynchronous assertion: the reset takes effect immediately, and does not wait for a clock
+    edge.
+  \item Synchronous release: the reset is removed only at an active clock edge, and all affected
+    logic leaves reset in a controlled relationship with the clock.
+\end{itemize}
+
+Explain:
+\begin{itemize}
+  \item Why immediate assertion of reset can matter when the clock is stopped, when the clock is
+    unstable, and when the system must enter its reset state without delay.
+  \item Why releasing an asynchronous reset near a clock edge can violate a flip-flop's recovery or
+    removal timing requirements.
+  \item Why synchronising the release stops different flip-flops from leaving reset on different
+    clock cycles.
+\end{itemize}
+
+% ------------------------------------------------------------------------------------------
+\exerciseset{Building the circuit}
+
+\exercise{\code{led_toggle_sync} by hand}{Circuit}
+\label{c4:ex:circuit}
+Build the \code{led_toggle_sync} circuit from \secref{c4:sec:worked} by hand in CircuitVerse.
+
+\xpart{a} Add the external ports: the inputs \code{clock}, \code{reset_n} (asynchronous, active
+low) and \code{button_n} (active low), plus the output \code{led}.
+
+\xpart{b} Build the two-flip-flop reset synchroniser:
+\begin{itemize}
+  \item Connect the two flip-flops in series.
+  \item Assert both stages asynchronously with the raw \code{reset_n} input.
+  \item Let the reset propagate out of the chain synchronously.
+  \item Use the synchronised reset output, \code{reset_s2_n}, throughout the rest of the circuit,
+    and do not use the raw \code{reset_n} input directly outside the reset synchroniser.
+\end{itemize}
+
+\xpart{c} Build the three-flip-flop button synchroniser and the edge detector:
+\begin{itemize}
+  \item Use the first two flip-flops as a two-flip-flop synchroniser.
+  \item Use the third flip-flop to store the previous synchronised button value.
+  \item Compare the current and the previous synchronised value, and detect a button press when the
+    current synchronised, active-low button value is \code{0} and the previous synchronised value
+    is \code{1}.
+  \item Use an AND gate with the current value inverted to generate \code{button_edge_s2}. The
+    relationship is $\mathit{button\_edge\_s2} = \mathit{previous} \cdot \mathit{current}'$.
+\end{itemize}
+
+\xpart{d} Build the LED toggle logic: add a flip-flop storing \code{led_s}, reset it with
+\code{reset_s2_n}, toggle it only when \code{button_edge_s2 = 1}, and connect the output \code{led}
+to \code{led_s}.
+
+\xpart{e} Simulate the whole design with a clock period of \code{1000 ms}. Assert and release
+\code{reset_n}, press and release \code{button_n}, and observe the synchronised button stages,
+\code{button_edge_s2} and \code{led_s}. Decide:
+\begin{itemize}
+  \item Whether the LED toggles at the first clock edge after the physical button press.
+  \item How many clock cycles it takes for the button value to propagate through the synchroniser
+    and the edge detector.
+  \item Whether the observed latency agrees with the behaviour this chapter predicts.
+\end{itemize}
+
+% ------------------------------------------------------------------------------------------
+\exerciseset{Debouncing and timing}
+
+\exercise{What the chain does and does not do}{Reasoning}
+\label{c4:ex:debounce}
+You have now built and watched the circuit, so this is a question about what you saw.
+
+The three-flip-flop chain in Exercise~\ref{c4:ex:circuit} does three jobs at once: it reduces the
+risk of metastability, it stores the previous synchronised button value, and it detects a button
+press. Explain why it does \textbf{not} by itself guarantee that the button is debounced.
+
+\xpart{a} Separate the three things that are easy to confuse:
+\begin{itemize}
+  \item Synchronisation: turns an asynchronous input into a signal usable in the clock domain.
+  \item Edge detection: generates a pulse when the sampled signal changes.
+  \item Debouncing: stops several physical transitions from being read as several separate presses.
+\end{itemize}
+Which two of these does your circuit actually do?
+
+\xpart{b} In your simulation one press gave a single clean toggle. That is a stronger claim than it
+looks: it holds only under a particular condition about where the bounce landed relative to the
+clock edges. State that condition exactly, in terms of what your circuit sampled and what it
+therefore saw. Then explain why that condition is an accident of your clock period rather than a
+property of your circuit. Be concrete about which of the two, the bounce or the sampling, your
+design actually controls.
+
+\xpart{c} Your simulation ran with a clock period of \code{1000 ms}; the FPGA runs at \code{50 MHz}.
+A push button's contacts typically bounce on the order of 1~ms. Work out the consequences yourself:
+\begin{itemize}
+  \item How many times does a clock with a period of \code{1000 ms} sample the button during that
+    millisecond of bounce?
+  \item How many times does a \code{50 MHz} clock sample it?
+  \item Every sampled transition looks like a new edge to your edge detector. From those two
+    numbers, predict what the LED does on the board at a single physical press, and say why exactly
+    the same circuit behaved impeccably in CircuitVerse.
+\end{itemize}
+
+\xpart{d} Describe one remedy of each kind: a hardware remedy (for example an RC low-pass filter
+followed by a Schmitt-trigger input) and a purely digital remedy (for example requiring the
+synchronised signal to hold a new level for some minimum number of clock cycles before accepting
+it, or a counter that ignores further transitions for a fixed interval after a press
+\textemdash{} which is what \chapref{c7:ch}'s timer would give you).
+
+\xpart{e} Explain why the two-flip-flop synchroniser must be kept even once a debouncing method has
+been added. Which problem does debouncing not solve?
+
+% ------------------------------------------------------------------------------------------
+\exerciseset{The synchronisers as modules of their own}
+
+The worked example puts each synchroniser in a module of its own, so that every later design
+instantiates the same two files instead of deriving them afresh. That is why both \chapref{c7:ch}'s
+\code{walking_led} and \chapref{c8:ch}'s \code{fsm_led} ask you to copy these two in, and why
+\chapref{c8:ch}'s \code{seq_detect_mealy}, which has no button, takes the reset synchroniser alone
+and leaves the other one aside.
+
+The two exercises that follow are you writing those modules. \Secref{c4:sec:resetsync} and
+\ref{c4:sec:buttonsync} give you the logic; what they do not give you is the entity around it, and,
+for the second, the step from a single button to a vector of them. Write each module yourself before
+you open the worked example's copy, and then compare. Exercise~\ref{c4:ex:toggle2} then puts both
+together into a working design.
+
+\exercise{\code{reset_sync}}{VHDL}
+\label{c4:ex:resetsync}
+Write the reset synchroniser as a module named \code{reset_sync}.
+
+The entity has:
+
+\begin{booktable}{@{}p{6em}p{3.4em}p{5.2em}L@{}}
+  \thead{Port} & \thead{Dir.} & \thead{Type} & \thead{Description} \\
+  \midrule
+  \code{clock} & in & \code{std_logic} & 50 MHz system clock. \\
+  \code{reset_n} & in & \code{std_logic} & Active-low asynchronous reset, straight from the outside
+    world. \\
+  \code{reset_s2_n} & out & \code{std_logic} & Active-low synchronised reset, safe for the rest of
+    the design to use. Goes low the moment \code{reset_n} does, with no clock edge involved, and
+    returns high two rising edges after \code{reset_n} has. \\
+\end{booktable}
+
+\xpart{a} Implement \textbf{assert asynchronously, release synchronously}
+(\secref{c4:sec:resetsync}):
+\begin{itemize}
+  \item An internal signal for the first stage, plus the output for the second.
+  \item One process, sensitive to both \code{clock} and \code{reset_n}.
+  \item At \code{reset_n = '0'}, drive both stages low, outside the clocked branch.
+  \item At a rising clock edge, shift a constant \code{'1'} through the two stages.
+\end{itemize}
+
+\xpart{b} The value forced at reset and the value shifted in on the clock are each other's
+opposites, \code{'0'} and \code{'1'}. Explain in one sentence why that is no contradiction, in
+terms of what each branch is for.
+
+\xpart{c} Verify the design with its testbench. It checks both halves of the pattern separately:
+that a low \code{reset_n} pulls \code{reset_s2_n} low with no clock edge in between, and that
+releasing \code{reset_n} leaves \code{reset_s2_n} low until two rising edges have passed.
+
+\xpart{d} Answer in prose:
+\begin{itemize}
+  \item The output is called \code{reset_s2_n} rather than \code{reset_n_sync}. What does \code{s2}
+    say, and what would have to change in this module for that name to become wrong?
+  \item Every other module in this book takes \code{reset_s2_n} as its reset. This one takes the
+    raw \code{reset_n}. Why must exactly one module in a design be the exception?
+\end{itemize}
+
+\note[Hint]The release is the interesting half. At reset the process does not care about the clock
+at all, so both stages go low together; on the clock it does not care about \code{reset_n}, so the
+\code{'1'} needs one edge per stage to reach the output. Two edges of latency at release is the
+price of the whole pattern.
+
+\modulefig[0.62]{lectures/L04/appendix/images/reset_sync.png}
+
+\begin{selfcheck}
+\textbf{Self-check.} Name your entity \code{reset_sync}, with the ports \code{clock},
+\code{reset_n} (in) and \code{reset_s2_n} (out), declared in that order; its testbench is in
+\file{exercises/reset_sync/}.
+\end{selfcheck}
+
+\exercise{\code{button_sync}}{VHDL}
+\label{c4:ex:buttonsync}
+Write the button synchroniser and edge detector as a module named \code{button_sync}.
+
+Exercise~\ref{c4:ex:toggle2} handles two buttons by writing a two-bit synchroniser. This one is the
+same circuit with the width left open: a generic decides how many buttons it serves, so that
+\code{led_toggle_sync} can use it for one button and \code{fsm_led} for two without either file
+having to change. See \secref{c4:sec:generics} for the syntax and for why this module has a generic
+where \code{reset_sync} has none.
+
+The entity has one generic:
+
+\begin{booktable}{@{}p{4.6em}p{9.4em}p{4em}L@{}}
+  \thead{Generic} & \thead{Type} & \thead{Default} & \thead{Description} \\
+  \midrule
+  \code{COUNT} & \code{natural range 1 to 3} & \code{1} & The number of buttons, and therefore the
+    width of both vector ports. \\
+\end{booktable}
+
+and these ports:
+
+\begin{booktable}{@{}p{7em}p{3.4em}p{11.4em}L@{}}
+  \thead{Port} & \thead{Dir.} & \thead{Type} & \thead{Description} \\
+  \midrule
+  \code{clock} & in & \code{std_logic} & 50 MHz system clock. \\
+  \code{reset_s2_n} & in & \code{std_logic} & Active-low, \textbf{already synchronised} reset. This
+    module does not synchronise its own reset; the module in Exercise~\ref{c4:ex:resetsync} did
+    that. \\
+  \code{button_n} & in & \code{std_logic_vector(COUNT - 1 downto 0)} & Active-low asynchronous push
+    buttons. \\
+  \code{button_edge_s2} & out & \code{std_logic_vector(COUNT - 1 downto 0)} & A one-cycle pulse at
+    every button's falling edge, two clock edges after the press. Every bit is independent of all
+    the others. \\
+\end{booktable}
+
+\xpart{a} Build the three-stage chain from \secref{c4:sec:buttonsync}, now over vectors instead of
+single bits:
+\begin{itemize}
+  \item Three internal \code{std_logic_vector(COUNT - 1 downto 0)} signals, one per stage.
+  \item Stages 1 and 2 are the two-flip-flop synchroniser; stage 3 stores the previous value of
+    stage 2.
+  \item At reset, set all three stages to \code{(others => '1')}, not \code{(others => '0')}.
+  \item Derive the output with a single concurrent assignment, and note that the same expression
+    works unchanged on vectors as on bits.
+\end{itemize}
+
+\textbf{Keep this one in mind.} The first two flip-flops are a synchroniser in their entirety and
+nothing else, and Exercise~\ref{c5:ex:sync} has you factor them out again as a module of their own,
+generic in both width and the value they reset to. Writing them inline here first is what makes that
+exercise a consolidation rather than a new idea.
+
+\xpart{b} Explain why the reset value is all ones. All ones means ``released'', since the buttons
+are active low, so a reset to all zeros starts the chain claiming that every button is already held
+down. Follow what that costs:
+\begin{itemize}
+  \item With the buttons released and a reset to all zeros, does the module emit a false pulse as
+    the released state propagates through the three stages? Walk through the output expression edge
+    by edge before you answer, rather than guessing.
+  \item Now the case that actually breaks. A user holds a button down at the moment the reset is
+    released. What does the module report with a reset to all ones, and what does it report with all
+    zeros? Which of the two is the behaviour you want, and why?
+\end{itemize}
+
+\xpart{c} Verify the design with its testbench. It instantiates your module \textbf{twice}, once
+with \code{COUNT = 1} and once with \code{COUNT = 2}, and checks that a press gives exactly one
+one-cycle pulse, that a held button gives no further pulses, that a release gives none at all, and
+that pressing one button of a pair never pulses the other.
+
+\xpart{d} Answer in prose:
+\begin{itemize}
+  \item \code{COUNT} is constrained to \code{1 to 3} rather than left as an unconstrained
+    \code{natural}. What does that constraint buy, given that nothing in the architecture depends on
+    the upper bound?
+  \item This module is deliberately not merged with Exercise~\ref{c4:ex:resetsync}'s, even though a
+    design that has a button always needs both. Name the design that justifies the split, and say
+    what it would have had to do instead.
+\end{itemize}
+
+\note[Hint]Write the architecture for \code{COUNT = 1} in your head first, then check that every
+line you wrote is already correct for a vector. \code{and}, \code{not} and the aggregate
+\code{(others => '1')} all work element by element, so the generalisation should cost you no extra
+code at all. If it does, that is worth another look.
+
+\modulefig[0.86]{lectures/L04/appendix/images/button_sync.png}
+
+\begin{selfcheck}
+\textbf{Self-check.} Name your entity \code{button_sync}, with the generic \code{COUNT}
+(\code{natural range 1 to 3}, default \code{1}), the inputs \code{clock}, \code{reset_s2_n},
+\code{button_n} (\code{std_logic_vector(COUNT - 1 downto 0)}) and the output \code{button_edge_s2}
+(\code{std_logic_vector(COUNT - 1 downto 0)}), declared in that order; its testbench is in
+\file{exercises/button_sync/}.
+\end{selfcheck}
+
+% ------------------------------------------------------------------------------------------
+\exerciseset{Putting them together into a design}
+
+\exercise{\code{led_toggle_sync2}}{VHDL}
+\label{c4:ex:toggle2}
+Now make \chapref{c3:ch}'s \code{led_toggle} metastability-safe, in VHDL, as a new module named
+\code{led_toggle_sync2}.
+
+\chapref{c3:ch}'s \code{led_toggle} toggled two LEDs from two push buttons, but fed their raw,
+asynchronous signals straight into the edge detector \textemdash{} logically correct, but unsafe on
+real hardware. Here you rebuild it with every asynchronous input protected by this chapter's
+two-flip-flop synchroniser.
+
+The entity has:
+
+\begin{booktable}{@{}p{5.4em}p{3.4em}p{11.4em}L@{}}
+  \thead{Port} & \thead{Dir.} & \thead{Type} & \thead{Description} \\
+  \midrule
+  \code{clock} & in & \code{std_logic} & 50 MHz system clock. \\
+  \code{reset_n} & in & \code{std_logic} & Active-low asynchronous reset. \\
+  \code{button_n} & in & \code{std_logic_vector(1 downto 0)} & Two active-low asynchronous push
+    buttons. \\
+  \code{led} & out & \code{std_logic_vector(1 downto 0)} & Two LEDs; \code{led(i)} toggles once per
+    press of \code{button_n(i)}. \\
+\end{booktable}
+
+\xpart{a} Synchronise every asynchronous input:
+\begin{itemize}
+  \item Apply the two-flip-flop reset synchroniser from \secref{c4:sec:resetsync}.
+  \item Give the buttons a two-flip-flop synchroniser plus a third stage for edge detection, as in
+    \secref{c4:sec:buttonsync} \textemdash{} now over a \code{std_logic_vector(1 downto 0)}, so that
+    both buttons are synchronised in parallel.
+  \item Never let the raw \code{reset_n} or \code{button_n} reach the toggle logic; use only the
+    synchronised reset and the per-button edge pulses.
+\end{itemize}
+
+\note[Hint]You can put the synchroniser inline, or factor it out into a subcomponent taking a
+two-bit \code{button_n}, with the instantiation syntax from \secref{c2:sec:submodules}. Inline is
+the shorter route, and then the build is a single file:
+
+\begin{shell}
+ghdl -a --std=93 led_toggle_sync2.vhd led_toggle_sync2_tb.vhd
+\end{shell}
+
+If you factor it out instead, copy in the \file{reset_sync.vhd} and \file{button_sync.vhd} you wrote
+for Exercise~\ref{c4:ex:resetsync} and \ref{c4:ex:buttonsync} (and instantiate \code{button_sync}
+with \code{COUNT = 2}), and name them first on the \code{ghdl -a} line, before your own module, so
+that GHDL sees them before the file that instantiates them:
+
+\begin{shell}
+ghdl -a --std=93 reset_sync.vhd button_sync.vhd \
+                 led_toggle_sync2.vhd led_toggle_sync2_tb.vhd
+\end{shell}
+
+See \secref{c2:sub:multifile}. Neither module is handed out anywhere in the course repository,
+because writing them is Exercise~\ref{c4:ex:resetsync} and \ref{c4:ex:buttonsync}.
+
+\xpart{b} Build the toggle logic:
+\begin{itemize}
+  \item One LED-state flip-flop per LED.
+  \item At the synchronised reset, turn both LEDs off.
+  \item Toggle \code{led(i)} only when button \code{i}'s synchronised falling-edge pulse fires.
+  \item Confirm that \code{led(i)} responds to \code{button_n(i)} alone, never to the other button.
+\end{itemize}
+
+\xpart{c} Verify the design with its testbench. The testbench presses each button in turn and checks
+that reset turns both LEDs off, that no press means no toggle, that pressing button 0 toggles
+\textbf{only} \code{led(0)} once the synchroniser latency has elapsed, that holding that button down
+does not toggle it again, and that pressing button 1 then toggles only \code{led(1)} and leaves
+\code{led(0)} as it was.
+
+Pay attention to the \textbf{latency}: the testbench checks the \emph{exact} edge, not merely that
+the LED eventually settles correctly. A press has to reach the toggle logic through two synchroniser
+flip-flops, so \code{led} is still unchanged after the first and the second rising edge and toggles
+at the third. Count the flip-flops a press travels through and convince yourself that the third edge
+is the right one, and that a defensive extra pipeline stage would now be caught rather than
+tolerated.
+
+\xpart{d} Answer in prose, comparing this design with your \code{led_toggle} from \chapref{c3:ch}:
+\begin{itemize}
+  \item What does the synchroniser change about pressing a real, bouncing button?
+  \item Why was the raw version unsafe to connect to a physical button at \code{50 MHz}?
+  \item Your testbench drives clean, perfectly timed transitions. Which of this chapter's two
+    problems, metastability or contact bounce, can a testbench therefore never demonstrate to you?
+\end{itemize}
+
+\modulefig[0.68]{lectures/L04/appendix/images/led_toggle_sync2.png}
+
+\begin{selfcheck}
+\textbf{Self-check.} Name your entity \code{led_toggle_sync2}, with the inputs \code{clock},
+\code{reset_n}, \code{button_n} (\code{std_logic_vector(1 downto 0)}) and the output \code{led}
+(\code{std_logic_vector(1 downto 0)}), declared in that order; its testbench is in
+\file{exercises/led_toggle_sync2/}. It presses each button in turn and checks that \code{led(i)}
+toggles on \code{button_n(i)}'s falling edge, that it does so at the right clock edge rather than
+merely settling on the right value eventually, and that it never fires the wrong LED.
+\end{selfcheck}

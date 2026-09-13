@@ -1,0 +1,43 @@
+% Avsnitt 10.8, ur lectures/L10/README.md.
+
+\section{Sammanfattning}
+\label{c10:sec:review}
+
+\needspace{6\baselineskip}
+\subsection*{Det här ska du kunna nu}
+\begin{itemize}
+  \item Säga varför kommunikationsprotokoll använder ramar, checksummor och arbitrering.
+  \item Beskriva CAN-ramens format fält för fält, och konstruera en komplett ram för hand.
+  \item Förklara hur wired-AND-arbitrering löser upp konkurrens utan bussmästare, och avgöra vilken
+    av två noder som vinner.
+  \item Tillämpa stoppbitsregeln på en bitföljd, för hand.
+  \item Skriva \file{can_def.vhd}: konstanterna, subtyperna och CRC-polynomet som resten av
+    projektet läser.
+  \item Redogöra för gruppens arbetssätt: branchning, PR:er och granskning.
+\end{itemize}
+
+\needspace{6\baselineskip}
+\subsection*{Frågor att testa dig själv med}
+\begin{enumerate}
+  \item Varför behöver ett protokoll ett längdfält när ramen ändå har en tydlig början?
+  \item Varför har CAN ingen destinationsadress, och vad använder den i stället?
+  \item Två noder börjar sända samtidigt. Vilken vinner, och vad gör förloraren?
+  \item Varför måste en sändare stoppa in en bit efter fem lika i rad, och varför gäller regeln inte
+    hela ramen?
+  \item Vad händer med CRC-beräkningen för en instoppad bit?
+  \item Varför ligger sampelpunkten runt 70~\% in i bitperioden i stället för i mitten?
+\end{enumerate}
+
+\needspace{6\baselineskip}
+\subsection*{Riktvärde}
+\file{can_def.vhd} bör vara skriven och mergad när passet är slut. Det är en kort fil och resten av
+projektet läser den, så den är värd att göra klar direkt.
+
+Riktvärdena i de här kapitlen är just riktvärden. De är inte milstolpar, de betygsätts inte, och
+gruppen bestämmer själv i vilken ordning modulerna byggs; se bilaga~\ref{app:project}.
+
+\needspace{6\baselineskip}
+\subsection*{Blicken framåt}
+\Chapref{c11:ch} går från protokoll till blockschema: kontrollerns arkitektur, den toppnivå varje
+senare modul instansieras i, registerkartan som drivrutinsklassen ska konsumera, och projektets
+simuleringsflöde i GHDL.

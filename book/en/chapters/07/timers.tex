@@ -1,0 +1,345 @@
+% Sections 7.1-7.5, from lectures/L07/appendix/a_timers.md (A.1-A.5).
+
+\section{Timers: a counter with a target value}
+\label{c7:sec:concept}
+
+A \textbf{timer} answers a different question from the counter in \secref{c6:sec:counter}. A counter
+answers ``what is the count right now?''; a timer answers ``has a certain amount of time passed?''
+
+It does so with three parts: an internal counter invisible from outside, a target value
+\code{TICK_COUNT} fixed per instance, and a comparison which, when true, clears the counter and
+pulses the output flag \code{timeout} for one clock cycle.
+
+Because the system clock ticks at a known, fixed frequency, counting ticks is the same thing as
+measuring elapsed time. On the DE0-CV that is 50,000,000 ticks per second:
+
+\[ \mathit{TICK\_COUNT} = \mathit{seconds} \times 50\,000\,000 \]
+
+\begin{itemize}
+  \item \code{TICK_COUNT = 50_000_000}: timeout once per second.
+  \item \code{TICK_COUNT = 25_000_000}: twice per second.
+  \item \code{TICK_COUNT = 5_000_000}: ten times per second.
+\end{itemize}
+
+Strictly speaking the counter runs \code{0} through \code{TICK_COUNT} inclusive, so a full period is
+\code{TICK_COUNT + 1} cycles. That extra tick is between 0.02 and 0.2~ppm at these values, far below
+the board oscillator's own tolerance, so the round numbers above are used for clarity; for an exact
+cycle count, use $\mathit{TICK\_COUNT} = \mathit{seconds} \times 50\,000\,000 - 1$.
+
+This is the opposite of a blocking \code{_delay_ms()}. A blocking delay stops the whole program to
+wait; a timer runs permanently in parallel with everything else and simply raises a flag, and
+nothing in the design is ever blocked waiting for it.
+
+% ------------------------------------------------------------------------------------------
+\section{Building a timer by hand in CircuitVerse}
+\label{c7:sec:byhand}
+
+Before any VHDL is written: build a timer as a gate network, exactly as you did for \chapref{c1:ch}
+and \ref{c2:ch}'s combinational networks and \chapref{c3:ch}'s flip-flops. A timer is small enough
+to draw in its entirety, and drawing it is what makes \secref{c7:sec:module}'s VHDL read as a
+description of something you already understand rather than a new idiom to learn by heart.
+
+Build it in a size you can follow: a \textbf{4-bit counter} with \code{TICK_COUNT = 10}, which is
+\code{1010}. The real design counts to 50,000,000; nothing in the structure changes, only the width.
+
+\textbf{Start from the counter you have already built} in \secref{c6:sec:counter}: a 4-bit register
+\code{Q0} to \code{Q3} sharing a clock, an adder and a constant \code{1} with the sum fed back to the
+\code{D} inputs, and nothing more. If you did not keep it, it is three elements and about five
+minutes to redraw. Confirm that it still counts and wraps before you add anything, so that you know
+the counter underneath is sound when the timer later misbehaves.
+
+Everything here adds \textbf{two things on top of that}: a comparison saying ``the count has
+arrived'', and a clear making it repeat. That is the whole difference between a counter and a timer.
+
+\paragraph{Add the comparison}
+You want \code{timeout} high exactly when the four bits spell \code{1010}, and the clean way to
+build ``are these two numbers equal?'' is one \textbf{XNOR gate per bit}. An XNOR gives \code{1}
+when its inputs are \emph{the same}, which is \secref{c1:sec:gates}'s XNOR column read as an equality
+test. Wire in four, each comparing one counter output against the corresponding target bit
+(\code{Q3} against \code{1}, \code{Q2} against \code{0}, \code{Q1} against \code{1}, \code{Q0}
+against \code{0}), and drive the target side from a constant in CircuitVerse rather than from a wire
+you might later mistake for a signal. Then combine the four outputs with AND; that single AND gate
+is \code{timeout}. With $\odot$ for XNOR, the one operator \secref{c1:sec:boolean} gave no symbol:
+
+\[ \mathit{timeout} = (Q_3 \odot 1) \cdot (Q_2 \odot 0) \cdot (Q_1 \odot 1) \cdot (Q_0 \odot 0) \]
+
+All four bits have to match simultaneously, which is what ``the counter has reached \code{1010}''
+means. This is a \textbf{general equality comparator}, worth recognising as a building block of its
+own: the same four XNORs plus an AND compare against any 4-bit value, and only the constants change.
+
+\paragraph{Add the clear}
+So that the timer restarts instead of carrying on: feed \code{timeout} back to force the counter to
+\code{0000} at the next edge, by gating every flip-flop's \code{D} input so that \code{timeout = 1}
+takes precedence over the adder's output. Without it the counter carries on to \code{1111} and wraps
+by itself, so \code{timeout} fires every sixteenth edge instead of every eleventh. Both are
+periodic; only one has the period you asked for.
+
+\paragraph{Then confirm, one clock edge at a time}
+\begin{itemize}
+  \item The counter goes from \code{0000} through \code{1010}, and \code{timeout} is low for every
+    count value except \code{1010}. Keep an eye on the four XNOR outputs as it counts and note how
+    often three are high at once. Three bits matching is no hit; it is the AND gate insisting on all
+    four.
+  \item At the edge after \code{timeout} fires, the counter is back at \code{0000} and
+    \code{timeout} is low, so it is high for exactly one clock cycle, never two.
+  \item The whole cycle is therefore eleven edges, count values \code{0} through \code{10}, repeated
+    forever. That is \secref{c7:sec:concept}'s \code{TICK_COUNT + 1} off-by-one, and this is the
+    book's easiest place to see it, since you can count the edges by eye.
+\end{itemize}
+
+\lecfig[0.5]{lectures/L07/appendix/images/timer_circuit.png}{The comparison logic: four XNORs
+against \code{1010}, ANDed into \code{timeout}.}{c7:fig:timercircuit}
+
+The drawing is cropped to the part this section adds. It labels the counter's bits
+\code{counter[3]} down to \code{counter[0]} where the text above calls them \code{Q3} to \code{Q0},
+and the increment feeding them is drawn as gate-level carry logic rather than the single adder block
+\secref{c6:sec:counter} used, since that is what CircuitVerse gives you when you build it one bit at
+a time. The four XNOR gates, their constants \code{1}, \code{0}, \code{1}, \code{0}, and the AND
+combining them are all that is new here.
+
+Two things are worth noticing before the VHDL, since both are what the language buys you:
+\begin{itemize}
+  \item \textbf{The comparator is hardwired to one target value.} Changing \code{TICK_COUNT} from
+    \code{10} to \code{12} means going back into the drawing and flipping two constants. It is a
+    small change, but it is a change to the \emph{circuit}, and every instance needs its own copy.
+    In \secref{c7:sec:module} the target value becomes a generic.
+  \item \textbf{The width is hardwired too.} Counting to 50,000,000 takes 26 flip-flops and a 26-bit
+    comparator, 26 XNORs over 52 inputs: the same circuit, an unreasonable drawing. In
+    \secref{c7:sec:module} it is the same six lines of VHDL either way.
+\end{itemize}
+
+That is the trade-off this book makes throughout: draw the circuit once, at a size you can see, to
+know what the tool builds for you, and then let the tool build it at a size you could not have
+drawn.
+
+% ------------------------------------------------------------------------------------------
+\section{The \code{timer} module in VHDL}
+\label{c7:sec:module}
+
+The same circuit as a reusable module. It is built live during the session, and
+Exercise~\ref{c7:ex:timer} asks you to write it yourself afterwards, so it is printed here in full
+rather than handed out as a file:
+
+\begin{vhdlcode}
+entity timer is
+    generic(TICK_COUNT: natural := 50_000_000);
+    port(clock, reset_s2_n, enable: in std_logic;
+         timeout                  : out std_logic);
+end entity;
+
+architecture behaviour of timer is
+-- Internal tick counter.
+signal counter: natural range 0 to TICK_COUNT;
+begin
+    process(clock, reset_s2_n) is
+    begin
+        if (reset_s2_n = '0') then
+            timeout <= '0';
+            counter <= 0;
+        elsif (rising_edge(clock)) then
+            timeout <= '0';
+            if (enable = '1') then
+                if (TICK_COUNT > counter) then
+                    counter <= counter + 1;
+                else
+                    timeout <= '1';
+                    counter <= 0;
+                end if;
+            end if;
+        end if;
+    end process;
+end architecture;
+\end{vhdlcode}
+
+\begin{itemize}
+  \item \code{TICK_COUNT} is a \textbf{generic}, not a constant baked into the architecture, so the
+    same entity serves any frequency by being instantiated with a different \code{generic map}. The
+    internal counter's range is written in terms of it, so the register is sized for the target value
+    rather than for whatever an unconstrained \code{natural} would give, the same point
+    \secref{c6:sec:counter} makes about \code{natural range 0 to 15}. A generic can size a signal
+    precisely because it is fixed before synthesis runs.
+  \item \code{reset_s2_n} is the already \emph{synchronised} reset signal, never the raw
+    asynchronous \code{reset_n}. A timer never touches a raw asynchronous input directly.
+  \item \code{enable} \textbf{freezes} the timer rather than clearing it. While it is \code{'0'},
+    \code{counter} holds its value and \code{timeout} stays low, and a disabled timer carries on
+    where it left off rather than restarting. \Chapref{c8:ch}'s \code{fsm_led} depends on that.
+  \item \code{timeout} is a one-cycle pulse. The \code{else} branch setting it is reached at only
+    one edge: the edge where \code{counter} already stands at \code{TICK_COUNT} and is cleared back
+    to \code{0}. At the following edge the unconditional \code{timeout <= '0';} runs with nothing
+    after it to overwrite it, so the pulse is exactly one cycle wide.
+\end{itemize}
+
+Compare this with \secref{c7:sec:byhand}'s gate network. The logic is the same, and
+\secref{c7:sec:byhand} already named what the generic buys. One difference it did not name:
+\secref{c7:sec:byhand}'s \code{timeout} is a combinational decode, high during the cycle where the
+count shows \code{1010}, while this one is registered, high one cycle later, during the cycle where
+\code{counter} shows \code{0}. Same period, different phase, and different glitch behaviour, which
+is the distinction \chapref{c8:ch}'s discussion of Moore versus Mealy rests on.
+
+% ------------------------------------------------------------------------------------------
+\section{Composing a complete timer circuit}
+\label{c7:sec:compose}
+
+A timer on its own only pulses \code{timeout}; something has to react to that pulse, and a button
+has to control the timer. With \chapref{c4:ch}'s two-flip-flop synchroniser reused, a complete
+button-controlled, timer-driven LED circuit looks like this:
+
+\lecfig[1.0]{lectures/L07/appendix/images/led_toggle_timer.png}{The whole circuit at once:
+synchronised button, timer and toggled LED. The details are legible in the two close-ups
+below.}{c7:fig:whole}
+
+Read it as a floor plan rather than as a wiring diagram. It is a wide circuit, so at page size its
+labels come out small; what it is for is showing how few parts there are and roughly where each
+sits. The two close-ups below are where the signal names are readable, and together they cover
+everything in it.
+
+From left to right:
+\begin{itemize}
+  \item \textbf{Synchronisation and edge detection.} \code{button_n} passes through two flip-flops
+    for metastability protection, and a third then lets the circuit compare ``now'' against
+    ``previous'' and detect a falling edge, giving a one-cycle \code{button_edge_s2} pulse.
+  \item \textbf{The timer} (\secref{c7:sec:module}), enabled or disabled by \code{timer_enabled},
+    which in turn is toggled by \code{button_edge_s2}.
+  \item \textbf{Toggling the LED.} The timer's \code{timeout} pulse flips the LED's state every time
+    it fires, and the LED is forced off as soon as the timer is disabled or the circuit is reset.
+\end{itemize}
+
+\lecfig[0.98]{lectures/L07/appendix/images/button_sync_and_flank_detection.png}{Synchroniser and
+falling-edge detector.}{c7:fig:buttonsync}
+
+\lecfig[0.6]{lectures/L07/appendix/images/led_toggle.png}{The LED toggle logic, driven by the
+timer's \code{timeout} pulse.}{c7:fig:ledtoggle}
+
+Two patterns matter here, independently of this circuit:
+\begin{itemize}
+  \item \textbf{Every asynchronous input is synchronised before it touches any other logic}, and
+    every enable or toggle signal derived from a button is a synchronous signal from that point on.
+    You reuse that unchanged in \secref{c7:sec:walking} and again for \chapref{c8:ch}'s state
+    machines.
+  \item \textbf{One clock, and everything else is an enable.} \code{timeout} clocks the LED by being
+    a one-cycle \emph{enable} for a flip-flop running on the system clock, not by being wired into a
+    clock input. It is tempting to run a counter or timer output into a clock port to ``slow things
+    down''; do not. A design with one clock is a design whose timing the tool can analyse, and this
+    is the single most common mistake a programmer makes when a baud generator has to be written.
+\end{itemize}
+
+% ------------------------------------------------------------------------------------------
+\section{\code{walking_led}: a shift register with a walking LED}
+\label{c7:sec:walking}
+
+\code{walking_led} is the first design composing three chapters' building blocks into a circuit that
+can be demonstrated in hardware: a single lit LED walking along a row, one position per timer tick,
+started and stopped with a button. It is built live during the session, and
+Exercise~\ref{c7:ex:walking} asks you to write it yourself afterwards, so it is printed here in full
+rather than handed out as a file.
+
+It writes almost no new logic, reusing \code{reset_sync} and \code{button_sync} unchanged
+(\secref{c4:sec:resetsync} and \ref{c4:sec:buttonsync}) to synchronise and edge-detect the button,
+\code{timer} (\secref{c7:sec:module}) to clock the speed, and the shift register from
+\secref{c6:sec:shift}--\ref{c6:sec:piso} for the walking itself. That is what the last four chapters
+have accumulated: a small set of composable modules.
+
+You write all three yourself: \code{reset_sync} and \code{button_sync} in
+Exercise~\ref{c4:ex:resetsync} and \ref{c4:ex:buttonsync}, \code{timer} in
+Exercise~\ref{c7:ex:timer} in this chapter. Copy your own into the exercise directory before you
+build this one. Reusing a module presupposes having one, and this is the first design that asks you
+for the ones you have already built.
+
+\begin{vhdlcode}
+entity walking_led is
+    generic(LED_COUNT : natural := 8;
+            TICK_COUNT: natural := 25_000_000);
+    port(clock, reset_n, button_n: in std_logic;
+         led                     : out std_logic_vector(LED_COUNT-1 downto 0));
+end entity;
+
+architecture behaviour of walking_led is
+signal reset_s2_n, button_edge_s2  : std_logic;
+signal button_n_v, button_edge_s2_v: std_logic_vector(0 downto 0);
+signal shift_enable, shift_tick    : std_logic;
+signal shift_reg: std_logic_vector(LED_COUNT-1 downto 0);
+
+begin
+    led <= shift_reg;
+
+    button_n_v(0)  <= button_n;
+    button_edge_s2 <= button_edge_s2_v(0);
+
+    reset_sync1: entity work.reset_sync
+        port map(clock, reset_n, reset_s2_n);
+
+    button_sync1: entity work.button_sync
+        generic map(1)
+        port map(clock, reset_s2_n, button_n_v, button_edge_s2_v);
+
+    timer1: entity work.timer
+        generic map(TICK_COUNT)
+        port map(clock, reset_s2_n, shift_enable, shift_tick);
+
+    SHIFT_ENABLE_PROCESS: process(clock, reset_s2_n) is
+    begin
+        if (reset_s2_n = '0') then
+            shift_enable <= '0';
+        elsif (rising_edge(clock)) then
+            if (button_edge_s2 = '1') then
+                shift_enable <= not shift_enable;
+            end if;
+        end if;
+    end process;
+
+    SHIFT_PROCESS: process(clock, reset_s2_n) is
+    begin
+        if (reset_s2_n = '0') then
+            shift_reg <= (0 => '1', others => '0');
+        elsif (rising_edge(clock)) then
+            if (shift_tick = '1') then
+                shift_reg <= shift_reg(LED_COUNT-2 downto 0) & shift_reg(LED_COUNT-1);
+            end if;
+        end if;
+    end process;
+end architecture;
+\end{vhdlcode}
+
+Design choices worth noting:
+\begin{itemize}
+  \item \code{button_n_v} and \code{button_edge_s2_v} only bridge a width difference:
+    \code{walking_led}'s button signals are single bits while \code{button_sync}'s ports are vectors
+    of width \code{COUNT}. The two concurrent assignments connect the scalar to element \code{0} and
+    back. They cost no hardware.
+  \item This is a PISO register (\secref{c6:sec:piso}) in its simplest form: parallel-loaded exactly
+    once, at reset, with a single lit bit at position 0, and shifting only thereafter. There is no
+    \code{load} at run time, since this design never loads a new pattern.
+  \item It is a \textbf{circular} shift register. The shift is \secref{c6:sec:shift}'s expression
+    unchanged, so the lit bit walks towards the MSB; the only difference from an ordinary PISO is
+    what feeds bit 0, which is the bit falling off the top rather than a \code{serial_in} from
+    somewhere else. A one-shot register that ``shifts a pattern out'' becomes an endlessly repeating
+    pattern generator for free, just by recirculating its own output.
+  \item \code{shift_enable} is \secref{c7:sec:compose}'s toggle flip-flop reused verbatim: the
+    button's synchronised edge pulse flips a single bit, and that bit becomes the timer's
+    \code{enable}.
+  \item \code{shift_tick} is the timer's \code{timeout} pulse, reused as the shift register's clock
+    enable instead of driving an LED toggle. Same building block, a different consumer, and exactly
+    the ``one clock, everything else is an enable'' rule from \secref{c7:sec:compose}.
+  \item Both \code{LED_COUNT} and \code{TICK_COUNT} are generics, so
+    \code{generic map(4, 25_000_000)} gives a row of 4 LEDs and \code{generic map(8, 5_000_000)} a
+    faster 100~ms step, without touching the module.
+\end{itemize}
+
+On the board, demonstrated during the session, the ports are assigned via the Pin Planner
+(appendix~\ref{app:quartus}): \code{clock} to the 50 MHz oscillator, \code{reset_n} and
+\code{button_n} to two push buttons, and \code{led} to a row of LEDs on the board. Press the button
+once to set the bit moving, once more to freeze it.
+
+You can see the same behaviour without a board by running the reference testbench, which overrides
+both generics so that a full round takes a handful of clock cycles:
+
+\begin{shell}
+cd lectures/L07/exercises/walking_led
+cp ../../../L04/exercises/reset_sync/reset_sync.vhd .   # the three you wrote yourself
+cp ../../../L04/exercises/button_sync/button_sync.vhd .
+cp ../timer/timer.vhd .
+ghdl -a --std=93 reset_sync.vhd button_sync.vhd timer.vhd \
+                 walking_led.vhd walking_led_tb.vhd
+ghdl -e --std=93 walking_led_tb
+ghdl -r --std=93 walking_led_tb --assert-level=error --stop-time=10ms
+\end{shell}

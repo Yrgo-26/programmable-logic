@@ -1,0 +1,42 @@
+% Avsnitt 11.7, ur lectures/L11/README.md.
+
+\section{Sammanfattning}
+\label{c11:sec:review}
+
+\needspace{6\baselineskip}
+\subsection*{Det här ska du kunna nu}
+\begin{itemize}
+  \item Rita kontrollerns blockschema och säga vad varje block ansvarar för, och lika viktigt, vad
+    det inte ansvarar för.
+  \item Skriva toppnivåns entitet med rätt portordning och rätt typer.
+  \item Förklara varför arkitekturen är tom nu och vilket kapitel som fyller vilken del av den.
+  \item Köra GHDL:s två första steg på den tomma toppnivån, läsa vad vart och ett rapporterar, och
+    säga vad det tredje steget kräver som ännu inte finns.
+  \item Säga vad positionell portbindning köper och vad den ger upp.
+\end{itemize}
+
+\needspace{6\baselineskip}
+\subsection*{Frågor att testa dig själv med}
+\begin{enumerate}
+  \item Varför äger \code{bit_timer} bara \emph{när}, och inte \emph{vad}?
+  \item Vilket block känner till CAN-ramens format, och varför bara ett?
+  \item Varför synkroniserar \code{can_controller} sina egna asynkrona ingångar i stället för att
+    kräva att den som instansierar den gör det?
+  \item Vad går sönder om du byter plats på två portar av samma typ, och när skulle du märka det?
+  \item Vad gör \code{ghdl -a}, \code{ghdl -e} och \code{ghdl -r}, var för sig?
+  \item Vilken registerkarterad operation svarar mot \code{tx_req}, och vilken mot \code{tx_done}?
+\end{enumerate}
+
+\needspace{6\baselineskip}
+\subsection*{Riktvärde}
+Toppnivåns entitet bör finnas och analysera rent. Därefter är det upp till gruppen: någon kan mycket
+väl börja på \code{bit_timer} eller \code{crc15} redan nu. De fyra lövmodulerna, \code{bit_timer},
+\code{crc15}, \code{tx_shift_reg} och \code{rx_shift_reg}, beror inte på varandra och har var sin
+egen testbänk, så en grupp om 4--5 kan bygga dem parallellt. Det är den enda punkt i projektet där
+ordningen på riktigt spelar roll för hur snabbt ni går framåt; se bilaga~\ref{app:project}.
+
+\needspace{6\baselineskip}
+\subsection*{Blicken framåt}
+\Chapref{c12:ch} bygger de två första byggblocken som går in i den tomma arkitekturen, båda små:
+synkroniseraren \code{meta_prev}, som inte vet någonting alls, och \code{bit_timer}, det första
+blocket som vet något om CAN.

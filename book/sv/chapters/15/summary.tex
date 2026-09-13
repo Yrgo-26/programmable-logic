@@ -1,0 +1,52 @@
+% Avsnitt 15.7, ur lectures/L15/README.md.
+
+\section{Sammanfattning}
+\label{c15:sec:review}
+
+\needspace{6\baselineskip}
+\subsection*{Det här ska du kunna nu}
+\begin{itemize}
+  \item Implementera ett skiftregister som deserialiserar från bussen och kastar stoppbitar.
+  \item Upptäcka ett stoppningsfel och säga exakt vilket villkor som utgör det.
+  \item Förklara varför mottagaren samplar vid \code{sample} och sändaren skiftar vid
+    \code{bit_done}.
+  \item Mata CRC-motorn från mottagarsidan utan att räkna stoppbitar.
+  \item Läsa någon annans VHDL och skriva en granskning som är användbar snarare än artig.
+\end{itemize}
+
+\needspace{6\baselineskip}
+\subsection*{Frågor att testa dig själv med}
+\begin{enumerate}
+  \item Varför samplar mottagaren vid \code{sample} snarare än vid \code{bit_done}?
+  \item Exakt vilket villkor utgör ett stoppningsfel, och varför är det sex lika bitar som är
+    gränsen på mottagarsidan när sändaren räknar fem?
+  \item Vad händer med stoppbiten när den är korrekt?
+  \item Varför får \code{crc15} bara se \code{real_bit}, och vad skulle en felaktigt matad stoppbit
+    ställa till?
+  \item Varför räcker det inte att räkna mottagna bitar för att veta när en byte är klar?
+\end{enumerate}
+
+\needspace{6\baselineskip}
+\subsection*{Kodgranskningsseminariet}
+Ungefär en timme, i helgrupp. Varje grupp får tio minuter och visar en mergad Pull Request (vad den
+ändrade, hur den var uppdelad, och vad commit-meddelandena säger), en granskning gruppen skrivit
+(vad granskaren tittade efter, och vad som faktiskt ändrades av kommentarerna), och en sak som inte
+fungerat i arbetssättet, och vad ni gjort åt det.
+
+Välj ut i gruppen en mergad Pull Request och en granskning någon i gruppen skrivit att visa. Det
+behöver inte vara den finaste; en PR som fick befogad kritik är mer värd att visa än en som ingen
+läste.
+
+Seminariet är obligatoriskt och är den ena av projektets två fasta hållpunkter. Det betygsätts inte
+för sig, men det ingår i den helhetsbedömning av arbetssättet som beskrivs i
+bilaga~\ref{app:project}.
+
+\needspace{6\baselineskip}
+\subsection*{Riktvärde}
+Med \code{rx_shift_reg} klar finns alla fyra lövmoduler, och \code{can_controller} är den enda som
+återstår på CAN-sidan. Grupper som ligger efter bör lägga tiden här snarare än att börja på
+tillståndsmaskinen: den behöver alla fyra.
+
+\needspace{6\baselineskip}
+\subsection*{Blicken framåt}
+\Chapref{c16:ch} tar ramen som tillståndsmaskin, först förklarad och sedan byggd på sändarsidan.

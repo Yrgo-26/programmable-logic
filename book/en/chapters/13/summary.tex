@@ -1,0 +1,37 @@
+% Section 13.7, from lectures/L13/README.md.
+
+\section{Summary}
+\label{c13:sec:review}
+
+\needspace{6\baselineskip}
+\subsection*{What you should be able to do now}
+\begin{itemize}
+  \item Implement a bit-serial CRC-15 engine matching CAN's polynomial.
+  \item Explain why generating and checking are the same operation, and what a cleared CRC register
+    at the end of a received frame proves.
+  \item Work a few bits through the recursion by hand and compare against the simulation.
+  \item Say why the engine has to be cleared between frames, and what failure arises if it is not.
+\end{itemize}
+
+\needspace{6\baselineskip}
+\subsection*{Questions to test yourself with}
+\begin{enumerate}
+  \item Why does the engine need no mode for ``generate'' as against ``check''?
+  \item What does it mean that the CRC register is zero after a received frame has been fed through
+    it?
+  \item What happens if a frame is aborted and the next frame starts being fed in without a
+    \code{clear}?
+  \item Why is a stuffed bit not fed into the CRC engine?
+  \item Which signal in \code{can_controller} decides when \code{crc15} may update, and why is it not
+    \code{bit_done}?
+\end{enumerate}
+
+\needspace{6\baselineskip}
+\subsection*{Target}
+By this point two of the four leaf modules should be finished. Which two does not matter.
+
+\needspace{6\baselineskip}
+\subsection*{Looking ahead}
+\Chapref{c14:ch} builds the transmit shift register: serialising out onto the bus, with the same bit
+stuffing rule as in \chapref{c10:ch}, now in VHDL. \Chapref{c14:ch} and \ref{c15:ch} together build
+the modules deciding which bits reach \code{crc15} and when.

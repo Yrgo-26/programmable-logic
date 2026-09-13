@@ -1,0 +1,33 @@
+% Kapitel 15, satt ur lectures/L15: Appendix A blir avsnitt 15.1-15.6, Appendix B övningarna.
+
+\chapter{Mottagningsskiftregister och avstoppning}
+\label{c15:ch}
+
+{\large\itshape Mottagarsidans spegelbild: deserialisering, borttagning av stoppbitar, och flaggning
+av stoppningsfel.\par}
+
+\begin{chapterbox}{I det här kapitlet}
+\begin{itemize}
+  \item \code{rx_shift_reg}: deserialisering, avstoppning och detektering av stoppningsfel.
+  \item Att sampla mitt i bitperioden (\code{bit_timer.sample}) snarare än vid \code{bit_done}.
+  \item \code{real_bit} och \code{real_bit_valid}: att mata \code{crc15} en avstoppad bit i taget.
+  \item Att instansiera \code{rx_shift_reg} inuti \code{can_controller}.
+\end{itemize}
+\end{chapterbox}
+
+\code{rx_shift_reg} är mottagarsidans spegelbild av \chapref{c14:ch}:s \code{tx_shift_reg}: den
+deserialiserar en grupp MSB först från bussen och \textbf{kastar} de stoppbitar som
+\code{tx_shift_reg} satte in, och flaggar för ett brott om en väntad stoppbit uteblir. Följdräkningen
+och regeln om fem lika i rad är identiska, bara omvända \textemdash{} \canref{3} är samma regel sedd
+från protokollet, och det är värt att läsa den en gång till härifrån, eftersom det är den enda regel
+i boken som två moduler måste vara oberoende överens om. \code{can_controller} (\chapref{c17:ch})
+återanvänder \textbf{ett enda} \code{rx_shift_reg} för varje stoppat fält i en inkommande ram, och
+ändrar dess \code{bit_count} mellan grupperna; den ostoppade svansen (CRC-avgränsare, ACK,
+ACK-avgränsare, EOF) läser den direkt, förbi det här registret.
+
+Det här kapitlet innehåller också projektets \textbf{obligatoriska kodgranskningsseminarium}; se
+bilaga~\ref{app:project}.
+
+\input{chapters/15/rxshiftreg}
+\input{chapters/15/summary}
+\input{chapters/15/exercises}

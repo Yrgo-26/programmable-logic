@@ -1,0 +1,32 @@
+% Chapter 8, typeset from lectures/L08: Appendix A becomes sections 8.1-8.6, and Appendix B the
+% exercises.
+
+\chapter{State machines}
+\label{c8:ch}
+
+{\large\itshape First designed by hand, then expressed in the language.\par}
+
+\begin{chapterbox}{In this chapter}
+\begin{itemize}
+  \item Finite state machines: states, transitions, inputs and outputs.
+  \item Designing a Moore machine by hand: state diagram, state table, Karnaugh-derived logic.
+  \item State encoding as a design decision, and why the worked machine uses Gray code.
+  \item The same machine in VHDL: an enumerated type and the \code{case} pattern for transitions.
+  \item Why Moore is the default here and in the CAN project.
+  \item \code{fsm_led}: buttons switching the LED between off, blinking and on.
+\end{itemize}
+\end{chapterbox}
+
+This is the last chapter of the book's first part, and its building block is the last one missing.
+The payoff is in seeing the two halves against each other: every row you derive by hand in the state
+table in \secref{c8:sec:byhand} becomes a branch of a \code{case} in \secref{c8:sec:vhdl}, and seeing
+that correspondence is worth more than either step on its own.
+
+Mealy machines (\secref{c8:sec:mealy}) are read about rather than presented, and that matters more
+than it may look. Everything presented is Moore, and Moore is the default both here and in the CAN
+project. \Secref{c8:sec:mealy} is where you find out what the alternative costs and buys, which is
+the only way for that default to become a choice rather than a habit.
+
+\input{chapters/08/fsm}
+\input{chapters/08/summary}
+\input{chapters/08/exercises}

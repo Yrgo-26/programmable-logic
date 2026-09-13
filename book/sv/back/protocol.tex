@@ -1,0 +1,415 @@
+% Bilaga D, satt ur project/register_map.md och project/spi_register_protocol.md.
+
+\chapter{Registerkartan och SPI-protokollet}
+\label{app:protocol}
+
+Det här är kontraktet i projektets mitt, och det är skrivet för \textbf{två klasser samtidigt}:
+den här kursen bygger FPGA-sidan som en SPI-slav (\chapref{c18:ch} och \ref{c19:ch}), och
+parallellklassen bygger mikrokontrollersidan som master. Båda halvorna skrivs mot det här dokumentet,
+inte mot varandras kod. \textbf{Är en implementation och den här bilagan oense är implementationen
+fel.}
+
+Kontraktet säger ingenting om CAN som protokoll; det förutsätter det. \canbook{} är beskrivningen,
+och dess kapitel~7 är den som förklarar varför det här lagret behövs alls: en kontroller som
+signalerar med encykelspulser går inte att polla över en seriebuss.
+
+Två saker hålls isär, och det är värt att veta vilken som är vilken. \emph{Registerkartan}
+(\secref{app:protocol:map} till \ref{app:protocol:order}) säger \textbf{vad} registren betyder.
+\emph{Transaktionsformatet} (\secref{app:protocol:electrical} till \ref{app:protocol:timing}) säger
+\textbf{hur} de nås över ledningarna.
+
+\begin{warning}
+En äldre version av det här projektet lät drivrutinen nå registren via minnesmappad I/O på
+basadressen \code{0xFF200000}. Det förutsätter en processor med en adressbuss ut mot FPGA-väven,
+vilket mikrokontrollern i det här systemet inte har. Registren nås över SPI, och kolumnen
+\textbf{Index} nedan, inte offseten, är det som står i kommandobyten.
+\end{warning}
+
+% ------------------------------------------------------------------------------------------
+\section{Registren}
+\label{app:protocol:map}
+
+\begin{booktable}{clllL}
+  \thead{Index} & \thead{Register} & \thead{Offset} & \thead{Åtkomst} & \thead{Beskrivning} \\
+  \midrule
+  0 & \code{STATUS} & \code{0x00} & R & Bit 0: TX klar. Bit 1: RX giltig. Bit 2: Fel. \\
+  1 & \code{TX_ID} & \code{0x04} & R/W & 11-bitars sändar-ID (bitarna 10--0). \\
+  2 & \code{TX_DLC} & \code{0x08} & R/W & Data Length Code (bitarna 3--0, värde 0--8). \\
+  3 & \code{TX_DATA_LO} & \code{0x0C} & R/W & Sändardata byte 0--3 (byte 0 = MSB). \\
+  4 & \code{TX_DATA_HI} & \code{0x10} & R/W & Sändardata byte 4--7 (byte 4 = MSB). \\
+  5 & \code{TX_SEND} & \code{0x14} & W & Skriv \code{0x1} för att utlösa sändning. \\
+  6 & \code{RX_ID} & \code{0x18} & R & Mottagen identifierare (bitarna 10--0). \\
+  7 & \code{RX_DLC} & \code{0x1C} & R & Mottagen DLC (bitarna 3--0). \\
+  8 & \code{RX_DATA_LO} & \code{0x20} & R & Mottagen data byte 0--3. \\
+  9 & \code{RX_DATA_HI} & \code{0x24} & R & Mottagen data byte 4--7. \\
+  10 & \code{RX_ACK} & \code{0x28} & W & Skriv \code{0x1} för att kvittera och tömma
+    RX-bufferten. \\
+  11 & \code{ERROR_FLAGS} & \code{0x2C} & R/W & Felregistret; skriv \code{0x0} för att
+    nollställa. \\
+  12 & \code{TX_ABORT} & \code{0x30} & W & Skriv \code{0x1} för att tvinga tillbaka TX klar efter
+    en avbruten sändning. \\
+\end{booktable}
+
+Index 13--15 är reserverade: en läsning ger \code{0x00000000}, en skrivning ignoreras.
+
+\code{Index} är \code{Offset / 4}. Offseten finns kvar i tabellen därför att drivrutinens konstanter
+är skrivna i den formen, men det är indexet som går ut på ledningen.
+
+% ------------------------------------------------------------------------------------------
+\section{\code{STATUS}}
+\label{app:protocol:status}
+
+\begin{booktable}{cLLL}
+  \thead{Bit} & \thead{Betydelse} & \thead{Sätts av} & \thead{Nollställs av} \\
+  \midrule
+  0 & TX klar & reset; kontrollerns puls \code{tx_done}; en stigande flank på \code{error} medan
+    biten är låg; en accepterad skrivning till \code{TX_ABORT} & en accepterad skrivning till
+    \code{TX_SEND} \\
+  1 & RX giltig & kontrollerns puls \code{rx_valid}, som också låser \code{RX_*} & en skrivning av
+    \code{0x1} till \code{RX_ACK} \\
+  2 & Fel & en \textbf{stigande flank} på kontrollerns nivå \code{error} & en skrivning av
+    \code{0x0} till \code{ERROR_FLAGS} \\
+\end{booktable}
+
+Poängen med hela lagret ligger i den tabellen. Kontrollern signalerar med encykelspulser, 20 ns vid
+50 MHz. En drivrutin som pollar över SPI ser systemet några mikrosekunder i taget i bästa fall, så en
+puls är borta tusentals cykler innan nästa pollning kommer. Registerbanken gör om pulserna till
+\textbf{klibbiga, pollbara nivåer med uttrycklig nollställning}.
+
+% ------------------------------------------------------------------------------------------
+\section{Semantik, register för register}
+\label{app:protocol:semantics}
+
+\begin{itemize}
+  \item \textbf{\code{TX_SEND}} utlöser en enda \code{tx_req}-puls när ett värde med \textbf{bit 0
+    satt} skrivs och \code{STATUS} bit 0 är satt. Övriga bitar i det skrivna ordet ignoreras. Är
+    \code{STATUS} bit 0 låg ignoreras skrivningen: en sändning pågår. En skrivning med bit 0 låg gör
+    ingenting. Läsning ger \code{0x00000000}, eftersom registret inte lagrar något utan \emph{gör}
+    något. Skrivningar är flankhändelser på det här lagret, så en upprepad skrivning är en upprepad
+    begäran, aldrig en hållen nivå.
+  \item \textbf{\code{RX_ACK}} nollställer \code{STATUS} bit 1. Kräver bit 0 satt; övriga bitar
+    ignoreras. Läsning ger \code{0x00000000}.
+  \item \textbf{\code{TX_ABORT}} sätter \code{STATUS} bit 0 tillbaka till \code{1}, och gör
+    ingenting annat. Bara en skrivning med \textbf{bit 0 satt} gör något; läsning ger
+    \code{0x00000000}. Registret når inte kontrollern \textemdash{} en kontroller som avbrutit en
+    sändning är redan tillbaka i vila och kan sända igen; det är bara bankens klibbiga bit som
+    fastnat. Det här är nödutgången: i en riktig konstruktion ska den aldrig behövas, eftersom bit 0
+    redan har två automatiska vägar tillbaka. En drivrutin som märker att den behöver den har hittat
+    en bugg värd att rapportera.
+  \item \textbf{\code{ERROR_FLAGS}} är en lås-och-nollställ-på-noll-konstruktion, inte ett allmänt
+    register: bara en skrivning där \textbf{hela ordet är noll} nollställer. \code{0x000000FF}
+    nollställer alltså inte, trots att bit 0 är satt. Bit 0 är låsningen och speglar \code{STATUS}
+    bit 2; bitarna 31--1 läses som \code{0}. Namnet är i plural av historiska skäl.
+  \item \textbf{Maskning vid skrivning.} \code{TX_ID} lagrar bitarna 10--0 och \code{TX_DLC}
+    bitarna 3--0; överflödiga bitar läses tillbaka som noll. En skrivning av \code{0xFFFFFFFF} läses
+    alltså tillbaka som \code{0x000007FF} respektive \code{0x0000000F}.
+    \code{TX_DATA_LO}/\code{HI} lagrar alla 32 bitarna.
+  \item \textbf{Ingen validering.} En \code{TX_DLC} på \code{0xF} lagras och lämnas vidare till
+    kontrollern som den är. Att avvisa \code{dlc > 8} är drivrutinens ansvar. Att göra det på båda
+    sidor är precis så de två kopiorna av regeln glider isär.
+  \item \textbf{Ingen buffring på mottagarsidan.} Kommer en ny ram innan den förra kvitterats skrivs
+    den över, och den nyaste vinner. Det är ett medvetet, dokumenterat val och inte en bugg; en
+    riktig kontroller har en mottagningskö.
+\end{itemize}
+
+\subsection{Detaljer en drivrutin behöver}
+\label{app:protocol:driver}
+
+Punkterna nedan hör till kontraktet lika mycket som tabellerna ovan.
+
+\begin{itemize}
+  \item \textbf{Varje register är 32 bitar brett.} Alla fem bytes i en transaktion överförs alltid,
+    även för ett register som bara har fyra meningsfulla bitar.
+  \item \textbf{\code{STATUS} bitarna 31--3 läses som \code{0}.} Bankens läsmux nollar allt ovanför
+    bit 2, så en jämförelse mot \code{0x1} är säker.
+  \item \textbf{\code{ERROR_FLAGS} skiljer inte på felorsaker.} De fyra orsakerna \textemdash{}
+    förlorad arbitrering, stoppfel, misslyckad CRC och mottagen fjärrram \textemdash{} ger alla samma
+    enda bit.
+  \item \textbf{\code{RX_DATA_LO}/\code{HI} bortom \code{RX_DLC} läses som \code{0x00}.} Kontrollern
+    nollställer sin dataackumulator vid varje ramstart, så bytes ovanför den mottagna längden bär
+    aldrig rester från en tidigare ram: en ram med \code{DLC = 2} som följer på en med
+    \code{DLC = 8} läses som två bytes data och sex nollor. \textbf{Maskera ändå mot \code{RX_DLC}}
+    \textemdash{} nollorna är kontrollerns garanti, inte ramens innehåll, och en drivrutin som
+    kopierar åtta bytes rapporterar sex bytes som aldrig sändes.
+  \item \textbf{\code{TX_DATA_LO}/\code{HI} bortom \code{TX_DLC} skickas aldrig}, så de behöver inte
+    nollställas.
+  \item \textbf{Skrivningar till \code{STATUS}, \code{RX_ID}, \code{RX_DLC} och
+    \code{RX_DATA_LO}/\code{HI} ignoreras tyst.} Transaktionen fullbordas normalt; inget fel
+    rapporteras.
+  \item \textbf{Det finns ingen tidsgräns att härleda.} Kartan säger inte hur lång en sändning är, så
+    en drivrutin som vill ge upp får välja sin timeout själv. Ett riktvärde: en maximal ram är
+    omkring 130 bitar, och vid 1 Mbit/s alltså omkring 130 µs, plus väntan på en ledig buss.
+  \item \textbf{En förlorad arbitrering återställer \code{STATUS} bit 0}, precis som en lyckad
+    sändning gör. En drivrutin behöver alltså inte skilja på utfallen för att kunna sända igen:
+    polla bit 0, och läs \code{ERROR_FLAGS} för att veta hur det gick.
+\end{itemize}
+
+\begin{aside}
+\textbf{Vad ”sändningen är slut” betyder här.} Att \code{STATUS} bit 0 kommer tillbaka säger att
+sändarporten är fri igen, inte att ramen levererades. En förlorad arbitrering ger tillbaka samma bit
+som en ren sändning. \code{ERROR_FLAGS} är det som skiljer dem åt, och den vanliga pollningsslingan
+är därför: vänta på bit 0, läs sedan \code{ERROR_FLAGS} för att avgöra om ramen ska skickas om.
+\Secref{app:project:limits} listar de övriga förenklingarna mot riktig CAN.
+\end{aside}
+
+% ------------------------------------------------------------------------------------------
+\section{Databyteordning}
+\label{app:protocol:order}
+
+\code{tx_data} och \code{rx_data} är 64 bitar breda, med databyte 0 i de mest signifikanta bitarna:
+
+\begin{widedrawing}
+bit 63                                                              bit 0
++--------+--------+--------+--------+--------+--------+--------+--------+
+| byte 0 | byte 1 | byte 2 | byte 3 | byte 4 | byte 5 | byte 6 | byte 7 |
++--------+--------+--------+--------+--------+--------+--------+--------+
+ \___________ TX_DATA_LO ___________/ \___________ TX_DATA_HI __________/
+\end{widedrawing}
+
+Namnen \code{LO} och \code{HI} syftar på registerparets ordning, inte på bitsignifikans.
+\code{TX_DATA_LO} bär de \emph{första} fyra databytesen.
+
+% ------------------------------------------------------------------------------------------
+\section{Motsvarigheter i hårdvaran}
+\label{app:protocol:hw}
+
+\begin{booktable}{LL}
+  \thead{Register} & \thead{Port på \code{can_controller}} \\
+  \midrule
+  \code{TX_ID}, \code{TX_DLC}, \code{TX_DATA_LO}/\code{HI} & \code{tx_id}, \code{tx_dlc},
+    \code{tx_data} \\
+  \code{TX_SEND} & \code{tx_req} (en puls) \\
+  \code{STATUS} bit 0 & \code{tx_done} (en puls), låst till en nivå \\
+  \code{RX_ID}, \code{RX_DLC}, \code{RX_DATA_LO}/\code{HI} & \code{rx_id}, \code{rx_dlc},
+    \code{rx_data} \\
+  \code{STATUS} bit 1 & \code{rx_valid} (en puls), låst till en nivå \\
+  \code{STATUS} bit 2, \code{ERROR_FLAGS} & \code{error} (en nivå), låst på stigande flank \\
+\end{booktable}
+
+Översättningen mellan de två kolumnerna är exakt vad \code{register_bank} gör, och ingenting mer.
+
+% ------------------------------------------------------------------------------------------
+\section{Elektriska parametrar och ramning}
+\label{app:protocol:electrical}
+
+\begin{booktable}{lL}
+  \thead{Parameter} & \thead{Värde} \\
+  \midrule
+  Roller & Mikrokontrollern är SPI-master, FPGA:n slav. \\
+  Läge & SPI-läge 0 (CPOL = 0, CPHA = 0): SCK vilar lågt, båda sidor samplar på stigande flank. \\
+  Bitordning & MSB först, i varje byte. \\
+  SCK-frekvens & $\le$ 1 MHz (AVR32DB28 går på 4 MHz och delar med 4). Se
+    \secref{app:protocol:timing} för varför. \\
+  \code{SS} & Aktiv låg. Ramsignal: en transaktion per låg period. \\
+  Spänning & AVR32DB28:s kärna går på 5 V, DE0-CV på 3,3 V, och ingen ledning passerar en
+    nivåomvandlare. De fyra SPI-ledningarna sitter på \code{PORTC}, AVR DB:s andra
+    matningsdomän, med \code{VDDIO2} matad från DE0-CV:s 3,3 V-skena. \\
+\end{booktable}
+
+\subsection{Pinnindelning}
+\label{app:protocol:pins}
+
+Båda sidor spikas fast här. Mikrokontrollersidan använder \code{SPI0}:s \textbf{ALT1}-pinnmux på
+AVR32DB28, som lägger periferienheten på \code{PC0}--\code{PC3}; FPGA-sidan är fri, och det här
+avsnittet lägger den friheten på att göra korten utbytbara.
+
+ALT1 är inget godtyckligt val. \code{PORTC} är AVR DB:s \textbf{MVIO}-domän: den matas från
+\code{VDDIO2} i stället för från \code{VDD}, så att knyta \code{VDDIO2} till DE0-CV:s 3,3 V-skena
+lägger alla fyra SPI-ledningar i en 3,3 V-domän medan kärnan fortsätter gå på 5 V. Varje nivå FPGA:n
+ser är då en nivå den är specificerad för, och de 3,3 V FPGA:n driver tillbaka läses mot ett
+3,3 V-tröskelvärde i stället för ett på 5 V. På \code{SPI0}:s förvalda mux skulle samma fyra signaler
+ligga på \code{PA4}--\code{PA7} i \code{VDD}-domänen, och bänken skulle behöva en nivåomvandlare för
+att vara säker. Det är därför muxen är en del av kontraktet i stället för varje grupps eget val.
+
+Mikrokontrollersidan är därmed skyldig två saker utöver pinnumren, och båda hör till
+drivrutinsklassen: \code{PORTMUX.SPIROUTEA} måste välja \code{ALT1}, och \code{VDDIO2} måste ha
+spänning innan \code{PORTC} gör någonting alls. \code{MVIO.STATUS} rapporterar om den har det.
+
+\begin{warning}
+\textbf{Det här begränsar kortet, inte bara firmware.} Hatten som bär AVR32DB28 är byggd för det här
+systemet, och pinntabellen nedan ställer tre krav på dess layout. \code{PC0}--\code{PC3} bär SPI0 och
+ingenting annat \textemdash{} ingen lysdiod, ingen knapp, och framför allt ingen avstudsningskondensator
+på \code{SS}, som vid 1 MHz skulle göra ramflanken oanvändbar. Ingenting annat sitter någonstans på
+\code{PORTC}, eftersom hela porten är en 3,3 V-domän så snart \code{VDDIO2} är det. Och \code{VDDIO2}
+dras som sitt eget nät ut till en pinne, avkopplad med 100 nF nära kapseln, i stället för att knytas
+till \code{VDD} på kortet. Ingen av de tre går att rätta i firmware när kortet väl är etsat.
+
+\textbf{En enda fuse avgör om något av ovanstående är sant.} MVIO:s tvåmatningsläge väljs av
+\code{MVSYSCFG} i \code{FUSE.SYSCFG1}. I enmatningsläge knyts \code{VDDIO2} internt till \code{VDD},
+\code{PORTC} blir en 5 V-port, och kopplingen i det här avsnittet driver då 5 V in i FPGA-ingångar
+som inte tål 5 V \textemdash{} medan bänken ser exakt likadan ut som en riktig. Bekräfta fusen mot
+databladet innan den första noden kopplas, inte efter att det första kortet betett sig konstigt.
+\end{warning}
+
+\begin{booktable}{llll}
+  \thead{Signal} & \thead{AVR32DB28} & \thead{DE0-CV-port} & \thead{DE0-CV-pinne} \\
+  \midrule
+  \code{SCK} & \code{PC2} & \code{sclk} & \code{GPIO_0(4)} \\
+  \code{MOSI} & \code{PC0} & \code{mosi} & \code{GPIO_0(5)} \\
+  \code{MISO} & \code{PC1} & \code{miso} & \code{GPIO_0(6)} \\
+  \code{SS} & \code{PC3} & \code{ss} & \code{GPIO_0(7)} \\
+  Matning I/O & \code{VDDIO2} & \textemdash{} & 3,3 V \\
+  Jord & \code{GND} & \textemdash{} & \code{GND} \\
+\end{booktable}
+
+\code{GPIO_0(0)} till \code{GPIO_0(2)} är reserverade för CAN-sidan \textemdash{} \code{tx_bus},
+\code{bus_en} och den wired-AND:ade busslinjen \textemdash{} och \code{GPIO_0(3)} lämnas medvetet
+oanvänd som ett glapp mellan de två grupperna, så att ett kabelknippe som sitter en pinne fel inte
+kortsluter något mellan domänerna.
+
+\textbf{Varför alls spika fast dem, när Quartus inte bryr sig?} Ingenting i konstruktionen går sönder
+av att en grupp väljer andra pinnar; poängen är vad som händer vid bänken. Med en tilldelning delad
+av båda klasserna passar vilken mikrokontrollernod som helst i vilket FPGA-kort som helst: ett
+kabelknippe kan byggas en gång i stället för per par, och en mjukvarugrupp vars partnerkort inte är
+klart kan låna ett fungerande i stället för att falla tillbaka på simulering. Det sista fallet är
+inte hypotetiskt \textemdash{} de två kurserna håller sin bring-up och sina slutredovisningar samma
+vecka.
+
+En grupp \emph{får} använda andra pinnar, men bara om kortet och den nod det paras med är överens, och
+bara om det är nedskrivet där den andra klassen kan se det. Ett odokumenterat pinnbyte visar sig som
+en nod som svarar på registerläsningar och aldrig sänder en ram, vilket är ett dyrt sätt att upptäcka
+en kopplingskonvention.
+
+% ------------------------------------------------------------------------------------------
+\section{Transaktioner}
+\label{app:protocol:transactions}
+
+Varje transaktion är exakt \textbf{5 bytes} lång: en kommandobyte, sedan fyra databytes. \code{SS}
+faller före kommandobyten och stiger efter den femte byten; den måste ligga låg hela transaktionen.
+
+\begin{textdrawing}
+Bit:      7    6    5    4    3    2    1    0
+        +----+----+----+----+----+----+----+----+
+        | W  | 0  | 0  | 0  |   register index  |
+        +----+----+----+----+----+----+----+----+
+\end{textdrawing}
+
+\begin{itemize}
+  \item \textbf{Bit 7 (\code{W})}: \code{1} = skrivning, \code{0} = läsning.
+  \item \textbf{Bit 6--4}: reserverade, måste vara \code{0}.
+  \item \textbf{Bit 3--0}: registerindexet, \code{offset / 4} ur \secref{app:protocol:map} (0--12).
+\end{itemize}
+
+\paragraph{Skrivning (\code{W = 1}).}
+Mastern skickar registervärdet i de fyra databytesen, \textbf{MSB först} (bitarna 31--24 i den första
+databyten). Slaven verkställer det ihopsatta värdet i det adresserade registret först när den femte
+byten är hel. Vad slaven än driver på \code{MISO} under en skrivning är meningslöst; mastern kastar
+det.
+
+\paragraph{Läsning (\code{W = 0}).}
+Vid slutet av kommandobyten \textbf{låser} slaven det adresserade registrets aktuella värde
+\textbf{en gång}, in i sitt svarsskiftregister. De fyra databytesen klockar sedan ut det värdet på
+\code{MISO}, MSB först, medan mastern skickar dummybytes \code{0x00}. Regeln om att låsa en gång är
+ingen implementationsdetalj utan en del av kontraktet: de fyra bytesen tillhör alltid \emph{ett}
+sammanhängande sampel av registret, taget i ett enda ögonblick \textemdash{} \code{STATUS} i
+synnerhet får aldrig vara ihopsytt av två skilda ögonblick.
+
+\paragraph{Avbrott.}
+Stiger \code{SS} innan den femte byten är hel överges transaktionen \textbf{utan sidoeffekter}:
+ingenting verkställs, ingen utlösare avfyras, och slaven återgår till vila, redo för nästa fallande
+flank på \code{SS}. Det är det som gör slaven självläkande efter en glitch eller en master som
+resettas.
+
+\paragraph{Ogiltiga kommandon.}
+En läsning av ett reserverat index (13--15) ger \code{0x00000000}; en skrivning till ett ignoreras.
+En kommandobyte med någon reserverad bit (6--4) satt är ogiltig på samma sätt: ingen läsning låses
+och ingen skrivning verkställs, och slaven förbrukar ändå hela fembytesramen innan den återgår till
+vila. Inget av fallen är ett fel slaven rapporterar \textemdash{} det finns ingen felkanal på det här
+lagret. Att upprätthålla regeln om reserverade \emph{kommando}-bitar är \code{spi_reg_bridge}s jobb;
+\code{register_bank} ser aldrig mer än ett 4-bitars index.
+
+% ------------------------------------------------------------------------------------------
+\section{Tidskrav}
+\label{app:protocol:timing}
+
+\begin{itemize}
+  \item Slaven använder \textbf{aldrig} \code{SCK} som klocka. Alla tre ingångarna (\code{SCK},
+    \code{MOSI}, \code{SS}) synkroniseras in i 50 MHz-domänen med två vippor var, och
+    \code{SCK}-flanker \emph{detekteras}, de klockas inte på (\chapref{c4:ch} för varför,
+    \chapref{c18:ch} för modulen som gör det). \code{spi_slave} bygger sin synkroniserare på plats i
+    stället för att instansiera \code{meta_prev}, så att \code{spi_slave} inte beror på något i
+    \file{controller/}.
+  \item Tvåvippssynkronisering plus flankdetektering kostar några 50 MHz-cykler per flank; vid
+    SCK $\le$ 1 MHz finns det $\ge$ 50 systemcykler per SPI-bit, alltså en tiopotens marginal.
+    Protokollet garanterar därför korrekt drift bara upp till 1 MHz; snabbare kan fungera, och det
+    är medvetet inte utlovat.
+  \item \code{MISO} ändras på \code{SCK}:s fallande flank och samplas av mastern på den stigande, som
+    läge 0 föreskriver.
+  \item Mastern måste höja \code{SS} mellan transaktioner. Transaktioner rygg mot rygg under en enda
+    låg \code{SS} stöds inte, och att försöka är ofarligt: \textbf{en transaktion börjar bara på
+    första byten efter att \code{SS} fallit}, så en sjätte byte som anländer medan \code{SS}
+    fortfarande är låg kastas i stället för att tas för en ny kommandobyte.
+\end{itemize}
+
+\subsection{Sättnings- och hålltid kring \code{SS}}
+\label{app:protocol:ss}
+
+Eftersom \code{SS} synkroniseras och sedan flankdetekteras i stället för att användas direkt behöver
+den några systemklockcykler för att få effekt. Vid 50 MHz är en cykel 20 ns, och talen är:
+
+\begin{booktable}{LlL}
+  \thead{Parameter} & \thead{Minimum} & \thead{Varför} \\
+  \midrule
+  \code{SS} låg före första stigande \code{SCK}-flanken & \textbf{60 ns} (3 cykler) & ramstartsflanken
+    detekteras på tredje systemklockflanken efter att \code{SS} fallit \\
+  \code{SS} hög mellan transaktioner & \textbf{60 ns} (3 cykler) & samma detektor måste se linjen
+    återvända innan den kan armas igen \\
+  \code{SS} låg efter sista \code{SCK}-flanken & \textbf{60 ns} (3 cykler) & så att sista byten
+    registreras innan ramen rivs \\
+\end{booktable}
+
+Räkna med 100 ns för var och en i en drivrutin så är ingenting av det här nära. En AVR som växlar
+\code{SS} genom \code{PORTC.OUTCLR} och \code{PORTC.OUTSET} kring en byte skriven till
+\code{SPI0.DATA} är redan långt långsammare än så, så gränserna spelar roll bara om mastern driver
+\code{SS} från hårdvara, eller går mycket fortare än AVR32DB28 gör.
+
+Det finns \textbf{inget} minsta glapp mellan bytes: bytes får komma rygg mot rygg inom en
+transaktion, och slaven bryr sig inte om hur länge mastern pausar mellan dem, så länge \code{SS}
+ligger kvar låg.
+
+\subsection{\code{MISO} utanför en läsning}
+\label{app:protocol:miso}
+
+\begin{itemize}
+  \item \code{MISO} drivs \textbf{lågt} medan slaven är avvald, den släpps inte till högimpedans.
+    Konstruktionen förutsätter en enda slav på bussen. Att lägga till en andra skulle kräva att den
+    här utgången gjordes trestatad.
+  \item Byten mastern klockar ut \textbf{under kommandobyten} är meningslös: slaven laddar sitt
+    svarsskiftregister vid kommandobytens \emph{slut}, så det som lämnar under den är vad som råkade
+    ligga kvar. Kasta den.
+  \item Under en skrivning är alla fyra \code{MISO}-databytesen meningslösa också.
+\end{itemize}
+
+% ------------------------------------------------------------------------------------------
+\section{Genomarbetat exempel}
+\label{app:protocol:example}
+
+Att skicka en ram (\code{id 0x123}, \code{dlc 2}, data \code{AA BB}) är fem transaktioner, och sedan
+en pollning:
+
+\begin{widedrawing}
+Write TX_ID      : 81 00 00 01 23
+Write TX_DLC     : 82 00 00 00 02
+Write TX_DATA_LO : 83 AA BB 00 00
+Write TX_DATA_HI : 84 00 00 00 00
+Write TX_SEND    : 85 00 00 00 01
+Read  STATUS     : 00 xx xx xx xx   -> MISO ger 00 00 00 00 medan sändningen pågår,
+                                       sedan 00 00 00 01 när tx_done satt TX klar igen.
+\end{widedrawing}
+
+Lägg märke till \code{83 AA BB 00 00}: byte 0 i den mest signifikanta positionen. Det är packningen
+på båda sidor om ledningen \textemdash{} drivrutinen sätter ihop den, \code{register_bank}
+presenterar \code{TX_DATA_LO} som de \emph{första} fyra bytesen, och \code{can_controller} läser
+\code{tx_data} med byte 0 i bitarna 63--56. Diagrammet i \secref{app:protocol:order} är bilden av
+det, och \code{register_bank_tb} kontrollerar det.
+
+Värt att läsa av samma exempel: de fyra första \code{MISO}-bytesen av en skrivning är meningslösa,
+och det är \code{MISO}-byten som returneras \emph{under} vilken kommandobyte som helst också. Kasta
+den.
+
+\begin{aside}
+\textbf{Att ändra i det här kontraktet.} Registerkartan och protokollet är ett kontrakt mellan två
+klasser som inte kan kompilera mot varandra. Ändras något måste båda sidor veta om det innan
+ändringen mergas. I praktiken: ändringar diskuteras med båda handledarna först, och dokumenten
+uppdateras \emph{före} koden, aldrig efter.
+\end{aside}

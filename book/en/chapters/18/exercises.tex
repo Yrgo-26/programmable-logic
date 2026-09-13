@@ -1,0 +1,158 @@
+% Section 18.11, from lectures/L18/appendix/b_exercises.md.
+
+\section{Exercises}
+\label{c18:sec:exercises}
+
+\begin{aside}
+Write your own \file{register_bank.vhd} from \secref{c18:sec:iface} to \ref{c18:sec:write}; the
+testbench handed out, run per appendix~\ref{app:sim}, is the check that it behaves correctly.
+Exercise~\ref{c18:ex:waveform} and \ref{c18:ex:slave} are about \file{spi_slave.vhd}, which is handed
+out rather than written \textemdash{} that one you read, and \chapref{c20:ch} expects you to know it.
+
+The authoritative source for every register number below is appendix~\ref{app:protocol}. Where an
+exercise and a specification disagree, the specification wins, and the exercise is the bug.
+\end{aside}
+
+\exercise{\code{register_bank}}{VHDL}
+\label{c18:ex:bank}
+Write your own \file{register_bank.vhd} from the chapter. Verify it:
+
+\begin{shell}
+cd bridge
+ghdl -a --std=93 ../controller/can_def.vhd register_bank.vhd register_bank_tb.vhd
+ghdl -e --std=93 register_bank_tb
+ghdl -r --std=93 register_bank_tb --assert-level=error
+\end{shell}
+
+If a check fails, read the assertion message; each of the eleven cases says what a failure in that
+particular case means.
+
+\exercise{The three STATUS bits}{Reasoning}
+\label{c18:ex:status}
+\xpart{a} Out of reset, STATUS reads \code{0x00000001}. Say which bit that is and why the reset value
+is \code{'1'} and not \code{'0'}. Then describe what a driver's \code{send()} would do, forever, if it
+were \code{'0'}.
+
+\xpart{b} Bit 2 latches a \textbf{rising edge} of the controller's \code{error}, not its level.
+Suppose it latched the level instead. Write down the sequence of driver operations \textemdash{} poll,
+clear, poll \textemdash{} that would then behave differently, and say what the driver's author would
+conclude was broken.
+
+\xpart{c} Bit 1 is set by \code{rx_valid} and cleared by a write to \code{RX_ACK}. Bit 0's main set
+condition is \code{tx_done}, and it is cleared by a write to \code{TX_SEND}. One of those pairs has
+its set and clear conditions in the ``natural'' order, and the other is reversed. Say which is which,
+and why the reversed one is right all the same.
+
+\xpart{d} \Secref{c18:sec:status} gives an ordering rule: controller events are applied \textbf{after}
+the bridge's writes in the clocked process. Construct the one clock edge where that rule changes the
+outcome, name both events, and say which of the two possible resolutions can lock the system up and
+which cannot.
+
+\xpart{e} Bit 0 has \emph{three} set conditions, and one of them is a rising edge of \code{error}
+while bit 0 is already low. Explain why that condition needs to know nothing about whether the
+controller was transmitting or receiving \textemdash{} what is it about a node's behaviour that makes
+``error rose while we were busy'' mean ``a transmission has just ended''?
+
+\xpart{f} Remove that condition from your bank and rerun the testbench. Which case fails, and what
+consequence does its message say it would have had? Then explain why this is defence in depth rather
+than duplicated work, given that \chapref{c17:ch} already has the controller pulse \code{tx_done} at
+an aborted transmission. (Who writes \code{can_controller}? Who wrote the testbench that would catch
+it?)
+
+\xpart{g} \code{TX_ABORT} is the third path, and unlike the other two it does not correspond to
+anything the hardware did \textemdash{} it is the driver going around the bank. Say what it does
+\emph{not} do: name at least two things you might expect a register called \code{TX_ABORT} to reach,
+and explain why it reaches neither. (The clue is \code{can_controller}'s port list, settled in
+\chapref{c11:ch}.)
+
+\exercise{\code{TX_SEND} and the pulse discipline}{Simulation}
+\label{c18:ex:txsend}
+\xpart{a} A write of \code{0x1} to \code{TX_SEND} raises \code{tx_req} for exactly one cycle. Say
+exactly which cycle, relative to the clock edge that carried \code{reg_write}, and which two things
+\code{register_bank_tb} checks about it.
+
+\xpart{b} Now break it deliberately. Change your \code{TX_SEND} branch so that \code{tx_req} becomes a
+\textbf{level}: set it at an accepted write and clear it only when \code{tx_done} arrives. Rerun
+\code{register_bank_tb}. Which check fails first, and what does its message say?
+
+\xpart{c} Your broken version from \textbf{b)} would still \emph{look} correct on an oscilloscope
+watching a single frame. Describe, using \secref{c16:sec:roles}'s rule for when
+\code{can_controller} acts on \code{tx_req}, what it does at the second frame and every frame after
+it. Then say why this is a bug simulation catches easily and a test on the bench does not.
+
+\xpart{d} A write to \code{TX_SEND} while STATUS bit 0 is low is discarded entirely \textemdash{} no
+pulse, no state change. Another design could queue it instead and fire when the controller reports
+ready. Give a concrete argument for the discard rule, given that the driver can poll STATUS. Put the
+module back as it was.
+
+\exercise{Reading an SPI transaction off the waveform}{Reasoning}
+\label{c18:ex:waveform}
+This chapter is called ``from the waveform'' for a reason: \chapref{c20:ch} may well hand you one and
+ask what it means. Mode 0 throughout \textemdash{} SCK idles low, MOSI is sampled on the
+\textbf{rising} edge, MISO changes on the \textbf{falling} edge, MSB first.
+
+\xpart{a} Draw by hand the whole five-byte transaction writing \code{0x00000001} to \code{TX_SEND}.
+Work out the command byte from the format in appendix~\ref{app:protocol} rather than copying it: bit 7
+is the write bit, bits 6--4 are reserved, bits 3--0 are the register index, and \code{TX_SEND} is
+index 5. Label \code{SS}, \code{SCK} and \code{MOSI}, and mark the 40 rising edges in groups of eight.
+
+\xpart{b} Mark on the same drawing where the master must not release \code{SS}, and what the slave has
+to do if it does anyway. Restate the rule from the protocol specification's section on aborts in your
+own words.
+
+\xpart{c} A read of \code{STATUS} is the mirror image: command byte \code{0x00}, four dummy bytes out,
+four bytes of register value back on MISO. The protocol specification says the slave latches the
+register value \textbf{once}, at the end of the command byte. Explain what a driver could observe if
+the slave instead reread the register for each of the four bytes, and why \code{STATUS} in particular
+is the register where that would hurt.
+
+\xpart{d} Count the SCK edges in a whole transaction and, at the maximum of 1~MHz the protocol
+specification allows, work out how long a transaction takes. Compare that with the 20~ns pulse the
+register bank exists to translate. That ratio is the whole argument for this layer, in a single
+number.
+
+\exercise{Reading \file{spi_slave.vhd}}{Reasoning}
+\label{c18:ex:slave}
+You do not write this module, but you have to be able to read it.
+
+\xpart{a} \code{spi_slave} does not use \code{SCK} as a clock. It synchronises it into the 50 MHz
+domain and detects its edges instead. Give two separate reasons, one about metastability
+(\chapref{c4:ch}) and one about what a design with two unrelated clocks costs in an FPGA.
+
+\xpart{b} The record \code{sync_t} has three fields, but only two of them are synchronisation stages.
+Say what the third is for, and why \code{mosi} needs two fields where \code{sclk} and \code{ss} need
+three.
+
+\xpart{c} In the reset branch, \code{sclk_s} is cleared to all zeros and \code{ss_s} to all
+\textbf{ones}. Explain why they differ, and then trace what \code{ss_active} would read during the
+first two clock edges after reset if \code{ss_s} were cleared to zeros with no master connected. This
+is the same rule Exercise~\ref{c4:ex:buttonsync} was built around; say which check in that exercise's
+testbench corresponds to it.
+
+\xpart{d} The SCK edge handling sits inside the \code{else} arm of a test on \code{ss_s.s2}, so a
+deselected slave ignores the SPI lines entirely. Construct the failure that would follow if it did
+not: start from a stray SCK edge while \code{SS} is high, and follow it through to what the
+\emph{next} register write lands on.
+
+\xpart{e} The \code{ss_falling} branch is an \code{elsif} before the SCK branches rather than a
+separate \code{if} beside them. Say at which single clock edge that order matters, and what would be
+wrong with the received bytes if the two branches ran in the reverse order.
+
+\exercise{The capture, and the gap it does not close}{Reasoning}
+\label{c18:ex:capture}
+\xpart{a} When \code{rx_valid} pulses, the bank captures \code{rx_id}, \code{rx_dlc} and
+\code{rx_data} into the \code{RX_*} registers instead of wiring the controller's ports straight into
+the read multiplexer. Explain what a driver reading four separate SPI transactions would see without
+that capture.
+
+\xpart{b} A write to \code{RX_ACK} clears STATUS bit 1 but leaves the \code{RX_*} registers holding
+their contents. Say why that is harmless, and quote the sentence in the register map that makes it so.
+
+\xpart{c} A second frame arrives before the first has been acknowledged. Say exactly what the driver
+observes, and why this is a documented gap inherited from \code{can_controller} (\chapref{c11:ch})
+rather than a shortcoming of the register bank.
+
+\xpart{d} Design, on paper alone, the smallest change to the \emph{register map} that would let a
+driver detect that it had missed a frame. You are not adding a receive queue; you are adding the
+ability to know that one was needed. Say what it costs in hardware, and in which existing register it
+could live without breaking the contract the parallel class is already writing to.

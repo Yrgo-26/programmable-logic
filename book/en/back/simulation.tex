@@ -1,0 +1,245 @@
+% Appendix A, typeset from info/simulation_workflow.md.
+
+\chapter{Simulation with GHDL}
+\label{app:sim}
+
+This is the book's permanent reference for simulation. Every chapter that verifies a module against a
+testbench points here instead of repeating the steps. \Secref{c2:sec:testbenches} is the gentler
+introduction, written for the first time you run a testbench at all; this appendix is the one you come
+back to, and it covers the group project's build in particular.
+
+% ------------------------------------------------------------------------------------------
+\section{Why simulate}
+\label{app:sim:why}
+
+\Chapref{c1:ch} to \ref{c8:ch} verify every design by hand, in CircuitVerse or directly on the
+DE0-CV. That works for small circuits with a handful of inputs a human can toggle.
+
+It stops working as soon as a design's correctness depends on exact timing relationships across
+several cycles between several modules, which is the group project's situation throughout.
+
+\begin{itemize}
+  \item A \textbf{testbench} is a small VHDL program, handed out, that drives a design's inputs and
+    checks its outputs automatically.
+  \item \textbf{GHDL} is the tool that compiles and runs it, entirely in software, with no FPGA
+    involved.
+  \item You are never asked to write the testbench that \emph{verifies} a module you build. Every one
+    of those is handed out; you run it and read what it reports.
+  \item A few exercises invite you to write a short \emph{ad hoc} rig, twenty lines feeding your own
+    bit sequence into a module and \code{report}ing what comes out. That is exploratory, and always
+    optional in form: nothing you are assessed on depends on a testbench you wrote yourself.
+\end{itemize}
+
+% ------------------------------------------------------------------------------------------
+\section{Installing GHDL}
+\label{app:sim:install}
+
+On Ubuntu or WSL:
+
+\begin{shell}
+sudo apt-get update && sudo apt-get install -y ghdl
+\end{shell}
+
+Confirm that it worked:
+
+\begin{shell}
+ghdl --version
+\end{shell}
+
+GHDL 3.x or later. The course's CI runs the same GHDL commands as below, so what passes locally passes
+in CI too.
+
+% ------------------------------------------------------------------------------------------
+\section{Where the files live}
+\label{app:sim:layout}
+
+The group project's VHDL lives in \textbf{two flat directories at the repository root}: the modules
+you write, alongside the testbenches handed out (\file{*_tb.vhd}) that check them. There are no
+per-session directories and nothing to copy between them; \file{can_def.vhd} in particular is written
+\emph{once}, in \chapref{c10:ch}, and every later controller module reads that one file.
+
+The split between the two directories is the protocol boundary: everything in \file{controller/}
+knows something about CAN and nothing about SPI, and everything in \file{bridge/} the other way
+round.
+
+\begin{textdrawing}
+controller/   can_def.vhd            ch 10, yours
+              can_controller.vhd     ch 11, yours (ports only at first, grows through ch 17)
+              meta_prev.vhd          ch 12, yours
+              bit_timer.vhd          ch 12, yours
+              crc15.vhd              ch 13, yours
+              tx_shift_reg.vhd       ch 14, yours
+              rx_shift_reg.vhd       ch 15, yours
+              + the six *_tb.vhd handed out
+
+bridge/       register_bank.vhd      ch 18, yours
+              spi_reg_bridge.vhd     ch 19, yours
+              can_spi_node.vhd       ch 19, yours
+              + spi_slave.vhd, spi_def.vhd, register_bank_tb.vhd,
+                spi_reg_bridge_tb.vhd, handed out
+\end{textdrawing}
+
+The two directories initially contain only the files handed out: eight testbenches, plus
+\file{spi_slave.vhd} and \file{spi_def.vhd}. Every chapter from \chapref{c10:ch} adds a module, with
+the exception that \file{can_controller.vhd} is written early (\chapref{c11:ch}) as an entity with an
+empty architecture and then \emph{grows}: \chapref{c16:ch} fills in its transmit path and
+\chapref{c17:ch} its receive path, without any new file appearing for either. That is why
+\code{can_controller_tb}, the only testbench exercising the whole controller, is gated on more than
+the files existing; \secref{app:sim:make} returns to that.
+
+% ------------------------------------------------------------------------------------------
+\section{The three GHDL steps}
+\label{app:sim:steps}
+
+Every VHDL design (and testbench) goes through the same three steps, in this order:
+
+\begin{enumerate}
+  \item \textbf{Analyse} (\code{ghdl -a}): parses a \file{.vhd} file, checks it for syntax and type
+    errors, and registers its design units (entities, architectures, packages) in a work library.
+    Dependencies have to be analysed before the units that use them: \file{can_def.vhd} before every
+    module that says \code{use work.can_def.all;}, and a module before its own testbench.
+  \item \textbf{Elaborate} (\code{ghdl -e}): resolves a particular top-level entity's complete
+    instantiation hierarchy into something executable.
+  \item \textbf{Run} (\code{ghdl -r}): actually simulates it.
+\end{enumerate}
+
+For a module with a testbench handed out, for example \chapref{c12:ch}'s \code{meta_prev}, which
+reads no package at all and therefore needs only its own two files:
+
+\begin{shell}
+cd controller
+ghdl -a --std=93 meta_prev.vhd meta_prev_tb.vhd
+ghdl -e --std=93 meta_prev_tb
+ghdl -r --std=93 meta_prev_tb --assert-level=error
+\end{shell}
+
+Every other controller module reads \code{can_def}, so the package comes first:
+
+\begin{shell}
+cd controller
+ghdl -a --std=93 can_def.vhd bit_timer.vhd bit_timer_tb.vhd
+ghdl -e --std=93 bit_timer_tb
+ghdl -r --std=93 bit_timer_tb --assert-level=error
+\end{shell}
+
+\file{bridge/} works the same way, with one wrinkle: \code{register_bank} reads \code{can_def}, which
+is a directory away.
+
+\begin{shell}
+cd bridge
+ghdl -a --std=93 ../controller/can_def.vhd register_bank.vhd register_bank_tb.vhd
+ghdl -e --std=93 register_bank_tb
+ghdl -r --std=93 register_bank_tb --assert-level=error
+\end{shell}
+
+\begin{itemize}
+  \item \code{--std=93} selects VHDL-93 throughout the course. Every testbench handed out terminates
+    itself cleanly, by setting a \code{done} signal the clock generation process checks and then
+    calling \code{wait;}, rather than relying on any ``stop the simulator'' procedure from a later
+    standard.
+  \item \code{--assert-level=error} tells GHDL to stop the simulation, with a non-zero exit code, at
+    every failed check reported at level \code{error} or higher. \textbf{Always pass it when you run a
+    project testbench.} The next section says why it is not optional here.
+\end{itemize}
+
+\subsection{Why \code{--assert-level=error} matters, and where it does not}
+\label{app:sim:assert}
+
+GHDL stops on a failed assertion only when the assertion's severity reaches the assert level, and
+GHDL's default level is \code{failure}. The book's two halves sit on opposite sides of that boundary,
+which is worth knowing since it explains why the flag looks optional in part~\ref{part:vhdl} and is
+not in part~\ref{part:can}:
+
+\begin{booktable}{lcLL}
+  & \thead{Level} & \thead{Without the flag} & \thead{With the flag} \\
+  \midrule
+  The chapters' testbenches & \code{failure} & stops, exits 1 & stops, exits 1 \\
+  The project's testbenches & \code{error} & \textbf{prints, carries on, exits 0} & stops, exits 1 \\
+\end{booktable}
+
+For a project testbench, then, omitting the flag turns a real failure into a message scrolling past
+above a zeroed exit code, which is exactly what a ``silent pass'' looks like. Pass it every time and
+the difference stops mattering.
+
+\code{--stop-time=10ms} is worth adding for the same kind of reason. A testbench waiting for an event
+your module never produces does not \emph{fail}; it hangs. The stop time turns that into a run that
+ends. It is not in the commands above because the project's testbenches all bound their own waits, but
+it costs nothing and \secref{c2:sec:testbenches} makes it a habit.
+
+Every testbench reports only pass or fail (and, on failure, the reason), nothing else. A passing run
+ends with a line like this:
+
+\begin{console}
+bit_timer_tb.vhd:148:9:@7312ns:(report note): bit_timer: all checks passed!
+\end{console}
+
+A failing run stops early with an \code{(assertion error)} message naming exactly which check failed
+and why. Read that message; it is written to say specifically what went wrong.
+
+% ------------------------------------------------------------------------------------------
+\section{Building everything at once}
+\label{app:sim:make}
+
+\code{make build-project}, from the repository root, does all of this automatically for every
+testbench whose modules you have written. It is useful for confirming that your whole tree still
+passes, but it is the understanding of the three individual steps above that lets you debug a single
+module quickly during a session.
+
+Since the project is built up one module at a time, \code{make build-project} \textbf{skips} every
+testbench whose modules do not exist yet, instead of failing on them, and says so:
+
+\begin{console}
+==> meta_prev_tb
+controller/meta_prev_tb.vhd:114:9:@311ns:(report note): meta_prev: all checks passed!
+==> bit_timer_tb (skipped: no bit_timer.vhd yet)
+\end{console}
+
+That is what \chapref{c12:ch} looks like halfway through: \file{meta_prev.vhd} written and passing,
+\file{bit_timer.vhd} still to do. \file{can_def.vhd} is not named as missing, since \chapref{c10:ch}
+already wrote it.
+
+Skipped is not failed, deliberately. The project runs over ten sessions and most of the tree is
+missing during most of them; a build glowing red until the last module landed would say nothing useful
+during any of the previous nine. The number of testbenches actually running therefore grows as you go:
+none after \chapref{c10:ch} or \ref{c11:ch}, two after \chapref{c12:ch}, then one more in each of
+\chapref{c13:ch}, \ref{c14:ch} and \ref{c15:ch}, one more in \chapref{c17:ch}, one in
+\chapref{c18:ch}, and the last in \chapref{c19:ch}.
+
+\begin{aside}
+\code{can_controller_tb} is \textbf{gated on more than the file existing}, and that is worth knowing
+before it puzzles you. \file{can_controller.vhd} is written in \chapref{c11:ch} as an entity with an
+empty architecture and grows through \chapref{c16:ch} and \ref{c17:ch}, so from \chapref{c15:ch}
+onwards every file the testbench needs exists while the controller still cannot receive a frame.
+Running it then would fail, twice over: once in \chapref{c15:ch}, and again in \chapref{c16:ch}, which
+can transmit but not yet receive. Since the testbench works by having one node receive another's
+frame, what it actually requires is a \textbf{receive path}, and that comes in \chapref{c17:ch}. The
+build script therefore looks inside your \file{can_controller.vhd} for \chapref{c17:ch}'s
+receive-side CRC gating and reports:
+
+\begin{console}
+==> can_controller_tb (skipped: can_controller.vhd has no receive path yet;
+    set CI_BUILD_ALL=1 to run it anyway)
+\end{console}
+
+That check is a heuristic rather than a real dependency, and it has a failure mode worth naming: if
+your \chapref{c17:ch} is correct but spells those expressions differently from the chapter, you get
+this skip message when the testbench should have run. Nothing is broken; run
+\code{CI_BUILD_ALL=1 make build-project} to force every testbench regardless. The check cannot fail the
+other way round, since the marker cannot appear before a receive path does.
+\end{aside}
+
+% ------------------------------------------------------------------------------------------
+\section{Cleaning up}
+\label{app:sim:clean}
+
+GHDL's analysis step creates \file{work-obj93.cf} and similar files in the directory you ran them
+from. The build script keeps a \file{work/} directory of its own instead, so those files do not
+litter the source tree. If you run the three steps by hand in \file{controller/} or \file{bridge/},
+clean up with:
+
+\begin{shell}
+make clean
+\end{shell}
+
+which removes the generated \file{work/} directories, any stray \file{work-obj*.cf}, and the waveform
+and executable files a hand run leaves behind.

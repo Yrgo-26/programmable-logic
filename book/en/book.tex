@@ -1,0 +1,54 @@
+% Programmable Logic - the book.
+%
+% The English edition of "Programmerbar logik", one directory below it, sharing the course
+% material it is typeset from. Built with LuaLaTeX; see the Makefile. The design is in
+% vhdlbook.sty, the front matter in front/, each chapter in chapters/NN/, one file per section,
+% mirroring the appendices of the lecture it is typeset from, and the back matter in back/: the
+% two toolchain references from info/, the group project's specification, the two documents that
+% form the contract with the driver course, and a closing note on where to read next.
+\documentclass[10pt, twoside, openright]{book}
+\usepackage{vhdlbook}
+
+\begin{document}
+
+\frontmatter
+\input{front/title}
+\tableofcontents
+\input{front/preface}
+
+\mainmatter
+\part{Digital design in VHDL}
+\label{part:vhdl}
+\input{chapters/01/chapter}
+\input{chapters/02/chapter}
+\input{chapters/03/chapter}
+\input{chapters/04/chapter}
+\input{chapters/05/chapter}
+\input{chapters/06/chapter}
+\input{chapters/07/chapter}
+\input{chapters/08/chapter}
+\input{chapters/09/chapter}
+
+\part{The group project: a CAN node}
+\label{part:can}
+\input{chapters/10/chapter}
+\input{chapters/11/chapter}
+\input{chapters/12/chapter}
+\input{chapters/13/chapter}
+\input{chapters/14/chapter}
+\input{chapters/15/chapter}
+\input{chapters/16/chapter}
+\input{chapters/17/chapter}
+\input{chapters/18/chapter}
+\input{chapters/19/chapter}
+\input{chapters/20/chapter}
+
+\appendix
+\addtocontents{toc}{\protect\addvspace{3ex}}
+\input{back/simulation}
+\input{back/quartus}
+\input{back/project}
+\input{back/protocol}
+\input{back/reading}
+
+\end{document}

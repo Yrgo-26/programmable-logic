@@ -1,0 +1,160 @@
+% Avsnitt 18.11, ur lectures/L18/appendix/b_exercises.md.
+
+\section{Övningar}
+\label{c18:sec:exercises}
+
+\begin{aside}
+Skriv din egen \file{register_bank.vhd} utifrån \secref{c18:sec:iface} till \ref{c18:sec:write}; den
+utdelade testbänken, körd enligt bilaga~\ref{app:sim}, är kontrollen av att den beter sig korrekt.
+Övning~\ref{c18:ex:waveform} och \ref{c18:ex:slave} handlar om \code{spi_slave.vhd}, som delas ut i
+stället för att skrivas \textemdash{} den läser du, och \chapref{c20:ch} förväntar sig att du kan
+den.
+
+Den auktoritativa källan för varje registernummer nedan är bilaga~\ref{app:protocol}. Där en övning
+och en specifikation är oense vinner specifikationen, och det är övningen som är buggen.
+\end{aside}
+
+\exercise{\code{register_bank}}{VHDL}
+\label{c18:ex:bank}
+Skriv din egen \file{register_bank.vhd} utifrån kapitlet. Verifiera den:
+
+\begin{shell}
+cd bridge
+ghdl -a --std=93 ../controller/can_def.vhd register_bank.vhd register_bank_tb.vhd
+ghdl -e --std=93 register_bank_tb
+ghdl -r --std=93 register_bank_tb --assert-level=error
+\end{shell}
+
+Om en kontroll fallerar, läs assertion-meddelandet; vart och ett av de elva fallen säger vad ett
+haveri i just det fallet betyder.
+
+\exercise{De tre STATUS-bitarna}{Resonemang}
+\label{c18:ex:status}
+\xpart{a} Ur reset läser STATUS \code{0x00000001}. Säg vilken bit det är och varför resetvärdet är
+\code{'1'} och inte \code{'0'}. Beskriv sedan vad en drivrutins \code{send()} skulle göra, i all
+evighet, om det vore \code{'0'}.
+
+\xpart{b} Bit 2 låser en \textbf{stigande flank} hos kontrollerns \code{error}, inte dess nivå. Anta
+att den i stället låste nivån. Skriv ner den följd av drivrutinsoperationer \textemdash{} polla,
+nollställ, polla \textemdash{} som då skulle bete sig annorlunda, och säg vad drivrutinens författare
+skulle dra för slutsats om vad som var trasigt.
+
+\xpart{c} Bit 1 sätts av \code{rx_valid} och nollställs av en skrivning till \code{RX_ACK}. Bit 0:s
+huvudsakliga sättvillkor är \code{tx_done}, och den nollställs av en skrivning till \code{TX_SEND}.
+Det ena av de paren har sina villkor för att sätta och nollställa i den ”naturliga” ordningen, och
+det andra är omvänt. Säg vilket som är vilket, och varför det omvända ändå är rätt.
+
+\xpart{d} \Secref{c18:sec:status} ger en ordningsregel: kontrollerhändelser tillämpas \textbf{efter}
+bryggans skrivningar i den klockade processen. Konstruera den enda klockflank där den regeln ändrar
+utfallet, namnge båda händelserna, och säg vilken av de två möjliga lösningarna som kan låsa systemet
+och vilken som inte kan det.
+
+\xpart{e} Bit 0 har \emph{tre} sättvillkor, och ett av dem är en stigande flank hos \code{error} medan
+bit 0 redan är låg. Förklara varför det villkoret inte behöver veta något om huruvida kontrollern
+sände eller tog emot \textemdash{} vad är det i en nods beteende som gör att ”error steg medan vi var
+upptagna” betyder ”en sändning tog just slut”?
+
+\xpart{f} Ta bort det villkoret ur din bank och kör om testbänken. Vilket fall fallerar, och vilken
+konsekvens säger dess meddelande att det skulle ha fått? Förklara sedan varför det här är skydd i
+flera lager snarare än dubbelarbete, givet att \chapref{c17:ch} redan låter kontrollern pulsa
+\code{tx_done} vid en avbruten sändning. (Vem skriver \code{can_controller}? Vem skrev testbänken som
+skulle fånga det?)
+
+\xpart{g} \code{TX_ABORT} är den tredje vägen, och till skillnad från de andra två motsvarar den inte
+något hårdvaran gjorde \textemdash{} det är drivrutinen som går förbi banken. Säg vad den \emph{inte}
+gör: namnge minst två saker du kanske skulle vänta dig att ett register som heter \code{TX_ABORT} når
+fram till, och förklara varför den inte når någondera. (Ledtråden är \code{can_controller}s portlista,
+som fastställdes i \chapref{c11:ch}.)
+
+\exercise{\code{TX_SEND} och pulsdisciplinen}{Simulering}
+\label{c18:ex:txsend}
+\xpart{a} En skrivning av \code{0x1} till \code{TX_SEND} höjer \code{tx_req} under exakt en cykel.
+Säg exakt vilken cykel, i förhållande till den klockflank som bar \code{reg_write}, och vilka två
+saker \code{register_bank_tb} kontrollerar om den.
+
+\xpart{b} Gör nu sönder det med flit. Ändra din \code{TX_SEND}-gren så att \code{tx_req} blir en
+\textbf{nivå}: sätt den vid en accepterad skrivning och nollställ den först när \code{tx_done}
+kommer. Kör om \code{register_bank_tb}. Vilken kontroll fallerar först, och vad säger dess meddelande?
+
+\xpart{c} Din trasiga version från \textbf{b)} skulle fortfarande \emph{se} korrekt ut på ett
+oscilloskop som tittar på en enda ram. Beskriv, med \secref{c16:sec:roles}:s regel för när
+\code{can_controller} agerar på \code{tx_req}, vad den gör vid den andra ramen och varje ram
+därefter. Säg sedan varför det här är en bugg som simulering fångar lätt och ett test på bänken inte
+gör.
+
+\xpart{d} En skrivning till \code{TX_SEND} medan STATUS bit 0 är låg kastas helt \textemdash{} ingen
+puls, ingen tillståndsändring. En annan design skulle i stället kunna köa den och avfyra när
+kontrollern rapporterar redo. Ge ett konkret argument för regeln att kasta den, givet att drivrutinen
+kan polla STATUS. Ställ tillbaka modulen som den var.
+
+\exercise{Att läsa av en SPI-transaktion ur vågformen}{Resonemang}
+\label{c18:ex:waveform}
+Det här kapitlet heter ”från vågformen” av ett skäl: \chapref{c20:ch} kan mycket väl räcka dig en och
+fråga vad den betyder. Läge 0 rakt igenom \textemdash{} SCK vilar lågt, MOSI samplas på
+\textbf{stigande} flank, MISO ändras på \textbf{fallande} flank, MSB först.
+
+\xpart{a} Rita för hand hela fembytestransaktionen som skriver \code{0x00000001} till
+\code{TX_SEND}. Räkna ut kommandobyten ur formatet i bilaga~\ref{app:protocol} i stället för att
+kopiera den: bit 7 är skrivbiten, bit 6--4 är reserverade, bit 3--0 är registerindexet, och
+\code{TX_SEND} är index 5. Märk upp \code{SS}, \code{SCK} och \code{MOSI}, och markera de 40 stigande
+flankerna i grupper om åtta.
+
+\xpart{b} Markera på samma ritning var mastern inte får släppa \code{SS}, och vad slaven måste göra
+om den ändå gör det. Återge regeln ur protokollspecifikationens avsnitt om avbrott med egna ord.
+
+\xpart{c} En läsning av \code{STATUS} är spegelbilden: kommandobyte \code{0x00}, fyra dummybytes ut,
+fyra bytes registervärde tillbaka på MISO. Protokollspecifikationen säger att slaven låser
+registervärdet \textbf{en gång}, vid slutet av kommandobyten. Förklara vad en drivrutin skulle kunna
+observera om slaven i stället läste registret på nytt för var och en av de fyra bytesen, och varför
+just \code{STATUS} är det register där det skulle göra ont.
+
+\xpart{d} Räkna SCK-flankerna i en hel transaktion och räkna, vid det maximum på 1~MHz som
+protokollspecifikationen tillåter, ut hur lång tid en transaktion tar. Jämför det med den 20~ns långa
+puls som registerbanken finns till för att översätta. Det förhållandet är hela argumentet för det här
+lagret, i ett enda tal.
+
+\exercise{Att läsa \code{spi_slave.vhd}}{Resonemang}
+\label{c18:ex:slave}
+Du skriver inte den här modulen, men du måste kunna läsa den.
+
+\xpart{a} \code{spi_slave} använder inte \code{SCK} som klocka. Den synkroniserar in den i
+50 MHz-domänen och detekterar dess flanker i stället. Ge två skilda skäl, ett om metastabilitet
+(\chapref{c4:ch}) och ett om vad en design med två orelaterade klockor kostar i en FPGA.
+
+\xpart{b} Posten \code{sync_t} har tre fält, men bara två av dem är synkroniseringssteg. Säg vad det
+tredje är till för, och varför \code{mosi} behöver två fält där \code{sclk} och \code{ss} behöver
+tre.
+
+\xpart{c} I resetgrenen nollställs \code{sclk_s} till idel nollor och \code{ss_s} till idel
+\textbf{ettor}. Förklara varför de skiljer sig, och följ sedan vad \code{ss_active} skulle läsa under
+de två första klockflankerna efter reset om \code{ss_s} nollställdes till nollor utan någon master
+inkopplad. Det här är samma regel som Övning~\ref{c4:ex:buttonsync} byggdes kring; säg vilken kontroll
+i den övningens testbänk som motsvarar den.
+
+\xpart{d} Hanteringen av SCK-flanker ligger inuti \code{else}-armen i ett test på \code{ss_s.s2}, så
+en avvald slav ignorerar SPI-ledningarna helt. Konstruera felet som skulle följa om den inte gjorde
+det: utgå från en vilsen SCK-flank medan \code{SS} är hög, och följ den fram till vad \emph{nästa}
+registerskrivning hamnar på.
+
+\xpart{e} Grenen \code{ss_falling} är ett \code{elsif} före SCK-grenarna i stället för ett separat
+\code{if} bredvid dem. Säg vid vilken enda klockflank den ordningen spelar roll, och vad som skulle
+vara fel med de mottagna bytesen om de två grenarna kördes i omvänd ordning.
+
+\exercise{Infångningen, och gapet den inte täpper till}{Resonemang}
+\label{c18:ex:capture}
+\xpart{a} När \code{rx_valid} pulsar fångar banken in \code{rx_id}, \code{rx_dlc} och \code{rx_data}
+i \code{RX_*}-registren i stället för att koppla kontrollerns portar rakt in i läsmultiplexern.
+Förklara vad en drivrutin som läser fyra separata SPI-transaktioner skulle se utan den infångningen.
+
+\xpart{b} En skrivning till \code{RX_ACK} nollställer STATUS bit 1 men lämnar \code{RX_*}-registren
+med sitt innehåll kvar. Säg varför det är ofarligt, och citera meningen i registerkartan som gör det
+så.
+
+\xpart{c} En andra ram anländer innan den första har kvitterats. Säg exakt vad drivrutinen
+observerar, och varför det här är ett dokumenterat gap som ärvts från \code{can_controller}
+(\chapref{c11:ch}) snarare än en brist hos registerbanken.
+
+\xpart{d} Konstruera, enbart på papper, den minsta ändring i \emph{registerkartan} som skulle låta en
+drivrutin upptäcka att den missat en ram. Du lägger inte till någon mottagningskö; du lägger till
+möjligheten att veta att en behövdes. Säg vad det kostar i hårdvara, och i vilket befintligt register
+det skulle kunna bo utan att bryta det kontrakt parallellklassen redan skriver mot.

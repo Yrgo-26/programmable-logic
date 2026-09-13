@@ -1,0 +1,73 @@
+% Half-title, title and copyright pages.
+%
+% \bookversion is the release the PDF was built for: `make VERSION=book-v2` passes it in, and the
+% release workflow passes the tag. Without it the title page carries only the date of the build.
+\providecommand{\bookversion}{}
+\newcommand{\bookdate}{\number\day\space\ifcase\month\or January\or February\or March\or April\or
+  May\or June\or July\or August\or September\or October\or November\or December\fi\space
+  \number\year}
+\newcommand{\bookedition}{\ifx\bookversion\empty\else\bookversion\,·\,\fi\bookdate}
+
+\thispagestyle{empty}
+\vspace*{2.2in}
+\begin{flushright}
+  {\Large\bfseries Programmable Logic}
+\end{flushright}
+\cleardoublepage
+
+\thispagestyle{empty}
+\vspace*{1.1in}
+\begin{flushleft}
+  {\color{accent}\rule{0.9in}{2.5pt}}\par\vspace{1.4ex}
+  {\fontsize{32}{38}\selectfont\bfseries Programmable\\[0.15ex] Logic\par}
+  \vspace{2.2ex}
+  {\Large\itshape Digital design in VHDL, from a gate\\network to a CAN node in an FPGA\par}
+  \vspace{1.2in}
+  {\large Erik Pihl\par}
+  \vfill
+  {\small\scshape\lsstyle qrtech academy\par}
+  \vspace{0.6ex}
+  {\small\color{muted} \bookedition\par}
+\end{flushleft}
+\newpage
+
+\thispagestyle{empty}
+\vspace*{\fill}
+{\small
+\noindent\textit{Programmable Logic}\\
+Copyright \textcopyright\ 2026 QRTECH Academy.
+
+\medskip
+\noindent This is the English edition of \textit{Programmerbar logik}. The book is typeset from the
+course's own material: twenty lectures with their appendices, their exercises, the worked examples,
+the group project's specification and the two documents that form the contract with the driver
+course. The code in the book, and all the code in the accompanying course repository, may be used
+under the MIT licence, which is the repository's licence:
+
+\medskip
+\noindent\url{https://opensource.org/licenses/MIT}
+
+\medskip
+\noindent The course repository holds the lecture material, the worked examples, every testbench
+handed out, the build scripts and the Python sources behind the figures. Every path the book refers
+to, for example \file{lectures/L06/serial_rx8/serial_rx8.vhd}, is a path in that repository.
+
+\medskip
+\noindent The VHDL code in the book is VHDL-93, simulated with GHDL and synthesised with Quartus
+Prime Lite. The C++ code in \secref{c10:sec:framing} is C++17, compiled with GCC. DE0-CV,
+Cyclone~V, Quartus, USB-Blaster, AVR and AVR32DB28 are trademarks belonging to their respective
+owners. CAN is standardised in ISO~11898; the controller this book builds is a deliberately
+simplified teaching design and no certifiable implementation, and \secref{c19:sec:gaps} lists the
+differences.
+
+\medskip
+\noindent Text and figures are in English. So are all the code, all the comments in the code and
+all the output from tools and testbenches, exactly as in the course material.
+
+\medskip
+\noindent Typeset in TeX Gyre Pagella and DejaVu Sans Mono with Lua\LaTeX.
+
+\medskip
+\noindent\textcolor{muted}{This edition: \bookedition.}
+\par}
+\cleardoublepage

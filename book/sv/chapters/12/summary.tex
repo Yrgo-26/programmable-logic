@@ -1,0 +1,46 @@
+% Avsnitt 12.3, ur lectures/L12/README.md.
+
+\section{Sammanfattning}
+\label{c12:sec:review}
+
+\needspace{6\baselineskip}
+\subsection*{Det här ska du kunna nu}
+\begin{itemize}
+  \item Implementera en breddgenerisk dubbelvippsynkroniserare, och förklara varför den inte behöver
+    någon reset och vad en breddning \emph{inte} löser.
+  \item Implementera en räknarbaserad bittimer som producerar rätt tajmade \code{sample}- och
+    \code{bit_done}-pulser, med en \code{resync}-ingång.
+  \item Förklara vad \code{resync} gör och varför \code{sample} kommer före \code{bit_done}.
+  \item Läsa ett spår på tickvis nivå över en bitperiod och för varje tick säga vad varje utgång bör
+    vara.
+  \item Köra en utdelad testbänk hela vägen och spåra ett fel tillbaka till den tick i designen som
+    orsakade det.
+\end{itemize}
+
+\needspace{6\baselineskip}
+\subsection*{Frågor att testa dig själv med}
+\begin{enumerate}
+  \item Varför behöver en synkroniserare två vippor snarare än en, och varför behöver den ingen
+    reset?
+  \item En breddad \code{meta_prev} tar bort metastabilitet men inte skevhet mellan bitarna. Vad är
+    skillnaden, och när slutar en synkroniserare vara rätt verktyg?
+  \item Vad gör \code{bit_timer.resync}, och när används den?
+  \item Varför kommer \code{sample} före \code{bit_done} snarare än tvärtom?
+  \item \code{bit_timer} håller sin räknare medan \code{enable = '0'}. Vilket tillstånd i
+    \code{can_controller} är det enda som någonsin skulle vilja ha det, och varför visar det sig inte
+    vilja det heller?
+  \item När en utdelad testbänk misslyckas, vad skriver GHDL ut, och hur hittar du vilken kontroll
+    som fallerade?
+\end{enumerate}
+
+\needspace{6\baselineskip}
+\subsection*{Riktvärde}
+\code{meta_prev} och \code{bit_timer} bör vara klara och mergade inom ungefär en vecka. Båda är
+korta, och de är de enda modulerna som ingen annan modul kan ersätta. Det här är också de första
+riktiga Pull Requesterna: använd granskningen, och kontrollera portordning, att testbänken passerar,
+och att inga konstanter är hårdkodade förbi \code{can_def}.
+
+\needspace{6\baselineskip}
+\subsection*{Blicken framåt}
+\Chapref{c13:ch} bygger \code{crc15}, en bitseriell checksummemotor som både genererar och
+kontrollerar en CRC med samma logik och utan lägesomkoppling.

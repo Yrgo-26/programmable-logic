@@ -1,0 +1,115 @@
+% Section 17.8, from lectures/L17/appendix/b_exercises.md.
+
+\section{Exercises}
+\label{c17:sec:exercises}
+
+\begin{aside}
+Once your receive logic is finished, \file{controller/can_controller_tb.vhd} verifies transmission and
+reception together, and \code{make build-project} stops skipping it: all six testbenches in
+\file{controller/} run from here on. The two in \file{bridge/} go on being skipped until
+\chapref{c18:ch} and \ref{c19:ch} write the modules they exercise.
+
+If it is still reported as skipped after you believe the receive path is finished, read the message
+before your design. The build settles the matter by looking for \chapref{c17:ch}'s receive-side CRC
+gating inside \file{can_controller.vhd}, so a correct controller spelling the two expressions
+differently is skipped rather than run. \code{CI_BUILD_ALL=1 make build-project} forces it, and
+appendix~\ref{app:sim} explains why the check works that way.
+\end{aside}
+
+\exercise{Reasoning about the RX-side timing fix}{Reasoning}
+\label{c17:ex:timing}
+\xpart{a} \Secref{c17:sec:preempt} shows that \code{rx_shift_reg} has to be enabled
+\emph{combinationally}, during the \code{STATE_LOAD_*} state itself, instead of waiting until
+\code{state} visibly becomes the shift state. Explain in your own words why first waiting for the
+state transition to complete would make \code{rx_shift_reg} miss the very sample that triggered the
+wait in the first place.
+
+\xpart{b} \code{STATE_CRC_LO_WAIT} waits for \code{bt_bit_done}, not for \code{bt_sample}, unlike
+every wait at a group boundary in the design (the \code{STATE_LOAD_*} states). Explain in your own
+words why that transition in particular has to align with a \emph{bit period boundary} and not with a
+sample point. Which other states share the \code{bt_bit_done} trigger, and what do they have in
+common with it?
+
+\xpart{c} Suppose (hypothetically) that \code{STATE_CRC_WAIT} also waited for \code{bt_sample} in the
+RX role, on top of \code{STATE_LOAD_CRC_HI} doing the same immediately afterwards. Explain what would
+go wrong, and why it would show up not so much as an outright failure as a receiving node ending up
+one bit period further behind a transmitting node than it should be.
+
+\exercise{Arbitration by hand}{Reasoning}
+\label{c17:ex:arbhand}
+Two nodes request transmission on the same cycle: node A with ID \code{0x2A0}, node B with ID
+\code{0x2C0}.
+
+\xpart{a} Write both IDs in binary (11 bits, MSB first) and mark the first bit position where they
+differ.
+
+\xpart{b} Using \secref{c10:sec:arbitration}'s arbitration rule (dominant \code{0} wins), say which
+node wins and at which bit the loser drops out.
+
+\xpart{c} The losing node detects its loss with
+\code{bt_sample = '1' and txsr_tx_bit = '1' and rx_bus_s2 = '0'}. For the loser at that bit, say what
+each of the three terms evaluates to and why the condition fires.
+
+\xpart{d} The loser sets \code{error <= '1'} and drops back to \code{STATE_IDLE} while the winner is
+still driving the bus. \code{error} is cleared in \code{STATE_START}. Explain why the loser's
+\code{error} would become unobservable to a caller if \code{STATE_IDLE} entered a reception on a
+dominant \emph{level}.
+
+\xpart{e} A tempting fix is to look for the \emph{edge} from recessive to dominant instead, in line
+with how \secref{c10:sec:frameformat} describes SOF. Show that that does not really work either,
+using the bit stuffing rule: what does the transmitter insert after five dominant bits in a row, and
+what does the bus do on the bit after that? Roughly how far into the winner's frame does the loser get
+before the edge test fires anyway?
+
+\xpart{f} State the rule the design actually uses (\secref{c16:sec:roles}). Two facts make it hold up;
+give both: what the bit stuffing rule bounds inside the stuffed region, and what the unstuffed tail
+adds on top of that which pushes the threshold to eleven. Then say why the idle counter has to be
+cleared to \textbf{full} and not to empty when the node comes out of reset.
+
+\exercise{The SOF bit nobody keeps}{Reasoning}
+\label{c17:ex:sof}
+\code{STATE_SOF} enables \code{rx_shift_reg} for one bit and then throws the value away.
+\Secref{c17:sec:states} explains why; this exercise is about seeing the failure with your own eyes.
+
+\xpart{a} Take ID \code{0x000}, DLC \code{0}. Write out the bits a transmitter puts on the wire from
+SOF through the end of the control field, using \secref{c16:sec:fields}'s field table, and mark where
+\code{tx_shift_reg} inserts every stuff bit. Remember that the run counter counts SOF.
+
+\xpart{b} Now do the same as seen by a receiver that skipped SOF, so that its run counter is one
+dominant bit behind. Mark where \emph{it} expects stuff bits. Line the two up against each other and
+state the first bit position where they disagree.
+
+\xpart{c} At that position the transmitter sends a stuff bit and the receiver expects none. What does
+the receiver do with it, and what does that make of every bit after it?
+
+\xpart{d} Repeat \textbf{a)} and \textbf{b)} for ID \code{0x123}, the ID \code{can_controller_tb} uses
+in case 1, and confirm that the two counters agree all the way. State the general rule for which
+identifiers break: what has to be true of the first identifier bits, and how many of the 2048 standard
+IDs satisfy it?
+
+\xpart{e} Case 2 in \code{can_controller_tb} \emph{does} send ID \code{0x000}. Explain why the bug
+would still not show up there, and say what you would add to the testbench to catch it.
+
+\exercise{Receiving a frame with no data}{Reasoning}
+\label{c17:ex:dlc0}
+Walk through the \textbf{receive role} over a complete frame with \code{DLC = 0}, using the per-state
+table in \secref{c17:sec:states}. A receiver does not know the DLC until it has decoded the control
+field, so this is also the path that tests whether your transition in \code{STATE_CTRL} is right.
+
+\xpart{a} List every state the node passes through, from \code{STATE_IDLE} back to
+\code{STATE_IDLE}. Mark the one transition that differs from a frame carrying data, and say what makes
+it fire.
+
+\xpart{b} For every \code{STATE_LOAD_*} state in your list, state the \code{rxsr_bit_count} the
+combinational network pre-empts, and say which \code{bt_sample} that pre-emption has to be in place
+for: the one triggering the transition out of \code{STATE_LOAD_*}, or the next one.
+
+\xpart{c} Suppose the pre-emption were one cycle too late everywhere, that is, that \code{rxsr_enable}
+went high only once \code{state} visibly read the shift state. How many real bits would
+\code{rx_shift_reg} have missed for a frame with \code{DLC = 0} by the time the node reaches
+\code{STATE_CRC_LO_WAIT}, and what would \code{crc_valid} read there?
+
+\xpart{d} Your answer to \textbf{c)} is a CRC error reported many bit periods after the actual
+mistake. Relate that to \secref{c17:sec:preempt}'s claim that a one-cycle misalignment accumulates
+into a silent misalignment that only shows up later, far from its cause, and say why that makes this
+kind of bug expensive to debug from the testbench's output alone.

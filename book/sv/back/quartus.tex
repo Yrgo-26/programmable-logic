@@ -1,0 +1,317 @@
+% Bilaga B, satt ur info/quartus_workflow.md.
+
+\chapter{Quartus Prime Lite och DE0-CV}
+\label{app:quartus}
+
+Det här är bokens verktygsreferens för syntes och hårdvara. Genom \chapref{c1:ch} till \ref{c18:ch}
+är den \textbf{lärarvänd}: Quartus- och DE0-CV-arbetet demonstreras från katedern, med början i
+bromsassistenten i \chapref{c1:ch}, och ingen deltagare behöver Quartus eller ett eget kort.
+
+\begin{aside}
+\Chapref{c19:ch} är undantaget, och det är det som räknas. Bring-upen demonstreras först och lämnas
+sedan över: varje grupp syntetiserar och programmerar sin egen \code{can_spi_node} och demonstrerar
+sin egen tvånodslänk. Läs därför \secref{app:quartus:project} till \ref{app:quartus:program} som
+deltagarvända \textemdash{} du behöver \secref{app:quartus:project} och \ref{app:quartus:sources} för
+att skapa projektet och lägga till källfilerna, och \secref{app:quartus:compile} är kompileringen som
+producerar den \file{.sof} \secref{app:quartus:program} programmerar \textemdash{} och läs
+\secref{app:quartus:linux} \emph{innan} du kopplar in något, eftersom det är avsnittet som avgör om
+Programmer över huvud taget kan se kortet.
+\end{aside}
+
+Ingenting som \textbf{bedöms} kräver hårdvaran (bilaga~\ref{app:project}). Bring-upen bedöms på
+simuleringen bakom den, inte på om ledningen fungerade just den dagen. Allt som beskrivs här slutar
+på riktig FPGA-hårdvara, verifierad för hand. Det är ett annat lager än övningarna, som du verifierar
+på din egen laptop med en självkontrollerande testbänk under GHDL (bilaga~\ref{app:sim}).
+
+% ------------------------------------------------------------------------------------------
+\section{Vad som behövs}
+\label{app:quartus:need}
+
+\begin{itemize}
+  \item \textbf{Quartus Prime Lite} (gratisutgåvan): tillverkarens FPGA-verktyg, som täcker syntes,
+    placering och routning (”fitting”), och generering av programmeringsfil.
+  \item \textbf{Enhetsstöd för Cyclone V}: ett separat tilläggspaket. DE0-CV:s FPGA,
+    \code{5CEBA4F23C7N}, är en Cyclone V-krets, och Quartus installerar inte varje familjs stöd som
+    förval.
+  \item \textbf{USB-Blaster-drivrutin}: DE0-CV programmeras över USB med USB-Blaster-protokollet.
+    Drivrutinen installeras oftast tillsammans med Quartus, men behöver ibland en manuell knuff
+    (\secref{app:quartus:trouble}).
+  \item Ett \textbf{Terasic DE0-CV}-kort och en USB-kabel.
+\end{itemize}
+
+Quartus Prime Lite finns för både Windows och Linux, och konstruktionsstegen nedan är desamma
+oavsett värdoperativsystem. \textbf{Att få kortet synligt för Programmer är det inte}, och det är där
+varje värdspecifikt problem i den här kursen bor: \secref{app:quartus:linux} täcker Linux och WSL,
+\secref{app:quartus:trouble} täcker Windows.
+
+\begin{warning}
+En rekommendation direkt, eftersom den sparar en kväll: kursens GHDL-verktygskedja kör på WSL eller
+Ubuntu, men \textbf{WSL2 kan inte se en USB-enhet alls utan extra arbete}
+(\secref{app:quartus:linux}). Är du på Windows, installera Quartus nativt på Windows och behåll WSL
+för GHDL. De två behöver aldrig se varandra; de delar bara \file{.vhd}-filerna, som ligger i
+Windows-filsystemet hur som helst.
+\end{warning}
+
+% ------------------------------------------------------------------------------------------
+\section{Att installera Quartus Prime Lite}
+\label{app:quartus:install}
+
+\begin{enumerate}
+  \item Hämta \textbf{Quartus Prime Lite Edition} från tillverkarens nedladdningsportal. Sök efter
+    ”Quartus Prime Lite download”: Intels FPGA-verksamhet blev \textbf{Altera} igen 2024, så sidorna
+    har flyttat och äldre djuplänkar ruttnar. Det som är stabilt att söka på är produktnamnet, inte
+    URL:en.
+    \begin{itemize}
+      \item Välj \textbf{Lite}-utgåvan, som är den fria och inte behöver någon licensfil. Standard
+        och Pro täcker inte Cyclone V gratis.
+      \item Vilken någorlunda färsk Lite-utgåva som helst fungerar; kursen beror inte på en viss
+        delversion.
+      \item Välj Windows- eller Linux-installeraren efter var du tänker köra den, och läs varningen
+        ovan om du är på Windows med WSL.
+    \end{itemize}
+  \item Se under installationen till att \textbf{Cyclone V} är valt bland enhetsfamiljerna. Är
+    Quartus redan installerat utan det, lägg till Cyclone V-stödet efteråt, antingen genom att köra
+    installeraren igen eller via Quartus egen ”Additional Software”-installerare.
+  \item När DE0-CV-kortet ansluts över USB första gången ska Windows upptäcka USB-Blastern och
+    antingen installera drivrutinen automatiskt eller be dig peka ut Quartus egna drivrutinsfiler
+    (vanligen under Quartus installationskatalog). Hittar Windows ingen drivrutin automatiskt, se
+    \secref{app:quartus:trouble}.
+\end{enumerate}
+
+\subsection{Två fallgropar i Windows 11}
+\label{app:quartus:win11}
+
+Ett par av Windows 11:s säkerhetsförval kan störa installationen, eller programmeringen av kortet
+senare:
+
+\begin{itemize}
+  \item \textbf{Om installeraren inte ens öppnar sig:} leta upp \code{Smart App Control} i Windows
+    Säkerhet (sök efter det i startmenyn), stäng av det och starta om.
+  \item \textbf{Om allt installeras snyggt men kortet ändå inte går att programmera}
+    (\secref{app:quartus:program}): gå till \code{Windows Security → Device security → Core
+    isolation} och slå av \textbf{Memory integrity}.
+\end{itemize}
+
+\lecfig[0.78]{info/images/mem_integrity.png}{\code{Memory integrity} under Windows 11:s
+inställningar för kärnisolering.}{app:quartus:fig:memint}
+
+Ingendera inställningen rör Quartus i sig; båda är allmänna härdningsförval i Windows 11 som råkar
+vara strikta nog att störa USB-åtkomst på drivrutinsnivå.
+
+% ------------------------------------------------------------------------------------------
+\section{Att skapa ett nytt projekt}
+\label{app:quartus:project}
+
+\begin{enumerate}
+  \item Öppna Quartus och starta \textbf{New Project Wizard} (\code{File → New Project Wizard}).
+  \item Välj en arbetskatalog och ett projektnamn. Quartus använder projektnamnet som förvalt namn
+    på toppnivåentiteten också, så låt det matcha din VHDL-entitets namn för att slippa skriva över
+    det senare (för \file{or_gate.vhd}: döp projektet till \code{or_gate}).
+  \item Välj \textbf{Empty Project} som projekttyp. Kursen använder varken Quartus IP-katalog eller
+    någon projektmall.
+  \item Hoppa över att lägga till filer i det här steget (\secref{app:quartus:sources} täcker det),
+    om du inte redan vet exakt vilken fil det gäller; endera går bra.
+  \item På sidan för enhetsval, välj exakt den krets som sitter på DE0-CV: filtrera på familjen
+    \textbf{Cyclone V}, och leta sedan upp och välj enheten \code{5CEBA4F23C7N}.
+  \item Hoppa över sidan för EDA-verktyg (lämna den på ”none”); kursen kör sina simuleringar direkt i
+    GHDL i stället för genom Quartus.
+  \item Avsluta guiden.
+\end{enumerate}
+
+% ------------------------------------------------------------------------------------------
+\section{Att lägga till sin VHDL}
+\label{app:quartus:sources}
+
+\begin{itemize}
+  \item Lägg till källfilen: \code{Project → Add/Remove Files in Project...}, bläddra fram din
+    \file{.vhd}-fil och lägg till den.
+  \item Har konstruktionen mer än en fil (en toppnivåentitet plus en eller flera delkomponenter),
+    lägg till dem allihop. Quartus löser upp instansieringshierarkin automatiskt så länge varje fil
+    finns i projektet.
+  \item Bekräfta att toppnivåentiteten är rätt satt: \code{Project → Set as Top-Level Entity}, med
+    din huvudfil markerad. För en enfilskonstruktion sker det automatiskt.
+\end{itemize}
+
+% ------------------------------------------------------------------------------------------
+\section{Att tilldela pinnar i Pin Planner}
+\label{app:quartus:pins}
+
+Varje port i din entitet behöver en fysisk pinne på FPGA:n innan Quartus kan producera en fungerande
+programmeringsfil; annars finns det ingen väg från konstruktionens portar till en verklig
+strömbrytare eller lysdiod på kortet.
+
+\begin{enumerate}
+  \item Kör \code{Processing → Start → Start Analysis \& Elaboration} först, och öppna sedan Pin
+    Planner via \code{Assignments → Pin Planner}. I ett alldeles nytt projekt är portlistan tom
+    tills Quartus har elaborerat konstruktionen och känner till dess portar.
+  \item Var och en av entitetens portar dyker upp som en rad. Fyll i kolumnen \textbf{Location} med
+    pinnbeteckningen för den strömbrytare eller lysdiod du vill använda.
+  \item \textbf{En strömbrytare eller en lysdiod är fritt val. En klocka är det inte.} För
+    \code{SW}, \code{KEY} och \code{LEDR} går det bra att ta vilka som helst som är bekväma:
+    konstruktionen bryr sig inte om vilken strömbrytare som driver vilken ingång, bara att varje
+    port når en. \code{CLOCK_50} är en bestämd pad på kretsen och går inte att flytta. På DE0-CV är
+    den \textbf{\code{PIN_M9}}, oscillatorn på 50 MHz. Varje konstruktion från \chapref{c3:ch} och
+    framåt är klockad, så från det kapitlet är det här det enda pinnummer som är värt att kunna utan
+    att slå upp. Bekräfta det mot ditt eget korts filer (steg 4) innan du förlitar dig på det.
+  \item \textbf{Skriv inte av pinntabellen för hand.} Tio \code{LEDR}-pinnar avskrivna ur en PDF är
+    tio chanser att kasta om två siffror, och felet det ger är det otäckaste i
+    \secref{app:quartus:trouble}: en ren kompilering som beter sig obegripligt.
+    \begin{itemize}
+      \item DE0-CV:s system-CD innehåller en \file{DE0_CV.qsf} där varje kortpinne redan är namngiven
+        och tilldelad.
+      \item \code{Assignments → Import Assignments…}, peka ut den filen, och varje
+        \code{CLOCK_50}-, \code{SW[n]}-, \code{KEY[n]}-, \code{LEDR[n]}- och
+        \code{GPIO_0[n]}-tilldelning landar på en gång.
+      \item Döp din entitets portar så att de matchar de signalnamnen så återstår ingenting att
+        tilldela. Det är därför \chapref{c19:ch}:s bring-up döper sina portar till \code{CLOCK_50},
+        \code{KEY}, \code{SW}, \code{LEDR} och \code{GPIO_0} i stället för till något snyggare.
+      \item Pin Planner (och kortets pinntabeller i användarmanualen) är fortfarande vägen att
+        kontrollera en enskild pinne, eller tilldela en som \file{.qsf}-filen inte täcker.
+    \end{itemize}
+  \item Sätt kolumnen \textbf{I/O Standard} om Quartus inte härleder ett vettigt förval för pinnen du
+    valde. DE0-CV:s allmänna I/O är 3,3 V LVTTL/LVCMOS. Att importera kortets \file{.qsf} (steg 4)
+    sätter det här också, vilket är ännu ett skäl att föredra den vägen.
+  \item Spara tilldelningarna (de skrivs in i projektets \file{.qsf}-fil). Varje ändring här kräver
+    omkompilering (\secref{app:quartus:compile}) innan den får effekt; Quartus lappar inte i
+    efterhand en \file{.sof} som kompilerades före ändringen.
+\end{enumerate}
+
+\subsection{En klocka behöver ett tidskrav också}
+\label{app:quartus:sdc}
+
+Att tilldela \code{CLOCK_50} en pinne talar om för Quartus \emph{var} klockan kommer in. Det säger
+inte hur fort den går, och tills du säger det har tidsanalysen ingenting att kontrollera mot och
+rapporterar en obegränsad konstruktion. Lägg till en \file{.sdc}-fil i projektet med en rad:
+
+\begin{console}
+create_clock -name CLOCK_50 -period 20.000 [get_ports CLOCK_50]
+\end{console}
+
+20 ns är 50 MHz. Med den på plats blir tidsanalysen i \code{Processing → Start Compilation}
+meningsfull och rapporten ger dig ett verkligt Fmax, vilket är siffran \secref{c5:sec:fmax}
+skickar dig hit för att läsa. Utan den saknas Fmax, eller är inte att lita på.
+
+% ------------------------------------------------------------------------------------------
+\section{Att kompilera konstruktionen}
+\label{app:quartus:compile}
+
+\code{Processing → Start Compilation} (eller ▶ i verktygsraden) kör hela flödet: analys och syntes,
+placering och routning, tidsanalys, och hopsättning till en programmeringsfil.
+
+Läs kompileringsrapporten när den är klar, i synnerhet \textbf{Warnings}: en oansluten port, en
+ofullständig känslighetslista, eller en latch som härletts där du menade kombinatorik dyker alla upp
+där som varningar snarare än fel. De är lätta att missa om man bara kontrollerar att bocken blev
+grön.
+
+En lyckad kompilering producerar en \file{.sof}-fil (SRAM Object File) i projektets
+\file{output_files}-katalog. Det är den \secref{app:quartus:program} laddar ner till kortet. Den är
+flyktig: den konfigurerar FPGA:ns SRAM direkt och försvinner när strömmen bryts. Kursen har inget
+steg som bränner konfigurationen permanent.
+
+% ------------------------------------------------------------------------------------------
+\section{Att programmera DE0-CV}
+\label{app:quartus:program}
+
+\begin{enumerate}
+  \item Anslut DE0-CV till datorn över USB och slå på det.
+  \item Öppna Programmer: \code{Tools → Programmer}.
+  \item Välj USB-Blastern under \textbf{Hardware Setup}. Den ska hittas automatiskt om drivrutinen
+    installerades rätt (annars \secref{app:quartus:trouble}).
+  \item Se till att \file{.sof}-filen från \secref{app:quartus:compile} står i listan och att dess
+    kryssruta \textbf{Program/Configure} är ibockad. Står den inte där, använd \code{Auto Detect}
+    eller lägg till filen för hand.
+  \item Klicka \textbf{Start}. Förloppsindikatorn ska nå 100 \% och rapportera att det gick bra.
+  \item Testa konstruktionen direkt på kortet: växla de strömbrytare du tilldelade i
+    \secref{app:quartus:pins} och bekräfta att lysdioden följer entitetens sanningstabell.
+\end{enumerate}
+
+% ------------------------------------------------------------------------------------------
+\section{Felsökning}
+\label{app:quartus:trouble}
+
+\begin{description}[style=unboxed,leftmargin=0pt,itemsep=0.8ex]
+  \item[USB-Blastern syns inte i Programmer.] Kontrollera Enhetshanteraren i Windows efter en okänd
+    enhet eller en med drivrutinsfel, och peka manuellt ut USB-Blaster-drivrutinen under Quartus
+    installationskatalog.
+  \item[Kortet går inte att programmera, utan något tydligt fel.] Slå av \code{Memory integrity}
+    under \code{Core isolation} på Windows 11 (\secref{app:quartus:win11}). Det är den enskilt
+    vanligaste orsaken när drivrutinen väl är installerad.
+  \item[Installeraren startar inte.] Kontrollera \code{Smart App Control} under Windows Säkerhet
+    (\secref{app:quartus:win11}).
+  \item[Kompileringen går igenom men konstruktionen beter sig fel på kortet.] Kontrollera
+    tilldelningarna i Pin Planner (\secref{app:quartus:pins}) \emph{innan} du misstänker din VHDL.
+    En omkastad eller saknad pinntilldelning ger ett kort som kompilerar rent och beter sig
+    obegripligt, eftersom det inte är kopplat som du tror.
+  \item[Fitter rapporterar otilldelade pinnar som fel.] Vissa projektinställningar behandlar det som
+    fatalt snarare än som en varning. Tilldela antingen varje port i Pin Planner, eller, för en
+    kvarglömd oanvänd port tidigt i utvecklingen, säg åt Quartus hur resten ska behandlas:
+    \code{Assignments → Device → Device and Pin Options… → Unused Pins}. För DE0-CV är
+    \textbf{”As input tri-stated (with weak pull-up)”} det säkra värdet. Förvalet i vissa flöden
+    driver oanvända pinnar låga, vilket på ett kort där pinnar når kontaktlister och kringkretsar är
+    ett sätt att slåss med en annan drivare. Lämna inte portar tyst otilldelade och förvänta dig att
+    Quartus gissar.
+\end{description}
+
+% ------------------------------------------------------------------------------------------
+\section{Att programmera från Linux och från WSL}
+\label{app:quartus:linux}
+
+\Secref{app:quartus:trouble} är Windows. På Linux är drivrutinen ingen drivrutin alls: Programmer
+talar med USB-Blastern genom libusb, och behöver rättighet att göra det.
+
+\subsection*{Linux, nativt}
+Ur lådan visar Programmer ingen hårdvara, eftersom enhetsnoden ägs av root. Ge den en udev-regel med
+raderna nedan i \file{/etc/udev/rules.d/51-usbblaster.rules}:
+
+\begin{console}
+# Altera USB-Blaster
+SUBSYSTEM=="usb", ATTR{idVendor}=="09fb", ATTR{idProduct}=="6001", MODE="0666"
+SUBSYSTEM=="usb", ATTR{idVendor}=="09fb", ATTR{idProduct}=="6002", MODE="0666"
+SUBSYSTEM=="usb", ATTR{idVendor}=="09fb", ATTR{idProduct}=="6003", MODE="0666"
+# USB-Blaster II
+SUBSYSTEM=="usb", ATTR{idVendor}=="09fb", ATTR{idProduct}=="6010", MODE="0666"
+SUBSYSTEM=="usb", ATTR{idVendor}=="09fb", ATTR{idProduct}=="6810", MODE="0666"
+\end{console}
+
+Ladda om reglerna och dra sedan ur och i kortet igen:
+
+\begin{shell}
+sudo udevadm control --reload-rules && sudo udevadm trigger
+\end{shell}
+
+Quartus cachar sin hårdvarulista i en bakgrundsdemon, så om Programmer fortfarande inte visar något,
+starta om den:
+
+\begin{shell}
+killall jtagd 2> /dev/null
+jtagconfig            # ska nu lista USB-Blastern och kedjan av enheter
+\end{shell}
+
+\code{jtagconfig} är den snabbaste vägen att skilja ett rättighetsproblem från ett kabelproblem:
+listar den kortet är hårdvaran i sin ordning och problemet sitter inuti Quartus; gör den det inte,
+stanna och lös det innan du rör Programmer.
+
+\subsection*{WSL2}
+Det här är fallet kursens egen verktygskedja går rakt in i, så det är värt att säga rent ut:
+\textbf{WSL2 har ingen USB-genomkoppling.} Kortet är osynligt för en WSL2-installation hur många
+udev-regler du än skriver, eftersom kärnan aldrig ser enheten. Det finns ingen inställning att ändra.
+Två vägar ut:
+
+\begin{itemize}
+  \item \textbf{Kör Quartus nativt på Windows} (rekommenderas). Behåll WSL för GHDL, som inte behöver
+    någon hårdvara alls. Dina \file{.vhd}-filer ligger i Windows-filsystemet och båda verktygen läser
+    dem. Det är vägen kursen förutsätter, och den med minst rörliga delar.
+  \item \textbf{Koppla vidare enheten med \code{usbipd-win}}, om du specifikt vill ha Quartus inuti
+    WSL. Från en PowerShell som administratör på Windows-sidan:
+
+\begin{console}
+winget install usbipd
+usbipd list                      # hitta USB-Blasterns BUSID
+usbipd bind   --busid <BUSID>    # en gång per enhet, består
+usbipd attach --wsl --busid <BUSID>
+\end{console}
+
+    Enheten dyker då upp inuti WSL och udev-regeln ovan gäller. Den måste kopplas om efter varje
+    urdragning och varje omstart av WSL, och Quartus grafiska gränssnitt behöver dessutom WSLg eller
+    en X-server. Görbart, men tre saker till som kan gå fel på en redovisningsdag.
+\end{itemize}

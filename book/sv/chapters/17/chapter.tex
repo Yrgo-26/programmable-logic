@@ -1,0 +1,29 @@
+% Kapitel 17, satt ur lectures/L17: Appendix A blir avsnitt 17.1-17.6, Appendix B övningarna.
+
+\chapter{CAN-kontrollern II: mottagning och arbitrering}
+\label{c17:ch}
+
+{\large\itshape Att färdigställa \code{can_controller}. Efter det här kapitlet är CAN-halvan av
+projektet klar.\par}
+
+\begin{chapterbox}{I det här kapitlet}
+\begin{itemize}
+  \item Mottagarrollen: tajmingen för \code{rx_shift_reg}s enable, och den enda cykelns
+    föregripande.
+  \item Att sätta ihop en mottagen ram igen, och att mata \code{crc15} på mottagarsidan.
+  \item Ett rent bord mellan ramar, och varför båda skiftregistren hålls i reset medan bussen är
+    ledig.
+  \item Detektering av förlorad arbitrering, kontrollerad bit för bit över arbitreringsfältet.
+  \item Att köra \code{can_controller_tb} hela vägen, sändning och mottagning tillsammans.
+\end{itemize}
+\end{chapterbox}
+
+\Chapref{c16:ch} byggde sändvägen. Det här kapitlet färdigställer \code{can_controller} med
+\code{role = '0'}-vägen (mottagning) och den arbitreringslogik som avgör vilken av två tävlande
+sändare som får fortsätta. Ramuppställningen, tillståndssekvensen och gruppstorlekarna per fält är
+desamma som i \chapref{c16:ch}; mottagarsidan läser bara tillbaka varje fält i stället för att driva
+det.
+
+\input{chapters/17/receive}
+\input{chapters/17/summary}
+\input{chapters/17/exercises}

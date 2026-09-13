@@ -1,0 +1,90 @@
+% Section 14.8, from lectures/L14/appendix/b_exercises.md.
+
+\section{Exercises}
+\label{c14:sec:exercises}
+
+\begin{aside}
+These exercises consolidate the chapter. Design your own \file{tx_shift_reg.vhd} from the
+specification in \secref{c14:sec:iface} to \ref{c14:sec:trace}; the testbench handed out, run per
+appendix~\ref{app:sim}, is the check that it behaves correctly.
+\end{aside}
+
+\exercise{\code{tx_shift_reg}}{VHDL}
+\label{c14:ex:txsr}
+Write your own \file{tx_shift_reg.vhd} from the chapter. Verify it:
+
+\begin{shell}
+cd controller
+ghdl -a --std=93 can_def.vhd tx_shift_reg.vhd tx_shift_reg_tb.vhd
+ghdl -e --std=93 tx_shift_reg_tb
+ghdl -r --std=93 tx_shift_reg_tb --assert-level=error
+\end{shell}
+
+If a check fails, read the assertion message; it names exactly which shift it concerns and what was
+expected.
+
+\exercise{Trace a stuffed sequence by hand, then in simulation}{Simulation}
+\label{c14:ex:trace}
+\xpart{a} Trace by hand \code{tx_shift_reg} loaded with \code{data = "11100000"},
+\code{bit_count = 8}, starting at a group boundary where the previous group's last bit was \code{0}
+with a run length of 3 (that is, \code{consecutive = 3} and \code{last_bit = '0'} going into the
+group). Write out, bit by bit: what is presented at \code{load}, and then at every subsequent
+\code{shift}, with every inserted stuff bit marked and stating which shift raises \code{done}.
+
+\xpart{b} Confirm your hand trace in simulation: write a short testbench (or reuse the structure of
+\file{tx_shift_reg_tb.vhd}) that preloads the same starting conditions with run length 3, then loads
+\code{"11100000"} and at every shift \code{assert}s \code{tx_bit}, \code{stuff} and \code{done}
+against the values you predicted (or \code{report}s them so that you can read them). Does its
+pass-or-fail outcome agree with your hand trace?
+
+\exercise{The one-bit group that still owes a stuff bit}{Simulation}
+\label{c14:ex:onebit}
+\Secref{c14:sec:timing}'s last point names an edge case without working it through: \emph{if
+\code{bit_count = 1} and that single bit triggers a stuff bit, \code{done} still waits for the stuff
+bit to be sent first.} That is not hypothetical; \code{can_controller} loads one-bit groups (SOF) and
+four-bit groups (the ID's lower half plus RTR), so a group really can end mid-run.
+
+Set it up exactly as tests 2 and 3 in \code{tx_shift_reg_tb} do, with no reset in between: load
+\code{"00001111"} with \code{bit_count = 8} and shift it out completely, so that the run counter
+stands at four \code{'1'}s in a row. Then load a \textbf{one-bit group} whose single bit is also
+\code{'1'} (\code{data = "1-------"}, \code{bit_count = 1}).
+
+\xpart{a} Trace what happens, presentation by presentation: what \code{load} puts on \code{tx_bit},
+what the run counter reaches, and then what every following \code{shift} does. Mark which
+presentation carries the stuff bit and which raises \code{done}.
+
+\xpart{b} How many \code{shift} pulses does this one-bit group consume in total, and how many would
+it have consumed if the run counter had instead stood at zero? Say where the difference comes from.
+
+\xpart{c} Suppose \code{done} had been allowed to pulse as soon as the group's single real bit was
+presented, with no regard for the pending stuff bit. \code{can_controller} would then load the next
+group during the next bit period. Describe exactly what the receiving node would then see on the
+wire, and which of \code{rx_shift_reg}'s outputs would eventually report it (\chapref{c15:ch}).
+
+\xpart{d} Confirm your walkthrough in simulation, by extending the pattern from test 2 and test 3 in
+\file{tx_shift_reg_tb.vhd} with this one-bit group as a fourth case.
+
+\exercise{Where \code{track_run} is called from}{Simulation}
+\label{c14:ex:trackrun}
+\Secref{c14:sub:tracker} puts the run counter in a procedure and is explicit about where that
+procedure may be called from: from a branch placing a bit, never from the process's top level. Both
+halves of that rule are worth breaking deliberately, in a scratch copy of your module.
+
+\xpart{a} Move the call \code{track_run(data(7));} out of the \code{load} branch, so that \code{load}
+latches the group and presents its first bit but the counter never sees that bit. Predict what the
+run counter then shows for the rest of the frame, and which of the testbench's three tests fails
+first. Run it.
+
+\xpart{b} Now put a single \code{track_run(tx_bit);} at the top of the
+\code{elsif (rising_edge(clock))} branch, above the defaults, and remove all three calls inside the
+branches. \code{tx_bit} is an \code{out} port, so start by saying why that does not even compile, and
+then repeat the experiment with an internal copy of the transmitted bit in its place. With
+\code{TICKS_PER_BIT} set to 50, how many times does the counter now run per CAN bit, and what does
+\code{consecutive} do on the second clock edge of the very first bit period?
+
+\xpart{c} \Secref{c14:sub:tracker} also says that the procedure has to be declared \emph{inside} the
+process rather than in the architecture. Move it out to the architecture's declarative part,
+unchanged, and analyse the file. It does not compile; read the four errors before you go on. Then
+make an architecture-level version that \emph{does} compile, with identical behaviour and a passing
+testbench. Compare the two call sites and say what the second version costs, and which new question
+it raises that the inside-the-process version cannot raise.

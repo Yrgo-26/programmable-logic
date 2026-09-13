@@ -1,0 +1,145 @@
+% Section 11.8, from lectures/L11/appendix/b_exercises.md.
+
+\section{Exercises}
+\label{c11:sec:exercises}
+
+\begin{aside}
+These exercises consolidate \secref{c11:sec:arch} to \ref{c11:sec:regmap}: the block architecture,
+the interface it lands in, and the register map it maps onto. The \code{can_def} package they all
+rest on was written in \chapref{c10:ch}.
+
+Exercise~\ref{c11:ex:reason} and \ref{c11:ex:groups} are done on paper. Exercise~\ref{c11:ex:entity}
+and \ref{c11:ex:iface} are done at the keyboard, against the
+\file{controller/can_controller.vhd} written during this session. \code{meta_prev} and its exercises
+belong to \chapref{c12:ch}, together with \code{bit_timer}.
+\end{aside}
+
+% ------------------------------------------------------------------------------------------
+\exerciseset{Reasoning about the architecture}
+
+\exercise{Who owns what}{Reasoning}
+\label{c11:ex:reason}
+\xpart{a} \code{tx_shift_reg} and \code{rx_shift_reg} do not know whether the bits they shift belong
+to the ID, the control field, a data byte or the CRC value. Explain, with reference to the block
+diagram, \emph{which} block does know that, and how it can reuse the same shift register for all of
+it instead of needing five different ones.
+
+\xpart{b} \code{crc15} is fed one bit at a time and told when to stop by whichever of
+\code{tx_shift_reg} and \code{rx_shift_reg} is active at the time (via their outputs \code{stuff} and
+\code{real_bit_valid} respectively, which gate \code{crc15.enable}). Why does \code{crc15} have to be
+told to \emph{skip} stuff bits in particular, instead of simply being fed every bit that turns up on
+the wire?
+
+\xpart{c} \code{can_controller} instantiates the four other blocks inside itself, so from outside the
+whole controller is a single component. Suppose someone proposes factoring the arbitration-loss check
+out into a block of its own \emph{beside} \code{can_controller}. Explain what that block would need
+access to, and why that makes the solution worse than leaving the check where it is.
+
+\exercise{Splitting a different frame into groups}{Reasoning}
+\label{c11:ex:groups}
+\Secref{c11:sec:trace} follows a frame with DLC \code{2} through the blocks and arrives at it
+reaching the bus as eight loads of \code{tx_shift_reg}, 50 bits together, plus a 10-bit tail driven
+directly.
+
+\xpart{a} Redo that split for a frame with ID \code{0x7A0} and DLC \code{5}. State the list of groups
+(every group's contents and bit count, in transmission order), the total number of bits in the
+stuffed region, and the total number of bits in the frame before any stuff bit is inserted.
+
+\xpart{b} How many groups would a frame with DLC \code{0} need, and which entries from your list in
+\textbf{a)} disappear? What does that tell you about how \code{can_controller} has to be structured
+around the data field, compared with the identifier or the CRC?
+
+\xpart{c} Four of the groups in your list are narrower than 8 bits, and \code{tx_shift_reg}'s data
+input is always a whole byte. Name them, and say what \code{can_controller} has to pass along with
+the data for the register to send the right number of bits. (You do not need \chapref{c14:ch}'s
+answer to \emph{how}; the question is what information the register cannot work out on its own.)
+
+\xpart{d} None of your group counts is the number of bits actually driven out on the wire. Explain
+what is missing, why it cannot be known from the DLC alone, and which block is responsible for it.
+
+% ------------------------------------------------------------------------------------------
+\exerciseset{The entity and the interface}
+
+\exercise{The entity, checked}{Simulation}
+\label{c11:ex:entity}
+\xpart{a} Run \code{make build-project} from the root of the group's repository, exactly as in
+\chapref{c10:ch}. Two of your own files should now be reported, alongside the two \file{bridge/}
+files handed out, and every testbench should still be skipped:
+
+\begin{console}
+--> controller/can_def.vhd analyzes cleanly
+--> controller/can_controller.vhd analyzes cleanly
+--> bridge/spi_def.vhd analyzes cleanly
+--> bridge/spi_slave.vhd analyzes cleanly
+
+==> meta_prev_tb (skipped: no meta_prev.vhd yet)
+==> bit_timer_tb (skipped: no bit_timer.vhd yet)
+==> crc15_tb (skipped: no crc15.vhd yet)
+==> tx_shift_reg_tb (skipped: no tx_shift_reg.vhd yet)
+==> rx_shift_reg_tb (skipped: no rx_shift_reg.vhd yet)
+==> can_controller_tb (skipped: no meta_prev.vhd bit_timer.vhd crc15.vhd tx_shift_reg.vhd rx_shift_reg.vhd yet)
+==> register_bank_tb (skipped: no register_bank.vhd yet)
+==> spi_reg_bridge_tb (skipped: no spi_reg_bridge.vhd yet)
+
+0 testbench(es) run, 8 skipped.
+\end{console}
+
+The second line is the whole point of this exercise: an entity with an empty architecture is still a
+complete, valid design unit. Now go beyond what \code{make build-project} does and elaborate it by
+hand, which is the second of GHDL's three steps:
+
+\begin{shell}
+cd controller
+ghdl -a --std=93 can_def.vhd can_controller.vhd
+ghdl -e --std=93 can_controller
+\end{shell}
+
+It elaborates cleanly, with no subblocks inside it and nothing to simulate. There is no third step to
+run here, since a design with no behaviour has nothing to check and no testbench of its own;
+\code{can_controller_tb} drives the \emph{finished} controller and is waiting for \chapref{c17:ch}.
+It is in \chapref{c12:ch} that the third step turns up, with the first module that has a testbench of
+its own.
+
+\xpart{b} \code{can_controller_tb} is already in \file{controller/}, and it needs seven modules, two
+of which you have written. Say which five are missing and in which chapter each one arrives. Why is
+it better for the build to skip that testbench than for it to try and fail?
+
+\xpart{c} \emph{Optional, and only if you have Quartus Prime Lite installed.} Take the same file
+through Quartus, following appendix~\ref{app:quartus}: New Project Wizard, device
+\code{5CEBA4F23C7N}, add \file{can_def.vhd} and \file{can_controller.vhd}, set
+\code{can_controller} as the top-level entity, and compile.
+
+It passes. Read the warnings rather than skipping them, and say which of them are unavoidable for an
+architecture that drives nothing at all. Then find the pin count in the fitter's report and compare
+it with what a DE0-CV actually offers a human being: ten switches, four buttons, ten LEDs. Write down
+what you think has to sit between this entity and the board, and keep the note; \chapref{c18:ch} and
+\ref{c19:ch} build exactly that, and call it \code{register_bank} and \code{can_spi_node}.
+
+Nothing later in the book depends on this, and \chapref{c12:ch} to \ref{c19:ch} need only GHDL. It is
+here because that pin count alone is the whole argument for the two layers above the controller,
+seven chapters in advance, and reading it off a real fitter report makes it yours rather than a
+number the book asserts.
+
+\xpart{d} Temporarily swap \code{tx_bus} and \code{bus_en} in the entity's port list, so that they
+stand in reverse order, and rerun \code{make build-project}. Both are outputs of type
+\code{std_logic}, so the file still analyses cleanly. Explain why nothing catches it now, in which
+chapter it would first do damage, and what that damage would look like on the bus (the clue is
+\secref{c11:sec:interface}'s section on the bus side's five ports). Then say why a mix-up between two
+ports of the same type is harder to find than a misspelled name would have been, given that
+everything in this book is bound positionally. Swap them back.
+
+\exercise{Reading the interface}{Reasoning}
+\label{c11:ex:iface}
+\xpart{a} A caller wants to send a frame with ID \code{0x123}, DLC \code{3} and the data bytes
+\code{AA BB CC}. List every port it has to drive, and the value of each. \code{tx_data} is
+\code{data_t}, 64 bits wide, and byte 0 sits in the most significant bits: give it in full.
+
+\xpart{b} The same caller now wants to know whether the frame was sent. It has three status ports at
+its disposal (\code{tx_done}, \code{rx_valid}, \code{error}). Which does it poll, and what is the one
+thing it can \emph{never} find out from them, however often it polls? (The clue is
+\secref{c11:sec:interface}'s remark about what \code{error} means; the reason is
+\secref{c10:sec:frameformat}'s ACK field.)
+
+\xpart{c} \code{error} stays high until the next frame begins, while \code{tx_done} and
+\code{rx_valid} are one-cycle pulses. Explain what would go wrong for the parallel class's C++ driver
+if \code{error} were a pulse like the other two.

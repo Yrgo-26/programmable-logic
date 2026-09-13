@@ -1,0 +1,78 @@
+% Section 15.8, from lectures/L15/appendix/b_exercises.md.
+
+\section{Exercises}
+\label{c15:sec:exercises}
+
+\begin{aside}
+These exercises consolidate the chapter. Design your own \file{rx_shift_reg.vhd} from the
+specification in \secref{c15:sec:iface} to \ref{c15:sec:trace}; the testbench handed out, run per
+appendix~\ref{app:sim}, is the check that it behaves correctly.
+\end{aside}
+
+\exercise{\code{rx_shift_reg}}{VHDL}
+\label{c15:ex:rxsr}
+Write your own \file{rx_shift_reg.vhd} from the chapter. Verify it:
+
+\begin{shell}
+cd controller
+ghdl -a --std=93 can_def.vhd rx_shift_reg.vhd rx_shift_reg_tb.vhd
+ghdl -e --std=93 rx_shift_reg_tb
+ghdl -r --std=93 rx_shift_reg_tb --assert-level=error
+\end{shell}
+
+If a check fails, read the assertion message; it names exactly which sample it concerns and what was
+expected.
+
+\exercise{A deliberate stuffing violation}{Simulation}
+\label{c15:ex:violation}
+\xpart{a} Construct (on paper) a 6-bit sequence on the wire that constitutes a genuine violation of
+the bit stuffing rule: five identical real bits in a row, followed by a sixth identical bit where a
+stuff bit should have broken the run.
+
+\xpart{b} Feed your sequence from \textbf{a)} into \code{rx_shift_reg} (either by extending
+\file{rx_shift_reg_tb.vhd} or by writing a short new testbench) and confirm that \code{stuff_error}
+pulses on exactly the sixth bit, not earlier.
+
+\xpart{c} \code{rx_shift_reg} makes no attempt to recover or resynchronise after a
+\code{stuff_error}; it merely reports it for one cycle and goes on accumulating as if nothing had
+happened. Explain, in one or two sentences, why that is an acceptable design here, given how
+\code{can_controller} (\chapref{c17:ch}) will react to it.
+
+\exercise{The right-justification, and what sits above it}{Simulation}
+\label{c15:ex:justify}
+\Secref{c15:sec:iface} says that a completed group ends up \textbf{right-justified in its lowest
+\code{bit_count} bits}, and that \code{can_controller} relies on that when it slices up reconstructed
+fields. Tests 3 and 4 in the testbench handed out exercise it: a 6-bit group, then a 3-bit group, with
+no reset in between, with \code{bit_count} changed between the groups in exactly the way
+\code{can_controller} does between one field and the next.
+
+Assume a just-cleared \code{rx_shift_reg}, \code{enable = '1'} and no stuff bits anywhere (no run ever
+reaches five). The process in \secref{c15:sec:process} shifts every accepted bit into the register's
+least significant end and never clears the register between groups; assume yours does the same. The
+testbench handed out does not actually require that, and part \textbf{d)} returns to why.
+
+\xpart{a} With \code{bit_count = 6}, feed in the six bits \code{0 1 0 1 0 1} (in that order, one per
+\code{sample}). Write out all eight bits of \code{data} when \code{valid} pulses. What is in
+\code{data(7 downto 6)}, and why?
+
+\xpart{b} Set \code{bit_count = 3} without clearing, and feed in \code{0 1 1}. Write out all eight
+bits of \code{data} when \code{valid} pulses again. What is now in \code{data(7 downto 3)}?
+
+\xpart{c} Your answer to \textbf{b)} shows that the bits above \code{bit_count} hold residue from the
+\emph{previous} group. Explain why that is harmless here, and what \code{can_controller} has to do
+(and must never do) when it reads \code{rxsr_data} for a field narrower than 8 bits.
+
+\xpart{d} \code{rx_shift_reg} holds two rather different kinds of state: the shift register
+accumulating the current group, and the run counter (\code{consecutive}, \code{last_bit}) deciding
+where stuff bits belong. Clearing them is not equally safe in both cases.
+\begin{itemize}
+  \item Suppose the module cleared its \textbf{shift register} at every \code{valid}. Which of your
+    answers above would change, and would any field ever be \emph{misread} as a result? Note that the
+    testbench handed out checks only the lowest \code{bit_count} bits of \code{data}, so both designs
+    pass it.
+  \item Suppose it cleared the \textbf{run counter} at the same moment. Name what breaks, and say
+    which rule from \chapref{c14:ch} that mirrors.
+\end{itemize}
+
+The difference between the two answers is why \secref{c15:sub:defaults} says the run counter is
+cleared only by reset and says nothing at all about the shift register.

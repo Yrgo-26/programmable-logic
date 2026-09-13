@@ -1,0 +1,33 @@
+% Kapitel 8, satt ur lectures/L08: Appendix A blir avsnitt 8.1-8.6, och Appendix B övningarna.
+
+\chapter{Tillståndsmaskiner}
+\label{c8:ch}
+
+{\large\itshape Först konstruerade för hand, sedan uttryckta i språket.\par}
+
+\begin{chapterbox}{I det här kapitlet}
+\begin{itemize}
+  \item Ändliga tillståndsmaskiner: tillstånd, övergångar, ingångar och utgångar.
+  \item Att konstruera en Mooremaskin för hand: tillståndsdiagram, tillståndstabell,
+    Karnaughhärledd logik.
+  \item Tillståndskodning som ett designbeslut, och varför den genomarbetade maskinen använder
+    Graykod.
+  \item Samma maskin i VHDL: en uppräkningstyp och \code{case}-mönstret för övergångar.
+  \item Varför Moore är standardvalet här och i CAN-projektet.
+  \item \code{fsm_led}: knappar som växlar lysdioden mellan släckt, blinkande och tänd.
+\end{itemize}
+\end{chapterbox}
+
+Det här är det sista kapitlet i bokens första del, och dess byggblock är det sista som saknas.
+Utdelningen ligger i att se de två halvorna mot varandra: varje rad du härleder för hand i
+tillståndstabellen i \secref{c8:sec:byhand} blir en gren i ett \code{case} i \secref{c8:sec:vhdl},
+och att se den överensstämmelsen är värt mer än något av stegen för sig.
+
+Mealymaskiner (\secref{c8:sec:mealy}) läses i stället för att presenteras, och det spelar större
+roll än det kan se ut. Allt som presenteras är Moore, och Moore är standardvalet både här och i
+CAN-projektet. \Secref{c8:sec:mealy} är där du får veta vad alternativet kostar och köper, vilket är
+enda sättet för det standardvalet att bli ett val i stället för en vana.
+
+\input{chapters/08/fsm}
+\input{chapters/08/summary}
+\input{chapters/08/exercises}

@@ -1,0 +1,137 @@
+% Section 12.1, from lectures/L12/appendix/a_meta_prev.md.
+
+\section{Designing \code{meta_prev}}
+\label{c12:sec:metaprev}
+
+\code{rx_bus} arrives from a transceiver on another chip, and \code{reset_n} from a button or a
+supervisor, so nothing in this FPGA has ever controlled either. Sampling one of them straight into
+\code{clock}'s domain can leave a flip-flop metastable, which is the problem \chapref{c4:ch} solved
+with two flip-flops in series. You have built this module before, as \code{sync} in
+Exercise~\ref{c5:ex:sync}; this is the same idea, written once, properly, to be kept in this design.
+
+\Secref{c11:sec:sync} already settled \emph{that} the controller synchronises its own two
+asynchronous inputs, and why: they are asynchronous whoever instantiates \code{can_controller}, so
+the controller owns them and an integrator connects both straight to pins without thinking about it
+further. This section builds the module that does it. It is the only module in the whole book that
+contains nothing at all about CAN, which is exactly why it is reusable enough to end up with three
+instances by \chapref{c19:ch}.
+
+\subsection{Interface}
+\label{c12:sub:mpiface}
+
+\modulefig[0.62]{lectures/L12/appendix/images/meta_prev.png}
+
+\begin{booktable}{@{}p{5em}p{4.4em}p{11.4em}L@{}}
+  \thead{Port / generic} & \thead{Dir.} & \thead{Type} & \thead{Meaning} \\
+  \midrule
+  \code{WIDTH} & generic & \code{natural := 1} & Number of independent bits to synchronise. \\
+  \code{clock} & in & \code{std_logic} & 50 MHz system clock, the domain being crossed \emph{into}. \\
+  \code{async_in} & in & \code{std_logic_vector(WIDTH-1 downto 0)} & The asynchronous input or
+    inputs. \\
+  \code{sync_out} & out & \code{std_logic_vector(WIDTH-1 downto 0)} & The same bits, safe to use in
+    this domain. \\
+\end{booktable}
+
+\code{meta_prev_tb} binds its ports positionally, as everything in this book does, so the order and
+the types above have to match exactly. \textbf{The generic map is positional too}, so \code{WIDTH} has
+to be the module's only generic (or at least its first). The testbench instantiates the module twice,
+once with the default width and once with width 4, so that both the default and the generic get
+exercised. It is also the only module here that reads no package at all, so it needs neither
+\code{can_def} nor anything else.
+
+\subsection{Behaviour}
+\label{c12:sub:mpbehav}
+
+Two flip-flops per bit, in series, on \code{clock}'s rising edge: the first can go metastable, and
+the second gives it a whole clock period to settle before anything downstream sees it.
+\code{sync_out} therefore follows \code{async_in} after exactly two rising edges.
+
+Three things differ from the \code{sync} module you wrote in Exercise~\ref{c5:ex:sync}, and all three
+are deliberate:
+\begin{itemize}
+  \item \textbf{No reset port.} \code{sync} took a \code{reset_s2_n}. This one takes none: after two
+    clock edges a synchroniser holds real data regardless of what it started from. Dropping the port
+    is also what lets the \emph{same} module synchronise a reset, without the circularity of a reset
+    synchroniser needing a synchronised reset. The testbench clocks the initial level through before
+    checking anything, for exactly that reason.
+  \item \textbf{No \code{PRESET} generic.} \Chapref{c5:ch} argued at length that the safe reset value
+    depends on what the signal \emph{means}, and that only the instantiating design knows that. That
+    argument was about the two cycles after reset, and it does not survive dropping the reset:
+    without a reset branch there is no value to preset. What replaces it is the caller's obligation
+    to ignore \code{sync_out} during the first two edges, which is the same obligation expressed
+    differently.
+  \item \textbf{\code{SIZE} is called \code{WIDTH}.} The same generic, the same job, renamed to the
+    name every subblock in this project uses.
+\end{itemize}
+
+This design instantiates it three times, all with \code{WIDTH = 1}: twice inside
+\code{can_controller}, for \code{reset_n} and for \code{rx_bus}, and once at \code{can_spi_node}'s
+top level for its own reset (\chapref{c19:ch}). One module, three instances, no copies. The generic
+still earns its place \textemdash{} the testbench exercises \code{WIDTH = 4}, and a synchroniser
+written for one bit is a synchroniser you copy the next time you need four.
+
+\begin{warning}
+A caveat to mention now, since \chapref{c19:ch} leans on it: a synchroniser handles metastability,
+not \emph{skew}. The second flip-flop makes it overwhelmingly unlikely that a metastable value
+propagates (never impossible; the probability falls exponentially with settling time, which is why
+two flip-flops are the accepted trade-off), but every bit still crosses independently, so two bits
+changing together can land one clock apart. That is why a synchroniser is not a general answer for a
+bus whose bits have to stay together \textemdash{} and it is why \code{can_spi_node} synchronises its
+reset with this module but leaves the SPI lines to \code{spi_slave}, which frames them, rather than
+widening a \code{meta_prev} across them.
+\end{warning}
+
+\subsection{What the testbench pins down}
+\label{c12:sub:mptb}
+
+\begin{itemize}
+  \item \code{sync_out} follows \code{async_in} after exactly two rising edges: not one (a single
+    flip-flop is no synchroniser) and not three.
+  \item The same holds from high to low as from low to high.
+  \item With \code{WIDTH = 4} all four bits arrive together, two edges after the input changed.
+  \item A stable input leaves \code{sync_out} stable.
+\end{itemize}
+
+This is the first testbench in the project that actually \emph{runs} rather than merely analyses, so
+it is also where the third GHDL step arrives. \Chapref{c11:ch} analysed and elaborated; see
+appendix~\ref{app:sim} for what \code{ghdl -r} adds and why \code{--assert-level=error} is not
+optional.
+
+\subsection{Putting it into \code{can_controller}}
+\label{c12:sub:mpwire}
+
+\code{meta_prev}'s ports are vectors even at width 1, so a scalar port needs a one-element signal on
+each side. In the architecture's declarative part (between \code{is} and \code{begin}):
+
+\begin{vhdlcode}
+    -- meta_prev, synchronizing the two inputs that arrive from off-chip.
+    signal reset_n_v, reset_s2_n_v : std_logic_vector(0 downto 0);
+    signal rx_bus_v,  rx_bus_s2_v  : std_logic_vector(0 downto 0);
+    signal reset_s2_n, rx_bus_s2   : std_logic;
+\end{vhdlcode}
+
+and after \code{begin}:
+
+\begin{vhdlcode}
+    reset_n_v(0) <= reset_n;
+    rx_bus_v(0)  <= rx_bus;
+
+    reset_s2_n <= reset_s2_n_v(0);
+    rx_bus_s2  <= rx_bus_s2_v(0);
+
+    reset_sync: entity work.meta_prev
+        port map(clock, reset_n_v, reset_s2_n_v);
+
+    rx_bus_sync: entity work.meta_prev
+        port map(clock, rx_bus_v, rx_bus_s2_v);
+\end{vhdlcode}
+
+Two instances rather than one with \code{WIDTH => 2}. Both bits would ride along together perfectly
+well, since they are independent and skew between them means nothing, but one named instance per
+concern reads better on the diagram, and later making the reset assert asynchronously would then tear
+nothing up.
+
+From now on, \textbf{every block takes \code{reset_s2_n}, never \code{reset_n}, and every block that
+reads the bus reads \code{rx_bus_s2}, never \code{rx_bus}}. That is the whole reason these two
+instances exist, it applies to \code{bit_timer} in the very next section, and it is easy to forget
+again when \code{rx_shift_reg} is wired in in \chapref{c15:ch}.

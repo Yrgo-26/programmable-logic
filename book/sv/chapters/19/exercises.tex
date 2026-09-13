@@ -1,0 +1,185 @@
+% Avsnitt 19.10, ur lectures/L19/appendix/c_exercises.md.
+
+\section{Övningar}
+\label{c19:sec:exercises}
+
+\begin{aside}
+Övning~\ref{c19:ex:thirdnode}, \ref{c19:ex:feature} och \ref{c19:ex:afterabort} befäster
+\secref{c19:sec:verify}. Övning~\ref{c19:ex:bridge} till \ref{c19:ex:endtoend} befäster
+\secref{c19:sec:bridge} till \ref{c19:sec:gaps} och bilaga~\ref{app:protocol}, som är auktoriteten
+överallt där den och en övning är oense.
+\end{aside}
+
+\exercise{En tredje nod, och ett nytt arbitreringsutfall}{Simulering}
+\label{c19:ex:thirdnode}
+\xpart{a} Utöka \file{can_controller_tb.vhd} med en tredje nod, C, som delar samma \code{bus_line}.
+Ge C ID:t \code{0x002} och låt den begära sändning på samma cykel som nod A (\code{0x000}) och B
+(\code{0x001}). Bekräfta (genom simulering, inte bara förutsägelse) att A fortfarande vinner, och att
+\emph{både} B och C upptäcker arbitreringsförlust.
+
+\xpart{b} Nod A:s \code{0x000} är den lägsta identifierare en standardram kan bära, så inget val av
+ID låter C slå den. Höj A:s ID till \code{0x010}, och välj sedan ett ID till C som gör C till vinnare
+medan B (\code{0x001}) fortfarande förlorar. Motivera ditt val med \secref{c10:sec:arbitration}:s
+arbitreringsregel, och bekräfta sedan den nya vinnaren i simulering. En följd att lägga märke till
+innan dina assertions överraskar dig: med A på \code{0x010} slår B:s \code{0x001} även A, så i den
+här omgången \textbf{förlorar A också} och höjer \code{error}; bara C fullföljer.
+
+\exercise{En funktion ur en riktig kontroller, som designskiss}{Resonemang}
+\label{c19:ex:feature}
+Välj \textbf{en} post ur \secref{c19:sec:gaps}:s lista över vad riktiga CAN-kontrollrar gör som den
+här designen inte gör. Skissa, utan att nödvändigtvis implementera den i VHDL (i prosa, plus ett
+tillägg i tillståndsdiagrammet eller en ny portlista om det hjälper), vad som skulle behöva ändras i
+\code{can_controller} för att stödja den. Ange vilket eller vilka befintliga block
+(\code{bit_timer}, \code{crc15}, \code{tx_shift_reg}/\code{rx_shift_reg}, eller
+\code{can_controller} självt) som skulle behöva ändras, och vilka som kunde stå exakt som de är.
+
+\exercise{\code{spi_reg_bridge}}{VHDL}
+\label{c19:ex:bridge}
+Skriv din egen \file{spi_reg_bridge.vhd} utifrån \secref{c19:sec:bridge} och
+bilaga~\ref{app:protocol}. Verifiera den:
+
+\begin{shell}
+cd bridge
+ghdl -a --std=93 spi_def.vhd spi_reg_bridge.vhd spi_reg_bridge_tb.vhd
+ghdl -e --std=93 spi_reg_bridge_tb
+ghdl -r --std=93 spi_reg_bridge_tb --assert-level=error
+\end{shell}
+
+\xpart{a} Få alla fyra fallen att passera. Fall 3 och 4 är de två som gör den här modulen till mer än
+en byteräknare \textemdash{} läs deras kommentarer innan du börjar, inte efteråt.
+
+\xpart{b} Gör nu sönder den med flit. Ta bort varje användning av \code{ss_active} och räkna bytes
+modulo fem i stället. Fall 1 och 2 passerar fortfarande. Säg vilken kontroll i fall 3 som fallerar,
+citera värdet som felmeddelandet rapporterar, och förklara var de bytesen kom ifrån.
+
+\xpart{c} En brygga som ignorerar de reserverade kommandobitarna passerar också fall 1 och 2.
+Förklara varför protokollspecifikationen lägger regeln om reserverade bitar i \emph{det här} lagret i
+stället för i \code{register_bank}, givet att banken aldrig ser mer än ett 4-bitars index.
+
+\xpart{d} Läsvägen låser \code{reg_rdata} \textbf{en gång}, vid slutet av kommandobyten. Säg vad
+\code{register_bank} skulle behöva göra i stället om bryggan läste det på nytt för varje databyte, och
+varför det vore fel plats att skjuta ner regeln i banken. Ställ tillbaka modulen.
+
+\exercise{Komponera \code{can_spi_node}}{VHDL}
+\label{c19:ex:node}
+Skriv toppnivån utifrån \secref{c19:sec:node}: \code{spi_slave}, \code{spi_reg_bridge},
+\code{register_bank} och \code{can_controller}, plus en \code{meta_prev} för reseten.
+
+\xpart{a} Skriv den, och kör \code{can_spi_node_tb} mot den. Fyra utdelade testbänkar täcker redan
+allt \emph{inuti} filen; säg vilka fyra, och säg sedan den enda sortens fel som
+\code{can_spi_node_tb} kan fälla och som ingen av de fyra kan. (Ledtråden är den positionella
+portbindningen.)
+
+\xpart{b} \code{can_spi_node_tb} håller 200~ns tyst kring varje \code{SS}-flank, där
+bilaga~\ref{app:protocol} kräver minst 60~ns. Den är alltså snäll mot tidskraven med flit, och ingen
+utdelad testbänk pressar dem. Kopiera den, krymp den tysta perioden stegvis ner mot 60~ns, och ta
+reda på vid vilket värde din nod slutar svara.
+
+Säg sedan \textbf{varför} just där, i klockcykler räknat, och var i \code{spi_slave} gränsen sitter.
+Jämför det uppmätta värdet med de 60~ns specifikationen lovar: har du marginal, eller ligger din nod
+precis på gränsen? Det här är enda stället i boken där du \emph{mäter} en marginal i stället för att
+läsa den, och det är värt att göra noga.
+
+\xpart{c} Räkna \code{meta_prev}-instanserna i den färdiga designen och säg vad var och en
+synkroniserar. Säg sedan varför \code{can_spi_node} räcker \code{can_controller} den \emph{råa}
+\code{reset_n} i stället för den \code{reset_s2_n} den ger varje annat block, och vad som skulle gå
+fel om den synkroniserade den två gånger.
+
+\xpart{d} \code{tx_bus} och \code{bus_en} lämnar designen som två skilda portar i stället för en
+ledning. Förklara vad som måste hända mellan dem och en fysisk ledning som delas med ett andra kort,
+och vad som skulle fallera om du tilldelade \code{tx_bus} rakt till en pinne och band ihop två kort.
+
+\exercise{Vad kortet visade}{Resonemang}
+\label{c19:ex:board}
+Bring-upen kördes i åtta steg, i två halvor: tre på två DE0-CV och fem med hatten som master. Den här
+övningen handlar om vad de fastställde och vad de inte gjorde. Den kräver ingen egen hårdvara.
+
+\xpart{a} Stegen är ordnade så att varje steg utesluter en felklass innan nästa beror på den. Säg för
+vart och ett av steg 1, 4 och 5 (ensamt kort, loopback på hatten, registereko) vilken enda sak det
+bevisar som steget före inte gjorde. Säg sedan vilka av de åtta stegen som \code{can_spi_node_tb}
+\textbf{redan} hade fastställt i simulering, och vilka som bara hårdvara kan fastställa.
+
+\xpart{b} Två kopplingsfel att skilja åt. Säg vilket steg som fallerar först om MISO och MOSI är
+förväxlade, och vilket som fallerar först om \code{VDDIO2} aldrig kopplades in, så att \code{PORTC}
+står utan matning. Förklara varför de fallerar vid olika steg, och vad den skillnaden låter dig sluta
+dig till utan att röra en mätare. Säg också vad \code{MVIO.STATUS} hade svarat i det andra fallet,
+och varför det svaret är snabbare än mätaren.
+
+\xpart{c} Testprogrammet som delades ut är skrivet för att lyckas: det håller \code{SS} låg i god
+tid, skickar aldrig en sjätte byte och avbryter aldrig mitt i en transaktion. Säg vilken av
+protokollspecifikationens regler \textemdash{} de 60~ns kring \code{SS}, \code{MISO} under
+kommandobyten, eller avbrottsregeln \textemdash{} som \textbf{inget} av de åtta stegen skulle ha
+avslöjat som trasig, och varför just den därför är den dyraste att ha fel i när en drivrutin du inte
+skrivit möter noden.
+
+\xpart{d} En ensam nod kan aldrig få \code{rx_valid} att pulsa, hur dess pinnar än är kopplade,
+vilket är skälet till att passet lade en ram över \textbf{två} kort. Säg varför en nod aldrig kan ta
+emot sin egen ram (skälet är \chapref{c17:ch}:s \code{role}), och vad det andra kortet därmed bevisar
+som varken en loopback eller \code{can_controller_tb} kan.
+
+\xpart{e} De två korten går på två oberoende 50 MHz-oscillatorer. \Secref{c19:sub:gaps-tb} kallar den
+delade klockan i \code{can_controller_tb} för testbänkens \textbf{största} gap av precis det skälet.
+Var noga med vad som ändras: \code{bit_timer.resync} gör redan riktigt arbete i simulering, så säg vad
+de två oberoende klockorna lägger till som ingen simulering med delad klocka kan visa, och ungefär
+hur långt isär de två oscillatorerna skulle kunna driva innan en ram slutade komma fram hel
+(Övning~\ref{c12:ex:drift} gjorde den uträkningen; återanvänd den). Jämför den gränsen med en typisk
+kristalls tolerans och säg om demonstrationen egentligen sätter den på prov.
+
+\xpart{f} \code{rx_bus} kommer utifrån FPGA:n, och \code{can_spi_node} skickar den osynkroniserad
+vidare till \code{can_controller} med flit, eftersom \code{can_controller} innehåller sin egen
+\code{meta_prev} (\chapref{c12:ch}). Förklara vad som skulle kunna gå fel om den instansen togs bort,
+varför felet skulle vara betydligt svårare att diagnostisera än en felkopplad ledning, och varför
+ingen mängd simulering i den här boken någonsin skulle återskapa det.
+
+\exercise{Att följa ett \code{send()} från ände till ände}{Resonemang}
+\label{c19:ex:endtoend}
+\xpart{a} Följ en enskild ramförfrågan hela vägen ner. Utgå från de fem bytesen på MOSI som skriver
+\code{0x1} till \code{TX_SEND}, och följ dem genom \code{spi_slave} (bytes),
+\code{spi_reg_bridge} (en registerskrivning) och \code{register_bank} (ett \code{tx_req} på en cykel)
+fram till \code{can_controller}s portar. Namnge vad varje lager räcker vidare till nästa. Gör sedan
+detsamma uppåt, för hur drivrutinen får veta att ramen är klar.
+
+\xpart{b} Fyra lager är tre fler än \code{can_controller_tb} behöver. Namnge för varje gräns den
+utdelade testbänk som spikar fast den, och säg vad som skulle vara oprövat om den testbänken inte
+fanns.
+
+\xpart{c} Pollning är det enda den här designen erbjuder: det finns ingen avbrottsutgång någonstans.
+Säg vad som skulle behöva läggas till för att ge drivrutinen en sådan, ur vilken befintlig signal den
+skulle härledas, och i vilket lager den skulle behöva ligga. Förklara sedan varför det hade varit
+hopplöst för en drivrutin att polla ett \code{tx_done} som varar en cykel, och vilken modul som gjorde
+att det inte är det.
+
+\xpart{d} En drivrutin skriver \code{TX_ID}, sedan \code{TX_DLC}, sedan \code{TX_SEND}, som tre
+separata transaktioner. Mellan den andra och den tredje går bussen till tomgång och en annan nod
+sänder. Säg om något av det drivrutinen skrivit är i fara, och vilken regel i registerkartan det är
+som gör ditt svar sant.
+
+\exercise{Livet efter ett avbrott}{Simulering}
+\label{c19:ex:afterabort}
+\Secref{c19:sub:gaps-tb} listar ”ingen nod sänder någonsin igen efter ett avbrott” som något
+systemtestbänken inte täcker. Den här övningen täcker det, och visar vad \code{clear}-ingången hos
+\code{crc15} var till för.
+
+\xpart{a} Utöka \file{can_controller_tb.vhd} med ett tredje fall. Ge båda noderna tid att återgå till
+tomgång efter att fall 2 körts, alltså efter att nod B förlorat arbitreringen och övergett sin ram
+mitt i identifieraren, och låt sedan \textbf{B} sända en egen ram (ID \code{0x123}, DLC 2, valfri
+nyttolast) med A som mottagare. Bekräfta i simulering att A tar emot den: A:s \code{rx_valid} pulsar,
+A:s \code{error} förblir låg, och ID:t kommer tillbaka korrekt.
+
+\xpart{b} Ta nu bort nollställningen: ändra \code{crc_clear} till en konstant \code{'0'} och kör om.
+Fall 1 och 2 passerar fortfarande. Fall 3 gör det inte. Säg vilken nod som höjer \code{error}, vid
+vilket tillstånd, och förklara varför det \emph{inte} är den noden som har buggen.
+
+\xpart{c} Räkna ut vad B:s \code{crc15}-register håller i det ögonblick den avbryter i fall 2, och
+varför ingen mängd korrekt beteende därefter någonsin återför det till noll. (Ledtråden är
+\chapref{c13:ch}:s egenskap att generering och kontroll är samma operation: vad förutsätter den om
+registret vid en rams \emph{början}?)
+
+\xpart{d} Hur många ramar måste nod B skicka innan den fungerar igen, med nollställningen fortfarande
+borttagen? Förklara ditt svar, och säg vad en drivrutin som pollar \code{STATUS} och
+\code{ERROR_FLAGS} över SPI skulle observera varje gång, med \chapref{c18:ch}:s regel för hur felbiten
+låses.
+
+\xpart{e} \Chapref{c16:ch} lägger nollställningen i \code{STATE_START} i stället för i
+\code{STATE_CRC_WAIT} eller på vägen ut ur ett avbrott. Ge ett skäl vardera till varför de andra två
+placeringarna är sämre.

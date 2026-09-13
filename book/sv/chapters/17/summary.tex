@@ -1,0 +1,41 @@
+% Avsnitt 17.7, ur lectures/L17/README.md.
+
+\section{Sammanfattning}
+\label{c17:sec:review}
+
+\needspace{6\baselineskip}
+\subsection*{Det här ska du kunna nu}
+\begin{itemize}
+  \item Implementera mottagarvägen i samma tillståndsmaskin som sänder.
+  \item Förklara hur en nod avgör att den förlorat arbitreringen, och vad den gör då.
+  \item Sätta ihop \code{rx_id}, \code{rx_dlc} och \code{rx_data} ur den mottagna bitströmmen och
+    höja \code{rx_valid} vid rätt tillfälle.
+  \item Köra systemtestbänken med två noder på en buss och läsa vad den rapporterar.
+  \item Säga vad \code{error} betyder, vilka fyra orsaker som sätter den, och när den nollställs.
+\end{itemize}
+
+\needspace{6\baselineskip}
+\subsection*{Frågor att testa dig själv med}
+\begin{enumerate}
+  \item Hur upptäcker en nod att den förlorat arbitreringen, och exakt vilka bitar jämför den?
+  \item Vad gör en nod som förlorat arbitreringen, och varför är det inte ”försök igen omedelbart”?
+  \item Varför måste \code{rx_shift_reg}s enable föregripas en cykel?
+  \item En nod kan inte sända och ta emot samtidigt. Var i tillståndsmaskinen syns det?
+  \item Vad sätter \code{error}, och vad nollställer den?
+  \item Vad bevisar \code{can_controller_tb} som de fyra modultestbänkarna tillsammans inte gör?
+\end{enumerate}
+
+\needspace{6\baselineskip}
+\subsection*{Riktvärde}
+Här går projektet över från CAN till SPI. En grupp som inte fått \code{can_controller_tb} att passera
+bör prioritera det framför registerbanken: SPI-halvan går att bygga och testa mot en kontroller som
+ännu inte fungerar, men bring-upen i \chapref{c19:ch} gör det inte.
+
+Systemtestbänken hoppas över av bygget tills kontrollern har en mottagarväg. Ser du fortfarande
+”skipped” när du tycker att den borde köra, kör med \code{CI_BUILD_ALL=1}; bilaga~\ref{app:sim}
+förklarar varför den kontrollen fungerar så.
+
+\needspace{6\baselineskip}
+\subsection*{Blicken framåt}
+\Chapref{c18:ch} tar registerbanken, och SPI från vågformen och uppåt. Här börjar den halva som gör
+kontrollern nåbar från en mikrokontroller.

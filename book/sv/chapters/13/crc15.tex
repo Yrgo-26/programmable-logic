@@ -1,0 +1,167 @@
+% Avsnitt 13.1-13.6, ur lectures/L13/appendix/a_crc15.md.
+
+\section{Gränssnitt}
+\label{c13:sec:iface}
+
+\modulefig[0.62]{lectures/L13/appendix/images/crc15.png}
+
+\begin{booktable}{@{}p{5.6em}p{3.4em}p{5.2em}L@{}}
+  \thead{Port} & \thead{Riktn.} & \thead{Typ} & \thead{Betydelse} \\
+  \midrule
+  \code{clock} & in & \code{std_logic} & 50 MHz systemklocka. \\
+  \code{reset_s2_n} & in & \code{std_logic} & Aktiv låg, synkroniserad reset. \\
+  \code{clear} & in & \code{std_logic} & Återför registret till idel nollor vid den här flanken,
+    utan en reset. \\
+  \code{enable} & in & \code{std_logic} & Integrera \code{data} i registret vid den här flanken när
+    \code{'1'}. \\
+  \code{data} & in & \code{std_logic} & Den aktuella biten, biten som sänds (TX) eller nyss samplats
+    av bussen (RX). \\
+  \code{crc} & out & \code{crc_t} & Registrets aktuella 15-bitars CRC-värde. \\
+  \code{valid} & out & \code{std_logic} & \code{'1'} närhelst registret för närvarande läser idel
+    nollor. \\
+\end{booktable}
+
+Inga generics. \code{crc15_tb} binder sina portar \textbf{positionellt}, så ordningen och typerna
+ovan är det som måste stämma; namnen är dina. \code{crc_t} (en 15-bitars vektor), dess bredd
+\code{CRC_WIDTH} och polynomet \code{CRC_POLY} kommer från \code{can_def} (\chapref{c10:ch}).
+
+% ------------------------------------------------------------------------------------------
+\section{Rekursionen}
+\label{c13:sec:recursion}
+
+Håll ett 15-bitars register (\code{crc_t}), nollställt till idel nollor av \code{reset_s2_n}. Vid
+varje klockflank där \code{enable = '1'}, integrera en bit:
+
+\begin{textdrawing}
+feedback = crc(CRC_WIDTH-1) xor data      -- Inkommande bit XOR registrets översta bit.
+shifted  = crc skiftat ett steg vänster, ny lägsta bit '0'
+crc      = shifted xor CRC_POLY           -- om feedback = '1'
+         = shifted                        -- annars
+\end{textdrawing}
+
+Det är hela motorn, femton vippor och en skiftning XOR-grindad av polynomets avgreningar. När
+\code{enable} är \code{'0'}, håll registret oförändrat. Driv \code{crc} kontinuerligt från registret,
+och \code{valid} som ”registret är idel nollor”.
+
+\begin{warning}
+\code{clear} gör med registret vad \code{reset_s2_n} gör, men den är ett \textbf{synkront kommando,
+inte en reset}: den hör hemma inuti den klockade grenen, prövad före \code{enable} så att den vinner
+när båda är höga vid samma flank. Vik inte in den i det asynkrona resetvillkoret; det skulle göra
+\code{clear} asynkron och nivåkänslig, en annan konstruktion som råkar passera testbänken (som alltid
+håller \code{clear} över en hel klockcykel). Gränssnittstabellen säger ”vid den här flanken” och
+menar det.
+\end{warning}
+
+\code{clear} finns eftersom motorn återanvänds för varje ram och håller inget eget tillstånd per ram:
+\code{can_controller} pulsar den en gång i början av varje ram (\chapref{c16:ch}). En ram som får
+löpa till slut återför registret till noll av sig själv, genom
+generera-sedan-kontrollera-egenskapen nedan, så på den lyckliga vägen ändrar \code{clear} ingenting.
+En ram som \emph{avbryts} halvvägs gör inte det, och det är det fallet den finns till för.
+
+% ------------------------------------------------------------------------------------------
+\section{En motor, två jobb}
+\label{c13:sec:twojobs}
+
+\begin{itemize}
+  \item \textbf{Generera:} aktivera motorn över SOF till och med datafältets slut. Läs sedan
+    \code{crc}; det är värdet som ska sändas som ramens CRC-fält.
+  \item \textbf{Kontrollera:} aktivera den över SOF till och med datafältet \emph{och fortsätt
+    sedan}, och mata in det \emph{mottagna} CRC-fältets egna bitar också. Om ramen anlände intakt
+    driver det registret tillbaka till exakt noll, en egenskap hos aritmetiken, inte något motorn
+    blivit tillsagd att förvänta sig. \code{valid} rapporterar precis det.
+    \code{can_controller} (\chapref{c17:ch}) kontrollerar \code{valid} bara vid just den punkten; den
+    behöver ingen andra, separat kontrollkrets.
+\end{itemize}
+
+Båda jobben förbrukar \textbf{bara riktiga bitar}. Stoppbitar (\chapref{c14:ch}) kommer aldrig in i
+CRC:n på någondera sidan av länken; anroparens grindning av \code{enable} är det som håller dem ute
+(\chapref{c16:ch} och \ref{c17:ch} bygger precis det), och motorn själv vet aldrig att de finns. Det
+är därför \code{crc15} inte behöver någon kunskap om ramfält eller stoppning: den som driver
+\code{enable} har redan tagit de besluten.
+
+Båda jobben förutsätter att registret börjar en ram på noll, vilket är exakt vad \code{clear}
+garanterar. Lägg märke till hur mycket som vilar på det: en nod som överger en ram halvvägs (den
+förlorar arbitreringen, eller ser en stoppningsöverträdelse, eller underkänns i CRC-kontrollen, allt
+sådant som \chapref{c17:ch} gör) slutar mata motorn med ett \emph{partiellt} värde i den. Utan en
+nollställning per ram får nästa ram den resten som utgångsvärde, så noden beräknar en CRC ingen annan
+håller med om och beräknar en felaktig kontroll på allt den tar emot, för varje ram från då till
+reset. En enda avbruten ram skulle ta noden ur bussen permanent.
+
+\code{valid} läser \code{'1'} vid reset också, före någon data alls; meningslöst där, meningsfullt
+bara vid kontrollpunkten ovan.
+
+% ------------------------------------------------------------------------------------------
+\section{Ett genomräknat exempel, för hand}
+\label{c13:sec:worked}
+
+Börja med det enklaste fallet. Mata in en enda \code{1} i en nyss resettad motor: \code{feedback} är
+\code{0 xor 1 = 1}, \code{shifted} är fortfarande idel nollor, så \code{crc} blir
+\code{0 xor CRC_POLY}, polynomet självt. Det är det första testbänken kontrollerar, och en bra
+rimlighetskontroll på din egen kod.
+
+Nu fyra bitar, \code{1001}, MSB först. \code{top} är registrets bit 14 \emph{före} flanken, och
+\code{CRC_POLY} är \code{100010110011001}:
+
+\begin{textdrawing}
+         top  data  fb   shifted          xor poly   crc
+reset      -     -   -   -                       -   000000000000000
+bit 1      0     1   1   000000000000000        ja   100010110011001
+bit 2      1     0   1   000101100110010        ja   100111010101011
+bit 3      1     0   1   001110101010110        ja   101100011001111
+bit 4      1     1   0   011000110011110       nej   011000110011110
+\end{textdrawing}
+
+Läs en rad i taget så slutar motorn se ut som aritmetik. Varje flank gör samma tre saker: XOR:a den
+inkommande biten med biten som faller av toppen, skifta vänster, och XOR:a tillbaka polynomet bara om
+det resultatet var \code{1}.
+
+Två rader är värda att stanna vid. \textbf{Bit 2} matar in en \code{0} och utlöser ändå XOR:en,
+eftersom \code{1}:an som lämnar toppen är det som sätter \code{feedback}; den inkommande biten är
+bara halva beslutet. \textbf{Bit 4} matar in en \code{1} och utlöser den \emph{inte}, eftersom den
+översta biten också är \code{1} och de två tar ut varandra. Det är därför en CRC svarar på \emph{var}
+en bit sitter och inte bara på hur många ettor det finns, och det är den egenskap
+Övning~\ref{c13:ex:missed} använder för att fånga en förvanskning som en enkel summa inte kan se.
+
+Lägg också märke till att varje rads \code{shifted}-kolumn är föregående rads \code{crc} skiftad ett
+steg vänster, med en \code{0} som kommer in nedifrån. Ingenting adderas någonsin i den låga änden;
+registrets innehåll kommer helt och hållet från polynomet som XOR:as in om och om igen vid olika
+förskjutningar.
+
+% ------------------------------------------------------------------------------------------
+\section{Vad testbänken låser fast}
+\label{c13:sec:tb}
+
+\begin{itemize}
+  \item Strax efter reset är \code{crc} idel nollor och \code{valid = '1'}.
+  \item En enda \code{'1'}-bit ger \code{crc = CRC_POLY}.
+  \item \code{clear} återför ett laddat register till idel nollor utan att \code{reset_s2_n} rörs.
+  \item En 19-bitars sekvens av SOF, ID, RTR och kontrollfält ger en CRC som stämmer med ett värde
+    beräknat oberoende i Python (inte härlett ur den här VHDL-koden).
+  \item Att mata den nyss beräknade CRC:ns egna bitar rakt in igen återför registret till idel nollor
+    (\code{valid = '1'}), generera-sedan-kontrollera-egenskapen.
+\end{itemize}
+
+% ------------------------------------------------------------------------------------------
+\section{Att lägga in den i \code{can_controller}}
+\label{c13:sec:wire}
+
+Samma tvådelade ändring som \chapref{c12:ch}:s, ett block längre in. I
+\file{controller/can_controller.vhd}, lägg till signalerna under \code{bit_timer}-gruppen:
+
+\begin{vhdlcode}
+    -- crc15.
+    signal crc_clear, crc_enable, crc_data_in, crc_valid : std_logic;
+    signal crc_value                                     : crc_t;
+\end{vhdlcode}
+
+och instansen under \code{bit_timer1}:
+
+\begin{vhdlcode}
+    crc1: entity work.crc15
+        port map(clock, reset_s2_n, crc_clear, crc_enable, crc_data_in, crc_value, crc_valid);
+\end{vhdlcode}
+
+Lägg märke till att \code{crc15} kopplas till ingenting annat än klockan, resetten och sina egna
+signaler: den tar sina bitar från vilket skiftregister som än är aktivt, och båda de registren är
+ännu oskrivna. Kopplingen som förenar dem är \chapref{c16:ch}:s, och den är ett enda uttryck snarare
+än en port map.

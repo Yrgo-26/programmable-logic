@@ -1,0 +1,693 @@
+% Avsnitt 8.8, ur lectures/L08/appendix/b_exercises.md.
+
+\section{Övningar}
+\label{c8:sec:exercises}
+
+\begin{aside}
+\textbf{Så kontrollerar du ditt arbete.} Övning~\ref{c8:ex:binary} och \ref{c8:ex:moore101} är penna
+och papper: de handlar om att få en tillståndsmaskin rätt \emph{innan} den blir kod, och inget i dem
+kräver VHDL, GHDL eller kort.
+
+Från Övning~\ref{c8:ex:mealy101} och framåt har varje övning som ber dig skriva en VHDL-modul en
+utdelad självkontrollerande testbänk under \file{lectures/L08/exercises/}, och ingenting annat;
+Övning~\ref{c8:ex:fastblink} ändrar en modul du redan har och kontrolleras för hand. Att sätta ihop
+resten av katalogen är en del av arbetet: modulerna du skrev i tidigare kapitel
+(\code{reset_sync}, \code{button_sync}, \code{sync}, \code{timer}) kopieras in från där du än skrev
+dem. Varje övning skriver ut de exakta kommandon den behöver.
+
+Övning~\ref{c8:ex:rx} och \ref{c8:ex:tx} är bokens capstones: de två ändarna av en och samma
+seriella länk, en mottagare och en sändare. Var och en komponerar moduler från fyra olika kapitel.
+Avsätt riktig tid för dem, och konstruera varje tillståndsdiagram på papper innan du skriver någon
+VHDL. Gör mottagaren först: den är den svårare av de två, eftersom den måste återskapa den
+bittajming den blir tilldelad snarare än att definiera den själv.
+\end{aside}
+
+% ------------------------------------------------------------------------------------------
+\exerciseset{Tillståndsdiagram och tillståndstabeller}
+
+\exercise{En maskin med binär tillståndsordning}{Krets}
+\label{c8:ex:binary}
+Konstruera en ny Mooremaskin med fyra tillstånd, $\{Q_1, Q_2\}$, som styr en lysdiod via en enda
+synkroniserad, flankdetekterad puls \code{X} från en knapp (producerad precis som \code{X} i det
+genomarbetade exemplet i \secref{c8:sec:byhand}).
+
+Den skiljer sig från det genomarbetade exemplet på två sätt:
+\begin{itemize}
+  \item Tillståndsordningen är den vanliga binärräkningen
+    $00 \to 01 \to 10 \to 11 \to 00$, \textbf{inte} den Graykod som används i
+    \secref{c8:sec:byhand}.
+  \item Lysdioden (\code{Y}) lyser i \textbf{två} tillstånd i stället för ett: närhelst $Q_1 = 1$
+    (alltså i både \code{10} och \code{11}).
+\end{itemize}
+
+\xpart{a} Rita tillståndsdiagrammet: fyra tillstånd, en övergångspil per tillstånd för $X = 1$, och
+en självloop per tillstånd för $X = 0$.
+
+\xpart{b} Fyll i hela tillståndstabellen (alla åtta rader av $\{Q_1, Q_2, X\}$).
+
+\xpart{c} Härled $Q_1^{+}$, $Q_2^{+}$ och \code{Y} med Karnaughdiagram, på samma sätt som
+\secref{c8:sec:byhand} härleder dem för Graykodsversionen.
+
+\xpart{d} Realisera grindnätet för hand: två D-vippor för $\{Q_1, Q_2\}$, grindar som beräknar
+$Q_1^{+}$, $Q_2^{+}$ och \code{Y}, och bygg och simulera det i CircuitVerse, med
+dubbelvippsynkronisering och flankdetektering av knappingången precis som i \secref{c8:sec:cv}.
+
+\xpart{e} Verifiera den i CircuitVerse, mot din egen tillståndstabell. Det finns ingen testbänk för
+den här maskinen, och det är inte meningen att det ska finnas: tillståndstabellen du härledde i
+\textbf{b)} \emph{är} specifikationen, och att kontrollera en krets mot en specifikation du själv
+arbetat fram är hela poängen med övningen.
+
+Stega klockan för hand och kontrollera, i den här ordningen:
+\begin{itemize}
+  \item \textbf{Stegningsvägen.} Pulsa \code{X} en gång per steg och gå ett helt varv,
+    $00 \to 01 \to 10 \to 11 \to 00$. Läs av det förväntade nästa tillståndet ur din tabell före
+    varje flank. Läs av $\{Q_1, Q_2\}$ på vippornas utgångar efter flanken. Alla fyra övergångarna
+    måste stämma.
+  \item \textbf{Hållvägen.} Stega klockan med $X = 0$ i vart och ett av de fyra tillstånden och
+    bekräfta att maskinen står kvar. Det är fyra kontroller till, och det är den halva folk hoppar
+    över; en maskin som stegar rätt men inte håller är en maskin vars $X'$-termer är fel.
+  \item \textbf{Utgången.} Kontrollera \code{Y} mot din tabell i varje tillstånd: hög i \code{10}
+    och \code{11}, låg i \code{00} och \code{01}. Gör det som en egen genomgång, inte medan du
+    tittar på tillståndsbitarna.
+\end{itemize}
+
+Var de skiljer sig åt säger dig vilken grind du ska titta på. Ett felaktigt $Q_1^{+}$ syns bara på
+de övergångar där $Q_1$ skulle ha ändrats. Ett felaktigt \code{Y} syns med tillståndsföljden
+fortfarande helt korrekt, vilket är varför det är värt en egen genomgång.
+
+\note[Tips]Eftersom tillståndsordningen ändrades från Graykod till binär, räkna med en övergång
+($01 \to 10$) där \emph{två} tillståndsbitar vänder på en gång. Enligt \secref{c8:sec:byhand} är det
+harmlöst för maskinen själv, eftersom ingenting samplar tillståndsregistret mellan flankerna, och
+CircuitVerses ideala simulering visar dig ingenting åt något håll. Vad det däremot påverkar är
+\code{Y}, som här avkodas kombinatoriskt ur tillståndsbitarna: på riktig hårdvara kan \code{Y}
+glitcha kort medan de två bitarna är skeva. Lägg märke till vilken övergång det är, och vad du
+skulle göra åt det om \code{Y} drev något som brydde sig.
+
+% ------------------------------------------------------------------------------------------
+\exerciseset{Sekvensdetektering}
+
+\exercise{En Mooredetektor för \code{101}}{Resonemang}
+\label{c8:ex:moore101}
+Konstruera en \textbf{Moore}maskin som detekterar sekvensen \code{1, 0, 1} när den kommer en bit per
+klockcykel på en ingång \code{din}, och som höjer sin utgång \code{y} så snart träffens tredje bit
+setts. Icke-överlappande duger här: efter en fullständig träff, börja leta efter ett nytt
+\code{1, 0, 1} från början i stället för att återanvända de avslutande bitarna.
+
+\xpart{a} Rita tillståndsdiagrammet: ett tillstånd per hur stor del av mönstret som matchats
+hittills, en pil ut ur varje tillstånd för \code{din = 0} \emph{och} för \code{din = 1} (en
+sekvensdetektor är aldrig sysslolös, den antingen stegar framåt eller faller tillbaka), och markera
+vilket tillstånd som driver \code{y = 1}.
+
+\xpart{b} Fyll i tillståndstabellen, en rad per kombination av (tillstånd, \code{din}).
+
+\xpart{c} Följ den. Välj en sexbitarssekvens för \code{din} som innehåller minst en träff, och
+anteckna, cykel för cykel: tillståndet före flanken, värdet på \code{din}, och utgången \code{y}.
+
+\xpart{d} Fällan i den här maskinen är pilarna tillbaka, inte de framåt. Säg för varje tillstånd vad
+som händer på den ingång som \emph{inte} för träffen vidare: vilka av dem går tillbaka till starten,
+och finns det någon ingång som borde skicka dig tillbaka till ett \emph{delvis} matchat tillstånd i
+stället för hela vägen till början? Motivera ditt svar för det här mönstret.
+
+\note[Tips]Räkna dina tillstånd innan du ritar dem. ”Inget matchat än”, ”sett \code{1}”, ”sett
+\code{10}”, ”sett \code{101}” är den naturliga uppdelningen, och det sista av dem är det som driver
+\code{y}.
+
+\textbf{Spara ditt svar.} Övning~\ref{c8:ex:mealy101} implementerar samma detektor i VHDL, som en
+Mealymaskin \textemdash{} som, enligt \secref{c8:sec:mealy}, behöver ett tillstånd färre än det du
+just ritade. Att lista ut vilket av dina tillstånd som försvinner, och varför, är en del av den
+övningen.
+
+% ------------------------------------------------------------------------------------------
+\exerciseset{Ändliga tillståndsmaskiner i VHDL}
+
+\exercise{Ett fjärde tillstånd i \code{fsm_led}}{VHDL}
+\label{c8:ex:fastblink}
+Utöka \code{fsm_led} med ett fjärde tillstånd, \code{STATE_FAST_BLINK}, som blinkar med 20~ms i
+stället för \code{STATE_BLINK}:s 100~ms. Följ det genomarbetade exemplet i \secref{c8:sec:vhdl}.
+
+Arbeta på en \textbf{kopia} av modulen, inte på \file{lectures/L08/fsm_led/fsm_led.vhd} självt.
+Kopiera först hela katalogen till ett eget ställe, tillsammans med de tre egna moduler den
+instansierar:
+
+\begin{shell}
+cp -r lectures/L08/fsm_led /tmp/fsm_led_fast
+cp lectures/L04/exercises/reset_sync/reset_sync.vhd /tmp/fsm_led_fast     # the three you wrote
+cp lectures/L04/exercises/button_sync/button_sync.vhd /tmp/fsm_led_fast   # yourself
+cp lectures/L07/exercises/timer/timer.vhd /tmp/fsm_led_fast
+cd /tmp/fsm_led_fast
+\end{shell}
+
+Det finns ingen testbänk att köra här, men maskinen med fyra tillstånd ska ändå gå att analysera,
+och det är värt att göra efter varje ändring: det fångar en saknad \code{case}-gren, eller ett
+\code{state_t}-värde du lagt till i den ena processen men inte den andra.
+
+\begin{shell}
+ghdl -a --std=93 reset_sync.vhd button_sync.vhd timer.vhd fsm_led.vhd
+\end{shell}
+
+\begin{warning}
+Skälet att arbeta på en kopia är värt att känna till, eftersom det är en verklig fallgrop och inte
+sysselsättning för dess egen skull. \code{fsm_led} har en utdelad referenstestbänk,
+\file{fsm_led_tb.vhd}, och Övning~\ref{c8:ex:readfsm} ber dig köra den. Den testbänken kontrollerar
+cykeln med \textbf{tre} tillstånd: den trycker på knappen en gång från \code{STATE_BLINK} och
+kontrollerar att lysdioden lyser fast, eftersom nästa tillstånd i maskinen som den är skriven är
+\code{STATE_ON}. I din version med fyra tillstånd landar det trycket i \code{STATE_FAST_BLINK},
+lysdioden blinkar fortfarande, och assertionen fallerar. Ingenting i felet talar om vilken av de två
+övningarna det hör till. Håll referensmaskinen intakt så uppstår aldrig den frågan.
+\end{warning}
+
+Det finns ingen testbänk för maskinen med fyra tillstånd. Kontrollera den så som
+\secref{c8:sec:byhand} lät dig kontrollera ett tillståndsdiagram: förutsäg tillståndsföljden för en
+serie knapptryck, läs sedan tillbaka dina \code{case}-grenar och bekräfta att de stämmer.
+
+Du behöver:
+\begin{itemize}
+  \item Lägga till det nya värdet i \code{state_t}.
+  \item Lägga till en gren i varje \code{case}-sats, i både \code{STATE_PROCESS} och
+    \code{LED_PROCESS}.
+  \item Hantera de två blinktakterna, antingen genom att lägga till en andra timerinstans, eller
+    genom att låta den befintliga timerns tickantal växla utifrån det aktuella tillståndet.
+\end{itemize}
+
+\exercise{\code{seq_detect_101_mealy}}{VHDL}
+\label{c8:ex:mealy101}
+Implementera detektorn för \code{1, 0, 1} från Övning~\ref{c8:ex:moore101} i VHDL, i en ny katalog
+\file{seq_detect_101_mealy} \textemdash{} den här gången som en \textbf{Mealy}maskin.
+
+Utgå från ditt tillståndsdiagram för Mooremaskinen och konvertera det:
+\begin{itemize}
+  \item Ditt sista tillstånd, ”sett \code{101}”, finns bara för att hålla utgången hög i en cykel.
+  \item En Mealymaskin behöver det inte: utgångsvillkoret kan läsa \code{din} direkt i det tillstånd
+    som redan matchat \code{1, 0}.
+  \item Ta bort det tillståndet, och flytta in dess utgång i villkoret för \code{y}.
+\end{itemize}
+
+Följ sedan mönstret \code{type state_t is (...)} och \code{case} från \secref{c8:sec:vhdl} och
+\ref{c8:sec:mealy}:
+\begin{itemize}
+  \item Återanvänd \code{reset_sync} för \code{reset_n}, precis som \file{seq_detect_mealy.vhd} gör.
+    Det finns ingen knapp i den här designen, så \code{button_sync} instansieras helt enkelt inte.
+  \item Se till att tilldelningen av utgången \code{y} är en enda konkurrent sats, utanför varje
+    klockad process, som beror på både \code{state} och \code{din}, inte bara \code{state}. Annars
+    har du i tysthet byggt en Mooremaskin i stället, och dess utgång kommer en cykel för sent
+    \textemdash{} vilket är precis vad testbänken kontrollerar.
+\end{itemize}
+
+\modulefig[0.56]{lectures/L08/appendix/images/seq_detect_101_mealy.png}
+
+\begin{selfcheck}
+\textbf{Självkontroll.} Döp din entitet till \code{seq_detect_101_mealy}, med portarna \code{clock},
+\code{reset_n}, \code{din} (in) och \code{y} (out), deklarerade i den ordningen för att matcha
+\code{seq_detect_mealy}. En testbänk finns i \file{exercises/seq_detect_101_mealy/}; den
+kontrollerar en icke-överlappande \code{101}-detektor. Din modul instansierar \code{reset_sync}, som
+inte är utdelad där eftersom du skrev den i Övning~\ref{c4:ex:resetsync}: kopiera in din egen.
+
+\begin{shell}
+cd lectures/L08/exercises/seq_detect_101_mealy
+cp ../../../L04/exercises/reset_sync/reset_sync.vhd .     # the one you wrote in L04
+ghdl -a --std=93 reset_sync.vhd seq_detect_101_mealy.vhd seq_detect_101_mealy_tb.vhd
+ghdl -e --std=93 seq_detect_101_mealy_tb
+ghdl -r --std=93 seq_detect_101_mealy_tb --assert-level=error --stop-time=10ms
+\end{shell}
+\end{selfcheck}
+
+% ------------------------------------------------------------------------------------------
+\exerciseset{Att läsa den genomarbetade maskinen}
+
+\exercise{Blinktakt, testbänk och tillståndsföljd}{Simulering}
+\label{c8:ex:readfsm}
+\code{fsm_led} demonstreras på DE0-CV (\secref{c8:sec:board}). Den här övningen kontrollerar att du
+kan redogöra för det du såg, och den har en utdelad referenstestbänk du kan köra själv. Den
+återanvänder dina två synkroniserare från \chapref{c4:ch} och din \code{timer} från
+\chapref{c7:ch}, och ingen av dem är utdelad, så kopiera in dem först:
+
+\begin{shell}
+cd lectures/L08/fsm_led
+cp ../../L04/exercises/reset_sync/reset_sync.vhd .     # the three you wrote yourself
+cp ../../L04/exercises/button_sync/button_sync.vhd .
+cp ../../L07/exercises/timer/timer.vhd .
+ghdl -a --std=93 reset_sync.vhd button_sync.vhd timer.vhd \
+                 fsm_led.vhd fsm_led_tb.vhd
+ghdl -e --std=93 fsm_led_tb
+ghdl -r --std=93 fsm_led_tb --assert-level=error --stop-time=10ms
+\end{shell}
+
+\xpart{a} Räkna ut blinktakten ur källkoden, inte ur demonstrationen. \code{fsm_led} instansierar
+\code{timer} med \code{TIMER_TICK_COUNT} som har förvalet \code{5_000_000}, på en klocka på
+\code{50 MHz}. Hur lång är en timeoutperiod? \code{STATE_BLINK} växlar lysdioden vid varje timeout.
+Vilken \textbf{blink}frekvens ger det, och varför är den hälften av vad du kanske först skriver ned?
+
+\xpart{b} Testbänken skriver över \code{TIMER_TICK_COUNT} med ett mycket mindre värde än förvalet.
+Hitta den överskrivningen i \file{fsm_led_tb.vhd}. Förklara varför en testbänk inte rimligen kan
+använda det riktiga värdet, och ungefär hur länge en simulering av en verklig blinkperiod skulle
+behöva köra.
+
+\xpart{c} Redogör för tillståndsmaskinens beteende:
+\begin{itemize}
+  \item Alla tre tillstånden går att nå åt båda hållen. Följ de tryck på \code{button_n(0)} och
+    \code{button_n(1)} som besöker varje tillstånd och återvänder till \code{STATE_OFF}.
+  \item Tryck på båda knapparna under samma klockcykel. Vad gör \code{fsm_led}, och vilka två rader
+    i arkitekturen avgör det?
+  \item \code{timer_enable} drivs ur \code{state}, så timern går bara i \code{STATE_BLINK}. Lägg
+    märke till att \code{timer} \textbf{fryses} snarare än nollställs när den är avstängd
+    (\secref{c7:sec:module}). Vad betyder det för ögonblicket då du återvänder till
+    \code{STATE_BLINK} efter att ha lämnat det, och skulle det vara bättre eller sämre att hålla
+    \code{timer_enable} hög permanent?
+\end{itemize}
+
+% ------------------------------------------------------------------------------------------
+\exerciseset{Capstone: en seriell länk}
+
+\exercise{\code{uart_rx8}: mottagaren}{VHDL}
+\label{c8:ex:rx}
+Det här är första halvan av bokens capstone, och den komponerar fyra kapitel till en enda design.
+Övning~\ref{c8:ex:tx} bygger den andra änden av samma seriella länk, så stanna inte här. Ingenting i
+den är en ny idé; allt handlar om att koppla ihop moduler du redan har, runt en tillståndsmaskin du
+konstruerar själv:
+\begin{itemize}
+  \item \chapref{c4:ch}:s \code{reset_sync}, som synkroniserar reset.
+  \item \chapref{c5:ch}:s \code{sync}, som synkroniserar ledningen \code{rx}, vilken kommer från
+    någon annans kristall och är asynkron i precis den mening \chapref{c4:ch} avser.
+  \item \chapref{c7:ch}:s \code{timer}, som genererar översamplingsticket.
+  \item Det här kapitlets tillståndsmaskin, som ramar in alltihop och sköter sin egen skiftning och
+    biträkning. Det byggde du som en modul i \chapref{c6:ch}; här är det fyra rader inuti maskinen
+    som redan har de räknare den behöver, vilket är det vanligare sättet en mottagare skrivs på.
+\end{itemize}
+
+Skriv en entitet med namnet \code{uart_rx8}: en mottagare för en byte asynkron seriell data, i det
+format en UART sänder.
+
+\task{Ledningens format}
+Ledningen \code{rx} bär ramar, och mellan ramarna ligger den i viloläge:
+\begin{itemize}
+  \item \textbf{Vila}: ledningen hålls hög.
+  \item \textbf{Startbit}: ledningen går låg i exakt en bitperiod. Det är det som markerar början på
+    en ram; det finns ingen separat klockledning, vilket är vad ”asynkron seriell” betyder.
+  \item \textbf{Åtta databitar}, mest signifikant först, en bitperiod var.
+  \item \textbf{Stoppbit}: ledningen går tillbaka hög i en bitperiod.
+\end{itemize}
+
+\lecfig[0.78]{lectures/L08/appendix/images/uart_frame.png}{En UART-ram: en ledning som vilar hög, en
+startbit, åtta databitar med den mest signifikanta först, och en stoppbit, med mottagaren som
+samplar mitt i varje bit.}{c8:fig:uartframe}
+
+Ramen ovan bär \code{10110010}, som är den första byten testbänken skickar. Pilarna är de åtta
+ögonblick då mottagaren tar upp en \textbf{databit}: en och en halv bitperiod efter den fallande
+flanken, och sedan en gång per bitperiod därefter. Den tittar på ledningen även däremellan
+\textemdash{} efter den fallande flanken, mitt i startbiten för att kontrollera att den fortfarande
+är låg, och mitt i stoppbiten \textemdash{} men bara de åtta pilarna bidrar med bitar till den
+mottagna byten.
+
+Mottagaren måste återskapa bittajmingen enbart ur startbitens fallande flank. Det är hela problemet
+den här övningen löser, och det är därför timern finns här.
+
+\begin{aside}
+\textbf{En medveten avvikelse från en riktig UART.} En riktig UART sänder sina databitar med den
+\textbf{minst} signifikanta först, som \secref{c6:sec:sipo} påpekar. Den här övningen sänder dem med
+den mest signifikanta först:
+\begin{itemize}
+  \item ramningen och tajmingen, som är vad de här två övningarna faktiskt handlar om, är identiska
+    åt båda hållen.
+  \item det är den riktning \secref{c6:sec:sipo}:s SIPO-idiom skiftar åt, så mottagarens skift blir
+    en rad, och sändaren i Övning~\ref{c8:ex:tx} blir dess spegelbild.
+  \item de utdelade testbänkarna sänder och förväntar sig MSB först för att matcha, så paret är
+    konsekvent med sig självt.
+  \item för att prata med en riktig UART skulle du vända skiftriktningen till
+    \secref{c6:sec:shift}:s spegelvända form och inte ändra något annat. Värt att veta innan du
+    kopplar det här till en dators serieport och undrar varför varje byte kommer bitvänd.
+\end{itemize}
+\end{aside}
+
+\task{Översampling: sexton tick per bit}
+Mottagaren måste hitta mitten av en bit vars början den bara kan sluta sig till. Tekniken heter
+\textbf{översampling}: kör \code{timer} med \textbf{sexton gånger} baudhastigheten, så att det finns
+sexton tick per bitperiod, och räkna dem.
+\begin{itemize}
+  \item Startbitens fallande flank nollställer tickräkningen till \code{0}. Timern går kontinuerligt,
+    före, under och efter en ram; det är \emph{räkningen} som nollställs, aldrig timern.
+  \item \textbf{Tick 8} ligger en halv bit senare, mitt i startbiten. Kontrollera att ledningen
+    \emph{fortfarande är låg} där. Har den gått hög var det en glitch och ingen startbit, och
+    mottagaren återgår till viloläge. Den omkontrollen är det som hindrar brus på en vilande ledning
+    från att läsas som data.
+  \item Därifrån är vart \textbf{sextonde} tick mitten på nästa bit: sampla ledningen och skifta in
+    den. Åtta av dem är databitarna, och det nionde är stoppbiten.
+\end{itemize}
+
+Att sampla mitt i biten i stället för vid flankerna är det som ger mottagaren dess tajmingmarginal.
+Sändarens klocka är en annan fysisk kristall än din, så de två driver isär under en ram; en
+mottagare som samplade nära gränserna skulle läsa fel bit så snart de gjorde det. Sexton tick är det
+konventionella valet, och sändaren i Övning~\ref{c8:ex:tx} går på samma tick.
+
+\task{Entiteten}
+
+\begin{booktable}{@{}p{11em}p{4.4em}p{3.4em}L@{}}
+  \thead{Generic} & \thead{Typ} & \thead{Förval} & \thead{Beskrivning} \\
+  \midrule
+  \code{OVERSAMPLE_TICK_COUNT} & \code{natural} & \code{325} & Tickantalet för \code{timer} för
+    \textbf{en sextondel} av en bitperiod. 9600 baud vid \code{50 MHz}; del \textbf{b)} ber dig
+    härleda det. \\
+\end{booktable}
+
+\begin{booktable}{@{}p{5.6em}p{3.4em}p{10.8em}L@{}}
+  \thead{Port} & \thead{Riktn.} & \thead{Typ} & \thead{Beskrivning} \\
+  \midrule
+  \code{clock} & in & \code{std_logic} & Systemklocka. \\
+  \code{reset_n} & in & \code{std_logic} & Asynkron, aktiv låg; går genom \code{reset_sync}, som
+    alltid. \\
+  \code{rx} & in & \code{std_logic} & Den seriella ledningen, direkt från en pinne och därför
+    \textbf{asynkron}. Synkronisera den till \code{rx_s2} innan något annat läser den. \\
+  \code{data_out} & out & \code{std_logic_vector(7 downto 0)} & Den mottagna byten, giltig under den
+    cykel då \code{byte_valid} är hög. \\
+  \code{byte_valid} & out & \code{std_logic} & En puls på en cykel: en komplett, korrekt ramad byte
+    ligger på \code{data_out}. \\
+  \code{frame_err} & out & \code{std_logic} & En puls på en cykel: stoppbiten var inte hög, så ramen
+    är trasig och ingen byte lämnas över. \\
+\end{booktable}
+
+\xpart{a} Konstruera tillståndsmaskinen \textbf{på papper först}, precis som \secref{c8:sec:byhand}
+lät dig göra. Fyra tillstånd:
+\begin{itemize}
+  \item \code{STATE_IDLE}, som väntar på att ledningen ska gå låg.
+  \item \code{STATE_START}, som vid tick 8 kontrollerar att ledningen fortfarande är låg.
+  \item \code{STATE_DATA}, som samplar en bit vart sextonde tick, åtta gånger.
+  \item \code{STATE_STOP}, som samplar stoppbiten sexton tick efter den sista databiten och väljer
+    mellan \code{byte_valid} och \code{frame_err}.
+\end{itemize}
+
+Rita den innan du skriver någon VHDL, och på diagrammet:
+\begin{itemize}
+  \item Ge varje tillstånd sin \textbf{självloop}: pilen för ”ticket jag väntar på har inte kommit
+    än, stå kvar”. Det är den pil som brukar saknas, och ett tillstånd utan den faller igenom dit
+    \code{else} råkar peka.
+  \item Skriv bredvid varje tillstånd \textbf{hur många tick det väntar på}, så att tickbokföringen
+    ligger på papperet i stället för i huvudet.
+  \item Markera var \code{ticks} \textbf{nollställs}. Timern själv stannar aldrig, så de
+    nollställningarna är de enda ställen där mottagaren avgör vad ”början på en bit” betyder.
+  \item Märk pilen ut ur \code{STATE_IDLE} med en \textbf{flank}, inte en nivå: \code{rx_s2} låg
+    \emph{och} hög vid föregående tick. Det kräver en bit historik, så anteckna var du tänker hålla
+    den.
+\end{itemize}
+
+\xpart{b} Räkna ut tajmingen innan du implementerar den:
+\begin{itemize}
+  \item DE0-CV:s klocka är \code{50 MHz} och 9600 baud betyder 9600 bitar per sekund. Hur många
+    klockcykler är en bitperiod? Hur många är en sextondel av en?
+  \item \code{timer} pulsar var \code{TICK_COUNT + 1} klockcykel (\secref{c7:sec:concept}). Vilket
+    \code{OVERSAMPLE_TICK_COUNT} ger det dig? Det exakta svaret är inget heltal, så det finns två
+    kandidater på var sin sida om det: räkna ut felet var och en av dem lämnar, och säg vilken av
+    dem förvalet ovan är och varför.
+  \item Det felet är en bråkdel av en procent, och det ackumuleras över en ram. Hur långt har din
+    samplingspunkt tio bitperioder efter startflanken drivit från mitten av stoppbiten, mätt i
+    översamplingstick? Hur många tick marginal hade den från början?
+  \item Och nu skälet till att svaret är bekvämt: du omsynkroniserar vid varje startbit. Vad skulle
+    behöva gälla för ramlängden för att det skulle sluta räcka?
+\end{itemize}
+
+\xpart{c} Implementera \code{uart_rx8}. Den instansierar tre moduler och gör resten själv:
+\begin{itemize}
+  \item \code{reset_sync} för reset. Allt annat i designen tar dess \code{reset_s2_n}.
+  \item \textbf{\code{sync}}, modulen du skrev i Övning~\ref{c5:ex:sync}, på pinnen \code{rx}, som
+    ger det \code{rx_s2} tillståndsmaskinen läser. Instansiera den med \code{SIZE = 1} och
+    \code{PRESET = '1'}: en vilande ledning är hög, och en synkroniserare som kommer ur reset och
+    läser \code{'0'} skulle för den här maskinen se ut som en startbit. \code{rx} kommer från en
+    pinne som drivs av en sändare med sin egen kristall, så den är asynkron i precis den mening
+    \chapref{c4:ch} avser, och varje regel därifrån gäller oförändrad. Lägg märke till att den tar
+    en \code{std_logic_vector} med ett element på var sida, så du deklarerar ett par sådana och
+    plockar ut \code{rx_s2} ur utgången.
+  \item \code{timer}, med \code{OVERSAMPLE_TICK_COUNT} skickat rakt igenom, \code{enable} bundet
+    till \code{'1'}, och dess \code{timeout} som din enda uppfattning om förfluten tid. Kalla den
+    \code{baud_tick}. Timern frilöper: den stoppas aldrig, nollställs aldrig, och inget tillstånd rör
+    den någonsin. Det maskinen fasar om i stället är sin egen räknare \code{ticks}.
+  \item Ingen skiftregistermodul. Maskinen behöver ändå en biträknare, så den skiftar in ledningen
+    direkt i en signal \code{frame} själv, en rad VHDL per samplad bit.
+\end{itemize}
+
+\task{Tillståndsmaskinen, tillstånd för tillstånd}
+Två räknare: \code{ticks} som räknar \code{0} till \code{15} inom en bit, och \code{bit_count} som
+räknar de åtta databitarna. Allt nedan händer \textbf{bara när \code{baud_tick = '1'}}; vid varje
+annan klockflank står maskinen still. Eftersom timern frilöper är ett tick alltid på väg, i varje
+tillstånd inklusive vila.
+
+\begin{booktable}{@{}p{6.6em}p{7em}p{10em}L@{}}
+  \thead{Tillstånd} & \thead{Väntar på} & \thead{Sedan} & \thead{Till} \\
+  \midrule
+  \code{STATE_IDLE} & fallande flank på \code{rx_s2} & nollställ \code{ticks} &
+    \code{STATE_START} \\
+  \code{STATE_START} & \code{ticks = 8} & \code{rx_s2} fortfarande låg? nollställ \code{ticks} &
+    \code{STATE_DATA} \\
+   & & \code{rx_s2} hög? det var en glitch & \code{STATE_IDLE} \\
+  \code{STATE_DATA} & \code{ticks = 15} & skifta in \code{rx_s2} i \code{frame}, nollställ
+    \code{ticks} & \code{STATE_DATA} tills 8 bitar, sedan \code{STATE_STOP} \\
+  \code{STATE_STOP} & \code{ticks = 15} & \code{rx_s2} hög? \code{data_out <= frame}, pulsa
+    \code{byte_valid} & \code{STATE_IDLE} \\
+   & & \code{rx_s2} låg? pulsa \code{frame_err}, kasta byten & \code{STATE_IDLE} \\
+\end{booktable}
+
+Det finns inget ”klart”-tillstånd. Samplingen av stoppbiten är där ramen bedöms, så det är där byten
+lämnas över, och maskinen går rakt tillbaka till viloläge.
+
+\task{Varför vilotillståndet väntar på en flank i stället för en nivå}
+Håll ett tick historik för \code{rx_s2}, och lämna vilotillståndet bara vid övergången från hög till
+låg. Att i stället testa nivån, ”om \code{rx_s2} är låg, starta en ram”, ser likvärdigt ut och
+klarar allt utom det enda fall som spelar roll.
+
+Betrakta ett \textbf{break}: ledningen hålls låg långt längre än en ram, vilket är hur en sändare
+som tappar strömmen ser ut. Ett nivåtest återaktiveras i samma ögonblick som den föregående ramens
+stoppbit bedöms, så mottagaren tillbringar hela breaket med att marschera genom ram efter ram av
+idel nollor. Var och en slutar på en låg stoppbit och förkastas korrekt, och den delen är i sin
+ordning. Problemet är den ram som är i luften när breaket \emph{slutar}: dess stoppbit samplas efter
+att ledningen gått tillbaka hög, så det är en fullkomligt välformad ram så vitt mottagaren kan
+avgöra, och en byte gjord av ingenting lämnas över som riktiga data. Flanktestet återaktiveras inte
+alls under breaket, eftersom det efter den första fallande flanken inte kommer någon till förrän
+ledningen har hämtat sig.
+
+Det är hela skillnaden, den kostar en vippa, och det är därför en mottagare som ”fungerar” på rena
+data ändå kan lämna över skräp första gången en kabel dras ur.
+
+\task{Skiftet}
+Åtta databitar kommer med den mest signifikanta först, så SIPO-idiomet från \secref{c6:sec:sipo}
+klarar det helt utan indexaritmetik:
+
+\begin{vhdlcode}
+frame <= frame(6 downto 0) & rx_s2;
+\end{vhdlcode}
+
+\code{bit_count} räknar då bara \emph{hur många} bitar som kommit, aldrig \emph{var} de hamnar. Att
+i stället lagra med \code{frame(bit_count) <= rx_s2} lägger den först ankomna biten i bit 0, vilket
+vänder byten: det är den ordning med minst signifikant först som en riktig UART använder, och det
+skulle vara rätt val om den här mottagaren måste prata med en sådan. Här ligger MSB först på
+ledningen, så skiftet är det som matchar.
+
+Fyra saker avgör om det här fungerar:
+\begin{itemize}
+  \item \textbf{Allt är villkorat på \code{baud_tick}.} Ett tillstånd som agerar på en vanlig
+    klockflank körs sexton gånger per tick och ungefär femtusen gånger per bit.
+  \item \textbf{Varje tillstånd behöver sin ”inte än”-väg.} Om ticket du väntar på inte har kommit,
+    eller räkningen inte har nått sitt mål, måste maskinen \textbf{stå kvar där den är}. Att skicka
+    den någon annanstans i \code{else} är det överlägset vanligaste sättet den här designen fallerar
+    på, och den fallerar fullständigt snarare än subtilt: maskinen hamnar i att studsa fram och
+    tillbaka mellan två tillstånd och når aldrig det tredje.
+  \item \textbf{Se upp med ettfelet i räknaren.} Med \code{ticks} som börjar på \code{0} och ökar
+    vid varje tick är det $n$:te ticket \code{ticks = n - 1} i det ögonblick du testar det. Om du
+    jämför före eller efter ökningen avgör vilket tick du faktiskt samplar på, och att vara ett
+    eller två tick sen går att överleva medan åtta inte gör det.
+  \item \textbf{Timern frilöper, så din fas kommer ur \code{ticks}, aldrig ur timern.} Startflanken
+    kommer när sändaren skickar den, vilket är någonstans inuti en tickperiod mottagaren inte valt,
+    så det första ticket efter den flanken kan komma allt från ett helt tick till nästan ingen tid
+    senare. Att nollställa \code{ticks} på vägen ut ur vilotillståndet är det som fasar om
+    samplingen mot startbiten. Den överblivna bråkdelen av ett tick är priset för att aldrig stoppa
+    timern, och det är billigt: en sextondel av en bit, mot den halva bit marginal del \textbf{b)}
+    ber dig räkna ut.
+\end{itemize}
+
+\xpart{d} Kör testbänken. Den behöver fyra designfiler, delblocken först, och inget av de tre
+delblocken är utdelat i övningskatalogen: alla tre är moduler du skrivit.
+
+\begin{shell}
+cd lectures/L08/exercises/uart_rx8
+cp ../../../L04/exercises/reset_sync/reset_sync.vhd .     # the three you wrote yourself
+cp ../../../L05/exercises/sync/sync.vhd .
+cp ../../../L07/exercises/timer/timer.vhd .
+ghdl -a --std=93 sync.vhd reset_sync.vhd timer.vhd uart_rx8.vhd uart_rx8_tb.vhd
+ghdl -e --std=93 uart_rx8_tb
+ghdl -r --std=93 uart_rx8_tb --assert-level=error --stop-time=10ms
+\end{shell}
+
+Den agerar sändare, och kontrollerar:
+\begin{itemize}
+  \item två rena ramar, som kommer fram som rätt byte, utan något \code{frame_err}.
+  \item en vilande ledning, före, mellan och efter dem, som inte producerar något.
+  \item en ram vars stoppbit är \textbf{låg}: \code{frame_err} måste pulsa och ingen byte får lämnas
+    över.
+  \item ledningen hållen låg långt längre än en ram, vilket är ett \textbf{break}: varje ram
+    mottagaren tror sig se där slutar med en låg stoppbit, så ingen av dem är en byte.
+  \item en ram där varje databit bär sitt värde bara i \textbf{mitten} av bitperioden och motsatt
+    nivå på var sida. En mottagare som samplar nära tick 8 läser den perfekt; en som samplar nära en
+    gräns läser grannbiten.
+  \item att \code{byte_valid} och \code{frame_err} var för sig aldrig är höga två cykler i rad.
+\end{itemize}
+
+\note[Tips]Bygg den i etapper och kör testbänken efter varje, i stället för att skriva alla fyra
+tillstånden och felsöka dem på en gång. Få först maskinen att lämna vilotillståndet på en startbit
+och nå \code{STATE_DATA}; kommer den aldrig dit är det ”inte än”-vägen du ska titta på. Sampla sedan
+en databit och kontrollera att det är rätt bit innan du bryr dig om de andra sju. Sedan stoppbiten
+och de två pulserna.
+
+\xpart{e} Ha nu sönder den med flit, och fundera på vad resultatet bevisar och inte bevisar:
+\begin{itemize}
+  \item Ta bort stoppbitstillståndet, och lämna över byten så snart den åttonde databiten är inne.
+    Förutsäg vad som borde gå fel, och kör den sedan. Två kontroller fångar det här, och det är värt
+    att veta vilken som utlöser först: ramen med låg stoppbit höjer inte längre \code{frame_err},
+    och den lämnar över en byte som skulle ha kastats.
+  \item Nu andra halvan av lärdomen. Att passera är den svagare signalen, så hitta en sabotering
+    testbänken \textbf{inte} fångar. Här är en: \textbf{ta bort omkontrollen mitt i startbiten}, så
+    att \code{STATE_START} går vidare till \code{STATE_DATA} vid tick 8 utan att bekräfta att
+    ledningen fortfarande är låg. Testbänken lägger aldrig någon glitch på en vilande ledning, så
+    ingenting märker det, och på riktig hårdvara startar en enda brusspik en spökram. Läs
+    \file{uart_rx8_tb.vhd} och säg vad du skulle lägga till för att fånga det.
+  \item Här är en andra: \textbf{sampla vid tick 3 i stället för tick 8.} Räkna ut varför testbänken
+    fortfarande passerar, och vad du har gett bort. Svaret ligger i marginalberäkningen i del
+    \textbf{b)}.
+  \item Och en tredje, som är den viktigaste av de tre: \textbf{ta bort synkroniseraren för
+    \code{rx}} och läs pinnen direkt. Varje kontroll passerar fortfarande, och det kommer den alltid
+    att göra, oavsett vad som läggs till i testbänken. Säg varför, i termer av vad en simulator
+    modellerar och vad den inte modellerar, och läs sedan om \secref{c4:sec:mtbf}. Det här är den
+    enda sortens bugg i boken som testning inte kan nå, vilket är precis varför \chapref{c4:ch} ger
+    dig en regel att följa snarare än ett symptom att leta efter.
+  \item Med några meningar: vad lovar egentligen ”passerar sin testbänk”, och vad lovar det inte?
+\end{itemize}
+
+\modulefig[0.74]{lectures/L08/appendix/images/uart_rx8.png}
+
+\begin{selfcheck}
+\textbf{Självkontroll.} Döp din entitet till \code{uart_rx8}, med generic
+\code{OVERSAMPLE_TICK_COUNT} (\code{natural}), ingångarna \code{clock}, \code{reset_n}, \code{rx},
+och utgångarna \code{data_out} (\code{std_logic_vector(7 downto 0)}), \code{byte_valid} och
+\code{frame_err}, deklarerade i den ordningen. Dess testbänk finns i \file{exercises/uart_rx8/}, och
+inget annat: \textbf{kopiera in dina egna \code{reset_sync}, \code{sync} och \code{timer}}, som del
+\textbf{d)} visar. En projektkatalog innehåller allt den byggs av, och att sätta ihop den är en del
+av övningen.
+\end{selfcheck}
+
+\exercise{\code{uart_tx8}: sändaren}{VHDL}
+\label{c8:ex:tx}
+Den andra halvan av länken: skriv \code{uart_tx8}, en sändare som skickar en byte i samma format som
+Övning~\ref{c8:ex:rx} tar emot.
+
+En sändare är den enklare av de två, och skälet är värt att förstå innan du börjar:
+\begin{itemize}
+  \item Mottagaren måste \emph{återskapa} bittajmingen ur en startflank den inte styrde över, vilket
+    är varför den samplade mitt i biten och varför dess timer gick på en sextondels bitperiod.
+  \item Sändaren \textbf{definierar} tajmingen. Ingenting behöver återskapas, så timern går på en
+    hel bitperiod och maskinen håller helt enkelt varje bit på ledningen under en timeout.
+\end{itemize}
+
+Den sänder den mest signifikanta biten först, vilket matchar mottagaren i Övning~\ref{c8:ex:rx}
+snarare än en riktig UART, av skälet som anges där.
+
+\task{Entiteten}
+
+\begin{booktable}{@{}p{9em}p{4.4em}p{3.4em}L@{}}
+  \thead{Generic} & \thead{Typ} & \thead{Förval} & \thead{Beskrivning} \\
+  \midrule
+  \code{BIT_TICK_COUNT} & \code{natural} & \code{5207} & Tickantalet för \code{timer} för en
+    \textbf{hel} bitperiod, 9600 baud vid \code{50 MHz}. Sexton av Övning~\ref{c8:ex:rx}:s
+    översamplingstick, så när som på den avrundning dess del \textbf{b)} ber dig räkna ut, så att en
+    \code{uart_tx8} och en \code{uart_rx8} byggda med de matchande förvalen pratar i samma takt. \\
+\end{booktable}
+
+\begin{booktable}{@{}p{5.4em}p{3.4em}p{10.8em}L@{}}
+  \thead{Port} & \thead{Riktn.} & \thead{Typ} & \thead{Beskrivning} \\
+  \midrule
+  \code{clock} & in & \code{std_logic} & Systemklocka. \\
+  \code{reset_n} & in & \code{std_logic} & Asynkron, aktiv låg; genom \code{reset_sync}, som
+    alltid. \\
+  \code{data_in} & in & \code{std_logic_vector(7 downto 0)} & Byten som ska skickas. \\
+  \code{send} & in & \code{std_logic} & En begäran om att sända \code{data_in}. Ignoreras medan
+    sändaren är upptagen. \\
+  \code{tx} & out & \code{std_logic} & Den seriella ledningen. \textbf{Vilar hög}, även under
+    reset. \\
+  \code{busy} & out & \code{std_logic} & Hög från ögonblicket en ram startar tills stoppbiten är
+    över. \\
+\end{booktable}
+
+\xpart{a} Rita tillståndsmaskinen först. Fyra tillstånd är den naturliga uppdelningen: vila,
+startbit, databitar, stoppbit, och vart och ett håller ledningen på en definierad nivå under en
+bitperiod.
+\begin{itemize}
+  \item Markera vad som driver \code{tx} i varje tillstånd. Lägg märke till att \code{tx} aldrig
+    beror på \code{send} eller någon annan primär ingång: det är tillståndet, plus skiftregistrets
+    aktuella utgång. Det gör det här till en Mooremaskin, som allt annat i den här boken.
+  \item Markera var \code{busy} kommer ifrån. Det är en enda jämförelse mot tillståndet.
+  \item Bestäm var byten fångas. Den måste låsas när ramen startar, inte läsas kontinuerligt ur
+    \code{data_in}: producenten står fritt att ändra \code{data_in} i samma ögonblick som
+    \code{busy} går hög, och en verklig sådan kommer att göra det.
+\end{itemize}
+
+\xpart{b} Skifta ut byten med den mest signifikanta biten först, i maskinen själv, spegelbilden av
+vad mottagaren gör: lås in \code{data_in} i en signal \code{frame} när ramen startar, driv \code{tx}
+från den översta biten i \code{frame} medan du är i datatillståndet, och skifta \code{frame} ett steg
+uppåt per bitperiod, med räkning på de åtta bitar som går ut.
+
+Det här skrev du som en modul i Övning~\ref{c6:ex:shiftregs}, och \code{piso8} är värd att läsa om
+för idiomets skull. Att instansiera den här skulle fungera, men maskinen äger redan den biträknare
+ett PISO-register behöver, så skiftet blir en enda rad inuti det tillstånd där det hör hemma. Så är
+båda halvorna av den här länken byggda, och samma avvägning återkommer i \chapref{c14:ch}, där
+\code{tx_shift_reg} är en egen modul just för att \code{can_controller} \emph{inte} redan äger den
+räknare den behöver.
+
+\xpart{c} Implementera den, med \code{reset_sync} instansierad för reset och \code{timer} med
+\code{BIT_TICK_COUNT} skickat rakt igenom.
+
+Här \textbf{är} timerns \code{enable} driven av tillståndet, hög bara medan en ram är i luften, och
+det är det enda stället där den här designen medvetet skiljer sig från Övning~\ref{c8:ex:rx}.
+Mottagaren måste låta sin timer frilöpa eftersom den inte styr när en ram börjar: den kan bara fasa
+om sin egen tickräkning när startflanken redan har kommit. Sändaren har det motsatta problemet. Den
+\emph{bestämmer} när ramen börjar, så den kan starta timern i det ögonblicket och få en första
+bitperiod som är exakt lika lång som alla andra. Låt den frilöpa här i stället, så blir startbiten
+kort med precis så mycket av en tickperiod som råkade återstå när \code{send} kom, vilket är en
+defekt i det enda en sändare är ansvarig för.
+
+Två krav testbänken är sträng med:
+\begin{itemize}
+  \item \textbf{\code{send} ignoreras medan sändaren är upptagen.} Att ladda om mitt i en ram skulle
+    starta om byten och korrumpera det som redan ligger på ledningen. En begäran som kommer under en
+    ram kastas, den köas inte.
+  \item \textbf{\code{busy} ligger kvar hög genom hela stoppbiten}, inte bara databitarna. Ramen är
+    inte över förrän ledningen hållits hög under den sista bitperioden.
+\end{itemize}
+
+\xpart{d} Kör testbänken. Den agerar mottagare: den väntar på din startbit, samplar mitten av varje
+bitperiod, och kontrollerar ramningen, byten, handskakningen med \code{busy}, och att ett
+\code{send} som matas in två bitperioder in i en ram ignoreras.
+
+\begin{shell}
+cd lectures/L08/exercises/uart_tx8
+cp ../../../L04/exercises/reset_sync/reset_sync.vhd .     # the two you wrote yourself
+cp ../../../L07/exercises/timer/timer.vhd .
+ghdl -a --std=93 reset_sync.vhd timer.vhd uart_tx8.vhd uart_tx8_tb.vhd
+ghdl -e --std=93 uart_tx8_tb
+ghdl -r --std=93 uart_tx8_tb --assert-level=error --stop-time=10ms
+\end{shell}
+
+\xpart{e} Svara, i löpande text:
+\begin{itemize}
+  \item En sändare som hoppar över stoppbiten helt lämnar ändå ledningen hög efteråt, eftersom vila
+    och stopp är samma nivå. Vad går egentligen fel, och när visar det sig först? Testbänken fångar
+    den här: vilken av dess kontroller gör det, och varför hade det aldrig gått att fånga genom att
+    bara titta på \code{tx}?
+  \item Din mottagare i Övning~\ref{c8:ex:rx} samplar mitt i varje bit; din sändare ändrar ledningen
+    vid flankerna. Om båda gick på kristaller som skilde sig med 1~\%, ungefär hur många bitar in i
+    en ram skulle mottagarens samplingspunkt driva in i fel bit? Vad säger det dig om varför
+    seriella format har en startbit per byte, snarare än en enda i början av ett långt meddelande?
+\end{itemize}
+
+\modulefig[0.66]{lectures/L08/appendix/images/uart_tx8.png}
+
+\begin{selfcheck}
+\textbf{Självkontroll.} Döp din entitet till \code{uart_tx8}, med generic \code{BIT_TICK_COUNT}
+(\code{natural}), ingångarna \code{clock}, \code{reset_n}, \code{data_in}
+(\code{std_logic_vector(7 downto 0)}), \code{send}, och utgångarna \code{tx}, \code{busy},
+deklarerade i den ordningen. Dess testbänk finns i \file{exercises/uart_tx8/}, och inget annat:
+kopiera in dina egna \code{reset_sync} och \code{timer}, som del \textbf{d)} visar.
+\end{selfcheck}

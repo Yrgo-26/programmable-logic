@@ -1,0 +1,28 @@
+% Kapitel 7, satt ur lectures/L07: Appendix A blir avsnitt 7.1-7.5, och Appendix B övningarna.
+
+\chapter{Timers}
+\label{c7:ch}
+
+{\large\itshape En räknare med ett målvärde, ritad för hand innan den skrivs.\par}
+
+\begin{chapterbox}{I det här kapitlet}
+\begin{itemize}
+  \item Timers: en räknare som höjer en flagga när den nått ett målvärde.
+  \item Att göra klockcykler till riktig tid, och likhetsjämföraren som gör det.
+  \item Samma timer i VHDL, återanvändbar tack vare en \code{generic} snarare än genom omkoppling.
+  \item Att komponera en design av färdiga moduler i stället för att skriva om deras logik.
+  \item \code{walking_led}: en enda tänd bit som vandrar längs en rad lysdioder.
+\end{itemize}
+\end{chapterbox}
+
+Innan timern körs: förutsäg vid vilket räknarvärde \code{timeout} slår till, och varför det är var
+elfte flank snarare än var tionde. Det där ettfelet är hela skälet till att modulens generic heter
+\code{TICK_COUNT} och inte \code{PERIOD}.
+
+\code{walking_led} i \secref{c7:sec:walking} är utdelningen från de fyra senaste kapitlen: tre
+moduler, två av dem oförändrade från \chapref{c4:ch} och en skriven här, komponerade till något du
+kan se från bakre raden.
+
+\input{chapters/07/timers}
+\input{chapters/07/summary}
+\input{chapters/07/exercises}

@@ -1,0 +1,318 @@
+% Appendix B, typeset from info/quartus_workflow.md.
+
+\chapter{Quartus Prime Lite and the DE0-CV}
+\label{app:quartus}
+
+This is the book's tool reference for synthesis and hardware. Through \chapref{c1:ch} to
+\ref{c18:ch} it is \textbf{teacher-facing}: the Quartus and DE0-CV work is demonstrated from the
+front, starting with the brake assistant in \chapref{c1:ch}, and no participant needs Quartus or a
+board of their own.
+
+\begin{aside}
+\Chapref{c19:ch} is the exception, and it is the one that counts. The bring-up is demonstrated first
+and then handed over: every group synthesises and programs its own \code{can_spi_node} and
+demonstrates its own two-node link. So read \secref{app:quartus:project} to \ref{app:quartus:program}
+as participant-facing \textemdash{} you need \secref{app:quartus:project} and
+\ref{app:quartus:sources} to create the project and add the source files, and
+\secref{app:quartus:compile} is the compilation producing the \file{.sof} that
+\secref{app:quartus:program} programs \textemdash{} and read \secref{app:quartus:linux} \emph{before}
+you connect anything, since that is the section deciding whether the Programmer can see the board at
+all.
+\end{aside}
+
+Nothing that is \textbf{assessed} requires the hardware (appendix~\ref{app:project}). The bring-up is
+assessed on the simulation behind it, not on whether the wire worked on that particular day.
+Everything described here ends on real FPGA hardware, verified by hand. That is a different layer from
+the exercises, which you verify on your own laptop with a self-checking testbench under GHDL
+(appendix~\ref{app:sim}).
+
+% ------------------------------------------------------------------------------------------
+\section{What you need}
+\label{app:quartus:need}
+
+\begin{itemize}
+  \item \textbf{Quartus Prime Lite} (the free edition): the manufacturer's FPGA tool, covering
+    synthesis, place and route (``fitting''), and programming file generation.
+  \item \textbf{Cyclone V device support}: a separate add-on package. The DE0-CV's FPGA,
+    \code{5CEBA4F23C7N}, is a Cyclone V device, and Quartus does not install every family's support
+    by default.
+  \item \textbf{USB-Blaster driver}: the DE0-CV is programmed over USB using the USB-Blaster
+    protocol. The driver usually installs alongside Quartus, but sometimes needs a manual nudge
+    (\secref{app:quartus:trouble}).
+  \item A \textbf{Terasic DE0-CV} board and a USB cable.
+\end{itemize}
+
+Quartus Prime Lite exists for both Windows and Linux, and the design steps below are the same on
+either host. \textbf{Getting the board visible to the Programmer is not}, and that is where every
+host-specific problem in this course lives: \secref{app:quartus:linux} covers Linux and WSL,
+\secref{app:quartus:trouble} covers Windows.
+
+\begin{warning}
+A recommendation straight away, since it saves an evening: the course's GHDL toolchain runs on WSL or
+Ubuntu, but \textbf{WSL2 cannot see a USB device at all without extra work}
+(\secref{app:quartus:linux}). If you are on Windows, install Quartus natively on Windows and keep WSL
+for GHDL. The two never need to see each other; they only share the \file{.vhd} files, which live in
+the Windows file system anyway.
+\end{warning}
+
+% ------------------------------------------------------------------------------------------
+\section{Installing Quartus Prime Lite}
+\label{app:quartus:install}
+
+\begin{enumerate}
+  \item Download \textbf{Quartus Prime Lite Edition} from the manufacturer's download portal. Search
+    for ``Quartus Prime Lite download'': Intel's FPGA business became \textbf{Altera} again in 2024,
+    so the pages have moved and older deep links rot. What is stable to search for is the product
+    name, not the URL.
+    \begin{itemize}
+      \item Choose the \textbf{Lite} edition, which is the free one and needs no licence file.
+        Standard and Pro do not cover Cyclone V for free.
+      \item Any reasonably recent Lite edition works; the course does not depend on a particular
+        point release.
+      \item Pick the Windows or Linux installer according to where you intend to run it, and read the
+        warning above if you are on Windows with WSL.
+    \end{itemize}
+  \item During installation, make sure \textbf{Cyclone V} is selected among the device families. If
+    Quartus is already installed without it, add the Cyclone V support afterwards, either by running
+    the installer again or via Quartus's own ``Additional Software'' installer.
+  \item When the DE0-CV board is connected over USB for the first time, Windows should detect the
+    USB-Blaster and either install the driver automatically or ask you to point out Quartus's own
+    driver files (usually under Quartus's installation directory). If Windows finds no driver
+    automatically, see \secref{app:quartus:trouble}.
+\end{enumerate}
+
+\subsection{Two pitfalls in Windows 11}
+\label{app:quartus:win11}
+
+A couple of Windows 11's security defaults can interfere with the installation, or with programming
+the board later:
+
+\begin{itemize}
+  \item \textbf{If the installer does not even open:} find \code{Smart App Control} in Windows
+    Security (search for it in the start menu), turn it off and restart.
+  \item \textbf{If everything installs cleanly but the board still cannot be programmed}
+    (\secref{app:quartus:program}): go to \code{Windows Security → Device security → Core isolation}
+    and turn off \textbf{Memory integrity}.
+\end{itemize}
+
+\lecfig[0.78]{info/images/mem_integrity.png}{\code{Memory integrity} under Windows 11's core
+isolation settings.}{app:quartus:fig:memint}
+
+Neither setting touches Quartus itself; both are general hardening defaults in Windows 11 that happen
+to be strict enough to interfere with driver-level USB access.
+
+% ------------------------------------------------------------------------------------------
+\section{Creating a new project}
+\label{app:quartus:project}
+
+\begin{enumerate}
+  \item Open Quartus and start the \textbf{New Project Wizard} (\code{File → New Project Wizard}).
+  \item Choose a working directory and a project name. Quartus uses the project name as the default
+    name of the top-level entity too, so let it match your VHDL entity's name to save overwriting it
+    later (for \file{or_gate.vhd}: name the project \code{or_gate}).
+  \item Choose \textbf{Empty Project} as the project type. The course uses neither Quartus's IP
+    catalog nor any project template.
+  \item Skip adding files at this step (\secref{app:quartus:sources} covers that), unless you already
+    know exactly which file it is; either is fine.
+  \item On the device selection page, choose exactly the device on the DE0-CV: filter on the
+    \textbf{Cyclone V} family, then find and select the device \code{5CEBA4F23C7N}.
+  \item Skip the EDA tools page (leave it at ``none''); the course runs its simulations directly in
+    GHDL rather than through Quartus.
+  \item Finish the wizard.
+\end{enumerate}
+
+% ------------------------------------------------------------------------------------------
+\section{Adding your VHDL}
+\label{app:quartus:sources}
+
+\begin{itemize}
+  \item Add the source file: \code{Project → Add/Remove Files in Project...}, browse to your
+    \file{.vhd} file and add it.
+  \item If the design has more than one file (a top-level entity plus one or more subcomponents), add
+    all of them. Quartus resolves the instantiation hierarchy automatically as long as every file is
+    in the project.
+  \item Confirm that the top-level entity is set correctly: \code{Project → Set as Top-Level Entity},
+    with your main file selected. For a single-file design that happens automatically.
+\end{itemize}
+
+% ------------------------------------------------------------------------------------------
+\section{Assigning pins in the Pin Planner}
+\label{app:quartus:pins}
+
+Every port in your entity needs a physical pin on the FPGA before Quartus can produce a working
+programming file; otherwise there is no path from the design's ports to a real switch or LED on the
+board.
+
+\begin{enumerate}
+  \item Run \code{Processing → Start → Start Analysis \& Elaboration} first, then open the Pin
+    Planner via \code{Assignments → Pin Planner}. In a brand new project the port list is empty until
+    Quartus has elaborated the design and knows its ports.
+  \item Each of the entity's ports appears as a row. Fill in the \textbf{Location} column with the pin
+    designation of the switch or LED you want to use.
+  \item \textbf{A switch or an LED is a free choice. A clock is not.} For \code{SW}, \code{KEY} and
+    \code{LEDR}, any convenient ones will do: the design does not care which switch drives which
+    input, only that every port reaches one. \code{CLOCK_50} is a specific pad on the device and
+    cannot be moved. On the DE0-CV it is \textbf{\code{PIN_M9}}, the 50 MHz oscillator. Every design
+    from \chapref{c3:ch} onwards is clocked, so from that chapter this is the one pin number worth
+    knowing without looking it up. Confirm it against your own board's files (step 4) before you rely
+    on it.
+  \item \textbf{Do not copy the pin table out by hand.} Ten \code{LEDR} pins transcribed from a PDF
+    are ten chances to transpose two digits, and the failure it gives is the nastiest one in
+    \secref{app:quartus:trouble}: a clean compilation that behaves incomprehensibly.
+    \begin{itemize}
+      \item The DE0-CV's system CD contains a \file{DE0_CV.qsf} where every board pin is already named
+        and assigned.
+      \item \code{Assignments → Import Assignments…}, point out that file, and every
+        \code{CLOCK_50}, \code{SW[n]}, \code{KEY[n]}, \code{LEDR[n]} and \code{GPIO_0[n]} assignment
+        lands at once.
+      \item Name your entity's ports to match those signal names and there is nothing left to assign.
+        That is why \chapref{c19:ch}'s bring-up names its ports \code{CLOCK_50}, \code{KEY},
+        \code{SW}, \code{LEDR} and \code{GPIO_0} rather than something prettier.
+      \item The Pin Planner (and the board's pin tables in the user manual) is still the way to check
+        an individual pin, or assign one the \file{.qsf} file does not cover.
+    \end{itemize}
+  \item Set the \textbf{I/O Standard} column if Quartus does not infer a sensible default for the pin
+    you chose. The DE0-CV's general I/O is 3.3 V LVTTL/LVCMOS. Importing the board's \file{.qsf} (step
+    4) sets this too, which is one more reason to prefer that route.
+  \item Save the assignments (they are written into the project's \file{.qsf} file). Every change here
+    requires recompilation (\secref{app:quartus:compile}) before it takes effect; Quartus does not
+    retrofit a \file{.sof} compiled before the change.
+\end{enumerate}
+
+\subsection{A clock needs a timing constraint too}
+\label{app:quartus:sdc}
+
+Assigning \code{CLOCK_50} a pin tells Quartus \emph{where} the clock comes in. It does not say how
+fast it runs, and until you say so the timing analysis has nothing to check against and reports an
+unconstrained design. Add a \file{.sdc} file to the project with one line:
+
+\begin{console}
+create_clock -name CLOCK_50 -period 20.000 [get_ports CLOCK_50]
+\end{console}
+
+20 ns is 50 MHz. With that in place, the timing analysis in \code{Processing → Start Compilation}
+becomes meaningful and the report gives you a real Fmax, which is the number \secref{c5:sec:fmax}
+sends you here to read. Without it, Fmax is missing, or not to be trusted.
+
+% ------------------------------------------------------------------------------------------
+\section{Compiling the design}
+\label{app:quartus:compile}
+
+\code{Processing → Start Compilation} (or ▶ in the toolbar) runs the whole flow: analysis and
+synthesis, place and route, timing analysis, and assembly into a programming file.
+
+Read the compilation report when it is done, in particular the \textbf{Warnings}: an unconnected port,
+an incomplete sensitivity list, or a latch inferred where you meant combinational logic all turn up
+there as warnings rather than errors. They are easy to miss if you only check that the tick went
+green.
+
+A successful compilation produces a \file{.sof} file (SRAM Object File) in the project's
+\file{output_files} directory. That is the one \secref{app:quartus:program} downloads to the board. It
+is volatile: it configures the FPGA's SRAM directly and disappears when the power is removed. The
+course has no step that burns the configuration permanently.
+
+% ------------------------------------------------------------------------------------------
+\section{Programming the DE0-CV}
+\label{app:quartus:program}
+
+\begin{enumerate}
+  \item Connect the DE0-CV to the computer over USB and switch it on.
+  \item Open the Programmer: \code{Tools → Programmer}.
+  \item Select the USB-Blaster under \textbf{Hardware Setup}. It should be found automatically if the
+    driver installed correctly (otherwise \secref{app:quartus:trouble}).
+  \item Make sure the \file{.sof} file from \secref{app:quartus:compile} is in the list and that its
+    \textbf{Program/Configure} checkbox is ticked. If it is not there, use \code{Auto Detect} or add
+    the file by hand.
+  \item Click \textbf{Start}. The progress bar should reach 100 \% and report success.
+  \item Test the design directly on the board: toggle the switches you assigned in
+    \secref{app:quartus:pins} and confirm that the LED follows the entity's truth table.
+\end{enumerate}
+
+% ------------------------------------------------------------------------------------------
+\section{Troubleshooting}
+\label{app:quartus:trouble}
+
+\begin{description}[style=unboxed,leftmargin=0pt,itemsep=0.8ex]
+  \item[The USB-Blaster does not appear in the Programmer.] Check Device Manager in Windows for an
+    unknown device or one with a driver error, and manually point out the USB-Blaster driver under
+    Quartus's installation directory.
+  \item[The board cannot be programmed, with no clear error.] Turn off \code{Memory integrity} under
+    \code{Core isolation} on Windows 11 (\secref{app:quartus:win11}). It is by far the most common
+    cause once the driver is installed.
+  \item[The installer does not start.] Check \code{Smart App Control} under Windows Security
+    (\secref{app:quartus:win11}).
+  \item[The compilation passes but the design misbehaves on the board.] Check the assignments in the
+    Pin Planner (\secref{app:quartus:pins}) \emph{before} you suspect your VHDL. A swapped or missing
+    pin assignment gives a board that compiles cleanly and behaves incomprehensibly, since it is not
+    wired the way you think.
+  \item[The fitter reports unassigned pins as errors.] Some project settings treat that as fatal
+    rather than as a warning. Either assign every port in the Pin Planner, or, for a forgotten unused
+    port early in development, tell Quartus how to treat the rest:
+    \code{Assignments → Device → Device and Pin Options… → Unused Pins}. For the DE0-CV,
+    \textbf{``As input tri-stated (with weak pull-up)''} is the safe value. The default in some flows
+    drives unused pins low, which on a board where pins reach headers and peripherals is a way of
+    fighting another driver. Do not leave ports silently unassigned and expect Quartus to guess.
+\end{description}
+
+% ------------------------------------------------------------------------------------------
+\section{Programming from Linux and from WSL}
+\label{app:quartus:linux}
+
+\Secref{app:quartus:trouble} is Windows. On Linux the driver is no driver at all: the Programmer talks
+to the USB-Blaster through libusb, and needs permission to do so.
+
+\subsection*{Linux, natively}
+Out of the box the Programmer shows no hardware, since the device node is owned by root. Give it a
+udev rule with the lines below in \file{/etc/udev/rules.d/51-usbblaster.rules}:
+
+\begin{console}
+# Altera USB-Blaster
+SUBSYSTEM=="usb", ATTR{idVendor}=="09fb", ATTR{idProduct}=="6001", MODE="0666"
+SUBSYSTEM=="usb", ATTR{idVendor}=="09fb", ATTR{idProduct}=="6002", MODE="0666"
+SUBSYSTEM=="usb", ATTR{idVendor}=="09fb", ATTR{idProduct}=="6003", MODE="0666"
+# USB-Blaster II
+SUBSYSTEM=="usb", ATTR{idVendor}=="09fb", ATTR{idProduct}=="6010", MODE="0666"
+SUBSYSTEM=="usb", ATTR{idVendor}=="09fb", ATTR{idProduct}=="6810", MODE="0666"
+\end{console}
+
+Reload the rules and then unplug and replug the board:
+
+\begin{shell}
+sudo udevadm control --reload-rules && sudo udevadm trigger
+\end{shell}
+
+Quartus caches its hardware list in a background daemon, so if the Programmer still shows nothing,
+restart it:
+
+\begin{shell}
+killall jtagd 2> /dev/null
+jtagconfig            # should now list the USB-Blaster and the device chain
+\end{shell}
+
+\code{jtagconfig} is the quickest way to tell a permissions problem from a cable problem: if it lists
+the board, the hardware is fine and the problem is inside Quartus; if it does not, stop and solve that
+before you touch the Programmer.
+
+\subsection*{WSL2}
+This is the case the course's own toolchain runs straight into, so it is worth saying outright:
+\textbf{WSL2 has no USB passthrough.} The board is invisible to a WSL2 installation however many udev
+rules you write, since the kernel never sees the device. There is no setting to change. Two ways out:
+
+\begin{itemize}
+  \item \textbf{Run Quartus natively on Windows} (recommended). Keep WSL for GHDL, which needs no
+    hardware at all. Your \file{.vhd} files live in the Windows file system and both tools read them.
+    That is the route the course assumes, and the one with the fewest moving parts.
+  \item \textbf{Forward the device with \code{usbipd-win}}, if you specifically want Quartus inside
+    WSL. From an administrator PowerShell on the Windows side:
+
+\begin{console}
+winget install usbipd
+usbipd list                      # find the USB-Blaster's BUSID
+usbipd bind   --busid <BUSID>    # once per device, persists
+usbipd attach --wsl --busid <BUSID>
+\end{console}
+
+    The device then appears inside WSL and the udev rule above applies. It has to be reattached after
+    every unplug and every WSL restart, and Quartus's graphical interface also needs WSLg or an X
+    server. Doable, but three more things that can go wrong on a presentation day.
+\end{itemize}

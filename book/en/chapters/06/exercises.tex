@@ -1,0 +1,303 @@
+% Section 6.9, from lectures/L06/appendix/b_exercises.md.
+
+\section{Exercises}
+\label{c6:sec:exercises}
+
+\begin{aside}
+\textbf{How to check your work.} Every exercise below that asks you to write a VHDL module has a
+self-checking testbench under \file{lectures/L06/exercises/}. Write your module in its directory
+\file{exercises/<module>/}, with the entity name and the \textbf{port order} the exercise states,
+and then run it with GHDL \textemdash{} see \secref{c2:sec:testbenches} for the three commands.
+\end{aside}
+
+% ------------------------------------------------------------------------------------------
+\exerciseset{Counters}
+
+\exercise{Width and wraparound point}{Reasoning}
+\label{c6:ex:width}
+A signal is declared as:
+
+\begin{vhdlcode}
+signal counter: natural range 0 to 1023;
+\end{vhdlcode}
+
+\xpart{a} How many bits wide is the register this synthesises to?
+
+\xpart{b} What is the largest value \code{counter} can hold before it wraps back to \code{0} at the
+next increment?
+
+\xpart{c} Rewrite the declaration for a counter that instead has to count from \code{0} up to
+\code{63}.
+
+Follow the counter pattern in \secref{c6:sec:counter}.
+
+\exercise{Trace a wraparound by hand}{Reasoning}
+\label{c6:ex:trace}
+Trace a counter of type \code{natural range 0 to 3} by hand (no VHDL needed). Assume the counter
+starts at \code{2}, that it is incremented once per clock edge for five consecutive edges, and that
+there is no reset in between.
+
+Note, clock edge by clock edge: the value held before the edge, and the value captured at the edge.
+Explain why the counter returns to \code{0} with no explicit ``if the count reaches its maximum,
+clear it'' logic.
+
+\note[Note]This is the \emph{synthesised} behaviour, the one that matters for hardware.
+\Secref{c6:sec:counter} flags the simulation caveat that goes with it: GHDL range-checks a signal of
+type \code{natural range 0 to 3}, so a simulation of this counter aborts at the wraparound instead
+of rolling over. Trace it on paper as hardware, and reach for a full-width \code{unsigned} if you
+ever need a counter that wraps in simulation too.
+
+\exercise{The counter by hand, and the bit that runs out}{Circuit}
+\label{c6:ex:counterhand}
+Build the 4-bit counter from \secref{c6:sec:counter} by hand in CircuitVerse, and use it to see the
+overflow rather than take it on trust.
+
+\xpart{a} Build it: a 4-bit register (four D flip-flops sharing a clock), an adder with the
+register's outputs on one input and a constant \code{1} on the other, the adder's sum wired back to
+the register's \code{D} inputs, and four output elements or LEDs, one per bit.
+
+\xpart{b} Run it with a clock period of \code{1000 ms} and note what you see:
+\begin{itemize}
+  \item Write down the sequence of counts over sixteen consecutive clock edges, starting from
+    \code{0000}.
+  \item Keep an eye on \code{carry_out} on the topmost adder as the count rolls from \code{1111} to
+    \code{0000}: during how many of the sixteen edges is it high, and what is connected to it?
+  \item Explain, in one sentence, where the fifth bit goes, and why the register stores \code{0000}
+    rather than \code{10000}.
+\end{itemize}
+
+\xpart{c} Now reason about what you did \emph{not} build: point at the part of your drawing that
+decides the counter should return to \code{0000}. There is none. Say what does the job instead. What
+would you have to add to make it count \code{0} to \code{9} and then wrap?
+(Exercise~\ref{c6:ex:counter} asks you to write exactly that in VHDL, so keep your answer.)
+
+\xpart{d} Change the width to three bits by removing the top flip-flop and narrowing the adder.
+Predict the new wraparound point before you run it, confirm it, and state the rule connecting a
+counter's width to the value it wraps at.
+
+\textbf{Keep this circuit.} \Chapref{c7:ch} builds its timer by adding two things to it, a
+comparator and a clear, and starting from a counter you have already seen working is the whole point
+of the exercise there.
+
+\exercise{\code{counter}: a counter with an arbitrary radix}{VHDL}
+\label{c6:ex:counter}
+Write an entity named \code{counter} that counts from \code{0} up to one below its radix, and then
+wraps back to \code{0}. With the default radix that is a decimal counter, \code{0} to \code{9}.
+
+The entity has one generic:
+
+\begin{booktable}{@{}p{4.4em}p{9.8em}p{4em}L@{}}
+  \thead{Generic} & \thead{Type} & \thead{Default} & \thead{Meaning} \\
+  \midrule
+  \code{RADIX} & \code{natural range 1 to 2**16} & \code{10} & How many values the counter goes
+    through before repeating. It counts \code{0} to \code{RADIX-1} inclusive, so \code{RADIX} is the
+    length of the cycle, not the largest count. \\
+\end{booktable}
+
+and these ports:
+
+\begin{booktable}{@{}p{5.6em}p{3.4em}p{10em}L@{}}
+  \thead{Port} & \thead{Dir.} & \thead{Type} & \thead{Meaning} \\
+  \midrule
+  \code{clock} & in & \code{std_logic} & System clock. \\
+  \code{reset_s2_n} & in & \code{std_logic} & Active-low, \textbf{already synchronised}: it comes
+    from your \code{reset_sync}, never straight from a pin. Asynchronous, so it clears with no clock
+    edge involved. \\
+  \code{count} & out & \code{natural range 0 to RADIX-1} & The running count. \code{0} is a value it
+    takes, so the range starts there: reset drives it to \code{0}, and it returns there at every
+    wraparound. \\
+  \code{tick} & out & \code{std_logic} & A one-cycle pulse at the edge where \code{count} wraps from
+    \code{RADIX-1} back to \code{0}. \\
+\end{booktable}
+
+Implement it with a single synchronous process:
+\begin{itemize}
+  \item Include \code{clock} and \code{reset_s2_n} in the sensitivity list.
+  \item At reset, set \code{count} to \code{0} and \code{tick} to \code{'0'}.
+  \item At every rising clock edge: drive \code{tick} low by default; when \code{count} has reached
+    \code{RADIX-1}, wrap \code{count} to \code{0} and pulse \code{tick} high; otherwise increment
+    \code{count}.
+\end{itemize}
+
+Write the comparison against \code{RADIX-1}, never against \code{9}. The generic is the whole
+difference between a module and a module you can use twice: \code{RADIX} is fixed before synthesis
+runs, so the comparator it builds is no larger than a hardcoded one, and the counter's register is
+sized for the radix you asked for. That is the same argument \secref{c4:sec:generics} makes for
+\code{button_sync}'s \code{COUNT}, and the reason \chapref{c7:ch}'s \code{timer} takes its target
+value as a generic rather than as a constant.
+
+Unlike the free wraparound of a counter of type \code{natural range 0 to 15}, a counter with an
+arbitrary radix needs an explicit comparison, since \code{RADIX-1} is in general not a power-of-two
+boundary. Note what happens when it is: with \code{RADIX = 16} the comparison is still written out,
+but the hardware underneath no longer needs it.
+
+\note[Hint]The process needs to read the running count (to compare it and to increment it), so hold
+the count in an internal \code{signal count_s: natural range 0 to RADIX-1;}, run the logic on
+\code{count_s}, and drive the output with \code{count <= count_s;} outside the process, exactly as
+\file{d_flip_flop.vhd} uses \code{q_s} in \chapref{c3:ch}. That is no stylistic choice: every
+\code{ghdl} command in this book passes \code{--std=93}, and under VHDL-93 reading an \code{out}
+port does not compile at all. Later standards relax that, which is why you may have seen it done
+elsewhere.
+
+Follow the counter pattern in \secref{c6:sec:counter}, and the drive-low-then-pulse shape
+\code{data_ready} has in \secref{c6:sec:rx8}.
+
+\modulefig[0.68]{lectures/L06/appendix/images/counter.png}
+
+\begin{selfcheck}
+\textbf{Self-check.} Name your entity \code{counter}, with the generic \code{RADIX}
+(\code{natural range 1 to 2**16}, default \code{10}), the inputs \code{clock}, \code{reset_s2_n} and
+the outputs \code{count} (\code{natural range 0 to RADIX-1}) and \code{tick} (\code{std_logic}),
+declared in that order; its testbench is in \file{exercises/counter/}. It elaborates \textbf{two}
+instances, one with \code{RADIX = 10} and one with \code{RADIX = 4}, and runs each through two full
+cycles, checking that \code{tick} is a one-cycle pulse rather than a level and that it never fires
+halfway through. An architecture that silently hardcodes \code{10} passes the first instance and
+fails on the second, which is the point of checking two.
+\end{selfcheck}
+
+% ------------------------------------------------------------------------------------------
+\exerciseset{Shift registers}
+
+\exercise{Four bits into a SIPO register}{Reasoning}
+\label{c6:ex:sipotrace}
+An 8-bit SIPO shift register starts at \code{00000000} and uses the idiom from
+\secref{c6:sec:sipo}:
+
+\begin{vhdlcode}
+shift_reg <= shift_reg(6 downto 0) & serial_in;
+\end{vhdlcode}
+
+It receives the serial bit stream \code{1, 0, 1, 1} (one bit per clock edge, in that order) over
+four consecutive rising clock edges.
+
+\xpart{a} Write out the whole 8-bit contents of \code{shift_reg} after each of the four clock edges.
+
+\xpart{b} After the four edges: which four bits of \code{shift_reg} hold the received data, and in
+what order do they sit, relative to the order the bits arrived in?
+
+\exercise{Four bits out of a PISO register}{Reasoning}
+\label{c6:ex:pisotrace}
+A 4-bit PISO register, following the idiom from \secref{c6:sec:piso}, is parallel-loaded with
+\code{parallel_in = "1010"} (\code{load = '1'} for one clock edge), then shifted with
+\code{shift = '1'} for the following four clock edges, with \code{serial_in} held at \code{'0'}
+throughout.
+
+Remember the direction from \secref{c6:sec:shift}: bits move towards the MSB, \code{serial_out} is
+bit 3 (the value about to leave), and \code{serial_in} enters at bit 0.
+
+\xpart{a} Write out the register's contents and \code{serial_out} at every step, one row per clock
+edge: the row for the load edge, before any shifting, and then one row for each of the four shift
+edges.
+
+\xpart{b} In what order do the four loaded bits appear on \code{serial_out}, relative to their
+positions in \code{parallel_in}?
+
+\xpart{c} What are the register's final contents after all four shifts, and why?
+
+\note[Hint]You need no real hardware to check Exercise~\ref{c6:ex:sipotrace} and
+\ref{c6:ex:pisotrace} by hand. Work through them exactly as you would trace a truth table: one clock
+edge, one row, at a time.
+
+\exercise{\code{sipo8} and \code{piso8}}{VHDL}
+\label{c6:ex:shiftregs}
+Implement the chapter's two useful shift register forms in VHDL.
+
+\xpart{a}\parttitle{\code{sipo8}.} Write an entity named \code{sipo8}, a serial-in, parallel-out
+register.
+
+\begin{booktable}{@{}p{6.6em}p{3.4em}p{11em}L@{}}
+  \thead{Port} & \thead{Dir.} & \thead{Type} & \thead{Meaning} \\
+  \midrule
+  \code{clock} & in & \code{std_logic} & System clock. \\
+  \code{reset_s2_n} & in & \code{std_logic} & Active-low, \textbf{already synchronised}.
+    Asynchronous. Clears the whole register, so \code{parallel_out} reads \code{"00000000"} while it
+    is held low. \\
+  \code{serial_in} & in & \code{std_logic} & The incoming bit. \\
+  \code{parallel_out} & out & \code{std_logic_vector(7 downto 0)} & The register's contents. \\
+\end{booktable}
+
+Follow the SIPO idiom from \secref{c6:sec:sipo}.
+
+\modulefig[0.68]{lectures/L06/appendix/images/sipo8.png}
+
+\xpart{b}\parttitle{\code{piso8}.} Write an entity named \code{piso8}, a parallel-in, serial-out
+register.
+
+\begin{booktable}{@{}p{6.6em}p{3.4em}p{11em}L@{}}
+  \thead{Port} & \thead{Dir.} & \thead{Type} & \thead{Meaning} \\
+  \midrule
+  \code{clock} & in & \code{std_logic} & System clock. \\
+  \code{reset_s2_n} & in & \code{std_logic} & Active-low, \textbf{already synchronised}.
+    Asynchronous. Clears the whole register, so \code{serial_out} reads \code{'0'} while it is held
+    low. \\
+  \code{load} & in & \code{std_logic} & Capture \code{parallel_in} at the next rising edge. \\
+  \code{shift} & in & \code{std_logic} & Shift one position at the next rising edge. \\
+  \code{serial_in} & in & \code{std_logic} & The bit fed in at bit 0 on a shift. \\
+  \code{parallel_in} & in & \code{std_logic_vector(7 downto 0)} & The value captured on a load. \\
+  \code{serial_out} & out & \code{std_logic} & The register's top bit. \\
+\end{booktable}
+
+Follow the PISO idiom from \secref{c6:sec:piso}: at a load edge (\code{load = '1'}), capture
+\code{parallel_in}; at a shift edge (\code{shift = '1'}), move every bit one position towards the
+MSB and feed \code{serial_in} in at bit 0; drive \code{serial_out} from bit 7, so that a loaded byte
+leaves most significant bit first; and let \code{load} take precedence over \code{shift} when both
+are high.
+
+\modulefig[0.68]{lectures/L06/appendix/images/piso8.png}
+
+\xpart{c} For each of the four shift register forms (SISO, SIPO, PISO, PIPO), name a task it is the
+natural choice for. Follow the summary table in \secref{c6:sec:shift}.
+
+Derive each idiom afresh from the chapter rather than copying \code{serial_rx8}'s shift line.
+
+\begin{selfcheck}
+\textbf{Self-check.} \code{sipo8}: the ports \code{clock}, \code{reset_s2_n}, \code{serial_in} (in)
+and \code{parallel_out} (\code{std_logic_vector(7 downto 0)}, out), declared in that order;
+testbench in \file{exercises/sipo8/}. \code{piso8}: the ports \code{clock}, \code{reset_s2_n},
+\code{load}, \code{shift}, \code{serial_in}, \code{parallel_in}
+(\code{std_logic_vector(7 downto 0)}) and \code{serial_out} (out), declared in that order; testbench
+in \file{exercises/piso8/}.
+
+\textbf{Keep \code{piso8}.} \Chapref{c8:ch}'s transmitter capstone does not instantiate it, but it is
+worth rereading there for the idiom's sake, since that machine shifts the byte out inline.
+\end{selfcheck}
+
+% ------------------------------------------------------------------------------------------
+\exerciseset{Reading the serial receiver}
+
+The worked example comes with a reference testbench. Run it from the example's own directory before
+you start:
+
+\begin{shell}
+cd lectures/L06/serial_rx8
+ghdl -a --std=93 serial_rx8.vhd serial_rx8_tb.vhd
+ghdl -e --std=93 serial_rx8_tb
+ghdl -r --std=93 serial_rx8_tb --assert-level=error --stop-time=10ms
+\end{shell}
+
+\exercise{The receiver's behaviour, and three real bugs}{Simulation}
+\label{c6:ex:rx8}
+Account for the receiver's behaviour, with reference to \secref{c6:sec:rx8}.
+
+\xpart{a} The bit stream \code{1, 0, 1, 1, 0, 0, 1, 0} arrives, one bit per enabled clock edge. What
+is on \code{data_out} during the cycle where \code{data_ready} pulses? Which arriving bit ends up in
+\code{data_out(7)}, and which in \code{data_out(0)}?
+
+\xpart{b} \code{shift_enable} goes low for three clock cycles after the fourth bit, and then high
+again for the remaining four. Does the receiver still produce the same byte? Explain what the bit
+counter does during the gap. What would go wrong instead if \code{shift_enable} gated only the shift
+register and not the counter?
+
+\xpart{c} Make each of the following changes in your own copy of \file{serial_rx8.vhd}, one at a
+time, and \textbf{predict} what the reference testbench will report before you run it. Then run it
+and account for the result:
+\begin{itemize}
+  \item Change the shift line to the mirrored direction,
+    \code{shift_reg <= serial_in & shift_reg(7 downto 1);}.
+  \item Remove the unconditional \code{data_ready <= '0';} at the top of the clocked branch.
+  \item Change the bit counter's comparison from \code{7} to \code{6}.
+\end{itemize}
+
+Each of them is a real bug that someone has shipped. For each, say which of the testbench's checks
+catches it, and what the failure would have looked like on a real serial link if nothing had caught
+it.

@@ -1,0 +1,88 @@
+% Avsnitt 19.2, ur projektspecifikationens avsnitt 7.2 och SPI-protokollets transaktionsavsnitt.
+
+\section{Transaktionsbryggan \code{spi_reg_bridge}}
+\label{c19:sec:bridge}
+
+\code{spi_slave} (\secref{c18:sub:slave}) talar bara \emph{bytes}. \code{register_bank}
+(\chapref{c18:ch}) talar bara \emph{registersemantik}. Mellan dem sitter ett lager som talar
+\emph{transaktioner}, och det är \code{spi_reg_bridge}. Den vet ingenting om vilka register som
+finns, och ingenting om vad någon av dem betyder.
+
+\subsection*{Gränssnitt}
+Tio portar, i den här ordningen: \code{clock}, \code{reset_s2_n}, \code{ss_active},
+\code{rx_data}, \code{rx_valid}, \code{reg_rdata}, \code{tx_data}, \code{reg_addr},
+\code{reg_wdata}, \code{reg_write}. De fem första plus \code{reg_rdata} är ingångar; de fyra sista är
+utgångar. Bindningen är positionell, som överallt annars.
+
+De tre första kommer från \code{spi_slave}: \code{ss_active} är hög medan slaven är vald,
+\code{rx_data} bär den senast mottagna byten, och \code{rx_valid} pulsar en gång per byte.
+\code{tx_data} är nästa byte slaven ska skifta ut. De fyra registersignalerna kopplas rakt till
+\code{register_bank}s sida mot bryggan.
+
+\subsection*{Transaktionen}
+Varje transaktion är exakt \textbf{5 bytes} lång: en kommandobyte, sedan fyra databytes. \code{SS}
+faller före kommandobyten och stiger efter den femte byten; den måste ligga låg hela transaktionen.
+
+\begin{textdrawing}
+Bit:      7    6    5    4    3    2    1    0
+        +----+----+----+----+----+----+----+----+
+        | W  | 0  | 0  | 0  |   register index  |
+        +----+----+----+----+----+----+----+----+
+\end{textdrawing}
+
+\begin{itemize}
+  \item \textbf{Bit 7 (\code{W})}: \code{1} = skrivning, \code{0} = läsning.
+  \item \textbf{Bit 6--4}: reserverade, måste vara \code{0}.
+  \item \textbf{Bit 3--0}: registerindexet, \code{offset / 4} ur registerkartan (0--12).
+\end{itemize}
+
+\paragraph{Skrivning (\code{W = 1})}
+Mastern skickar registervärdet i de fyra databytesen, \textbf{MSB först} (bitarna 31--24 i den första
+databyten). Slaven verkställer det ihopsatta värdet i det adresserade registret \textbf{först när den
+femte byten är hel}. Vad slaven än driver på \code{MISO} under en skrivning är meningslöst; mastern
+kastar det.
+
+\paragraph{Läsning (\code{W = 0})}
+Vid slutet av kommandobyten \textbf{låser} slaven det adresserade registrets aktuella värde
+\textbf{en gång}, in i sitt svarsskiftregister. De fyra databytesen klockar sedan ut det värdet på
+\code{MISO}, MSB först, medan mastern skickar dummybytes \code{0x00}. Regeln om att låsa en gång är
+inte en implementationsdetalj utan en del av kontraktet: de fyra bytesen tillhör alltid \emph{ett}
+sammanhängande sampel av registret, taget i ett enda ögonblick \textemdash{} \code{STATUS} i
+synnerhet får aldrig vara ihopsytt av två skilda ögonblick.
+
+\paragraph{Avbrott}
+Går \code{ss_active} låg innan den femte byten är hel överges transaktionen \textbf{utan
+sidoeffekter}: ingenting verkställs, ingen utlösare avfyras, och slaven återgår till vila, redo för
+nästa fallande flank på \code{SS}. Det är det som gör slaven självläkande efter en glitch eller en
+master som resettas.
+
+\paragraph{Ogiltiga kommandon}
+En läsning av ett reserverat index (13--15) ger \code{0x00000000}; en skrivning till ett ignoreras. En
+kommandobyte med någon reserverad bit (6--4) satt är ogiltig på samma sätt: ingen läsning låses och
+ingen skrivning verkställs, och slaven förbrukar ändå hela fembytesramen innan den återgår till vila.
+Inget av fallen är ett fel slaven rapporterar \textemdash{} det finns ingen felkanal på det här
+lagret. Att upprätthålla regeln om reserverade \emph{kommando}-bitar är \code{spi_reg_bridge}s jobb;
+\code{register_bank} ser aldrig mer än ett 4-bitars index, aldrig ett reserverat kommando.
+
+\begin{warning}
+\code{reg_addr} \textbf{håller} det avkodade indexet tills nästa kommandobyte avkodar ett nytt: det
+är ett låst värde, inte en puls som följer den pågående byten. Testbänken kontrollerar indexet när
+alla fem bytes är förbrukade, så en brygga som nollställer \code{reg_addr} när den återgår till vila
+passerar de första fallen och faller på det.
+\end{warning}
+
+\subsection*{Att verifiera den}
+Bryggan läser inget register alls och behöver därför bara \code{spi_def}:
+
+\begin{shell}
+cd bridge
+ghdl -a --std=93 spi_def.vhd spi_reg_bridge.vhd spi_reg_bridge_tb.vhd
+ghdl -e --std=93 spi_reg_bridge_tb
+ghdl -r --std=93 spi_reg_bridge_tb --assert-level=error
+\end{shell}
+
+Testbänken modellerar \code{spi_slave} i stället för att instansiera den: den pulsar \code{rx_valid}
+en gång per byte, inramat av \code{ss_active}, så att du kan skriva och kontrollera bryggan innan
+någon SPI-vågform är inblandad. Fyra fall: en skrivning, en läsning byte för byte, ett avbrott på
+\code{ss_active}, och en kommandobyte med reserverad bit satt. Fall 3 och 4 är de två som gör den här
+modulen till mer än en byteräknare \textemdash{} läs deras kommentarer innan du börjar, inte efteråt.

@@ -1,0 +1,47 @@
+% Avsnitt 18.10, ur lectures/L18/README.md.
+
+\section{Sammanfattning}
+\label{c18:sec:review}
+
+\needspace{6\baselineskip}
+\subsection*{Det här ska du kunna nu}
+\begin{itemize}
+  \item Förklara skillnaden mellan en puls och en klibbig nivå, och varför registerlagret måste
+    konvertera mellan dem.
+  \item Implementera \code{register_bank.vhd} enligt registerkartan: STATUS-bitarnas sättning och
+    nollställning, \code{TX_SEND} som encykelspuls, och maskningen vid skrivning.
+  \item Läsa ett SPI-tidsdiagram i läge 0 och säga vilken bit som ligger på MOSI vid varje flank.
+  \item Förklara varför en SPI-slav i en FPGA översamplar SCK i stället för att använda den som
+    klocka.
+  \item Läsa och använda \code{spi_slave.vhd} utan att skriva den.
+\end{itemize}
+
+\needspace{6\baselineskip}
+\subsection*{Frågor att testa dig själv med}
+\begin{enumerate}
+  \item Varför kan en drivrutin som pollar var femte mikrosekund inte se en puls på 20~ns?
+  \item Vad sätter STATUS bit 0, och vad nollställer den?
+  \item Varför låser felbiten på en \emph{stigande flank} av \code{error} och inte på nivån?
+  \item En andra ram tas emot innan den första kvitterats. Vad händer, och varför är det ett medvetet
+    val snarare än en bugg?
+  \item STATUS bit 0 sätts av tre saker under drift, utöver reset. Vilka, och varför räcker det inte
+    med \code{tx_done} ensamt?
+  \item Vad gör \code{TX_ABORT}, och vad når det \emph{inte}?
+  \item En skrivning av \code{0xFFFFFFFF} till \code{TX_DLC} läses tillbaka som \code{0x0000000F}.
+    Var sker maskningen, och varför validerar banken inte att värdet är högst 8?
+  \item Varför använder \code{spi_slave} inte SCK som klocka? Vad skulle gå fel om den gjorde det?
+  \item Varför byter MISO värde på SCK:s fallande flank?
+\end{enumerate}
+
+\needspace{6\baselineskip}
+\subsection*{Riktvärde}
+\code{register_bank} är en avgränsad modul med en fullständig testbänk och bör gå att bli klar med
+under passet och veckan efter. Den beror inte på SPI alls, så den kan skrivas parallellt med att
+någon annan i gruppen läser in sig på transaktionsformatet. Lägg in den utdelade
+\file{spi_slave.vhd} i repot oförändrad, och läs igenom \file{spi_reg_bridge_tb.vhd} inför nästa
+kapitel: den är kontraktet för modulen du skriver då.
+
+\needspace{6\baselineskip}
+\subsection*{Blicken framåt}
+\Chapref{c19:ch} bygger SPI-bryggan, toppnivån \code{can_spi_node}, och tar hela kedjan ut på riktig
+hårdvara. Det är projektets sista pass.

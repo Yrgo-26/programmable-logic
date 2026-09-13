@@ -1,0 +1,30 @@
+% Kapitel 11, satt ur lectures/L11: Appendix A blir avsnitt 11.1-11.6, Appendix B övningarna.
+
+\chapter{Arkitektur, toppnivån och registerkartan}
+\label{c11:ch}
+
+{\large\itshape Från protokoll till blockschema, och den toppnivå varje senare modul instansieras
+i.\par}
+
+\begin{chapterbox}{I det här kapitlet}
+\begin{itemize}
+  \item Att avbilda CAN-begrepp på hårdvarublock: bittimer, CRC-motor, skiftregister, och den
+    ramsekvenserande tillståndsmaskin som styr dem.
+  \item Vem som äger vad: \code{bit_timer} äger \emph{när}, skiftregistren äger bitstoppningen,
+    \code{crc15} vet ingenting om ramar, och \code{can_controller} är det enda block som känner till
+    ramformatet.
+  \item En första titt på registerkartan som drivrutinsklassen ska konsumera.
+  \item Att skriva \file{can_controller.vhd} från grunden: dess femton portar, och en arkitektur som
+    börjar tom och växer kapitel för kapitel.
+  \item Vilka av portarna som är asynkrona, och varför kontrollern synkroniserar dem själv.
+\end{itemize}
+\end{chapterbox}
+
+\Chapref{c10:ch} gav protokollet. Det här kapitlet gör det till en \emph{arkitektur}: fem block med
+ett ansvar var, en entitet som håller ihop dem, och ett gränssnitt som ligger fast resten av boken.
+Ingen av delarna byggs här. Det som skrivs är entiteten de alla ska bo i, och dess arkitektur lämnas
+medvetet tom.
+
+\input{chapters/11/architecture}
+\input{chapters/11/summary}
+\input{chapters/11/exercises}

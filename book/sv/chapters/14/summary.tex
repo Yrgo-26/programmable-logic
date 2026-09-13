@@ -1,0 +1,41 @@
+% Avsnitt 14.7, ur lectures/L14/README.md.
+
+\section{Sammanfattning}
+\label{c14:sec:review}
+
+\needspace{6\baselineskip}
+\subsection*{Det här ska du kunna nu}
+\begin{itemize}
+  \item Implementera ett skiftregister som serialiserar MSB först och sätter in stoppbitar enligt
+    femregeln.
+  \item Förklara varför stoppningsräknaren inte får nollställas när en ny grupp laddas.
+  \item Skilja på \code{bit_valid} och \code{bit_done}, och säga vilken av dem CRC-motorn ska
+    grindas på.
+  \item Säga vad \code{stuff} är till för, och varför den behövs utanför modulen.
+\end{itemize}
+
+\needspace{6\baselineskip}
+\subsection*{Frågor att testa dig själv med}
+\begin{enumerate}
+  \item Varför måste den första biten i en nyladdad grupp ligga ute direkt, i stället för vid nästa
+    \code{shift}?
+  \item Varför nollställs inte stoppningsräknaren vid omladdning?
+  \item Vad skulle gå fel om \code{can_controller} matade CRC-motorn på \code{bit_done} i stället
+    för på \code{bit_valid and not stuff}?
+  \item En stoppbit har alltid motsatt värde mot de fem föregående. Varför räcker inte ”sätt in en
+    nolla”?
+  \item Varför väntar \code{done} en extra skiftning i stället för att gå hög direkt när sista
+    databiten skiftats ut?
+\end{enumerate}
+
+\needspace{6\baselineskip}
+\subsection*{Riktvärde}
+Ungefär halvvägs genom projektet. Tre av fyra lövmoduler brukar vara klara här, och det är också
+ungefär nu det blir tydligt vilken grupp som faktiskt granskar varandras kod och vilken som bara
+klickar ”Approve”.
+
+\needspace{6\baselineskip}
+\subsection*{Blicken framåt}
+\Chapref{c15:ch} bygger \code{rx_shift_reg}, mottagarsidans spegelbild: deserialisering, avstoppning
+och flaggning av brott mot stoppbitsregeln. \Chapref{c16:ch} sätter sedan båda registren i arbete
+inuti \code{can_controller}.

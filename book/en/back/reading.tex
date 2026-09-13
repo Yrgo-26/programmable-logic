@@ -1,0 +1,130 @@
+% Appendix E: further reading. The protocol reference first, then the standards, the tools and four
+% directions further into the subject.
+
+\chapter{Further reading}
+\label{app:reading}
+
+This book ends with a CAN node a microcontroller can talk to, and it ends there deliberately: the
+design is simplified at several deliberate points (\secref{c19:sec:gaps}), and the driver on the other
+side of the SPI link is written by somebody else. This appendix says where the protocol itself is
+described, which standards the design relates to, and where to go next.
+
+% ------------------------------------------------------------------------------------------
+\section{The protocol reference}
+\label{app:reading:protocol}
+
+\canbook{} (``CAN: the bus, the frame and the controller'') is the book this one leans on every time
+CAN as a \emph{protocol} comes up. It is short, in Swedish, and written for both halves of a CAN
+system: the one building the controller in hardware and the one writing the driver in software. It
+therefore mentions neither course nor class, and it is deliberately independent of which of the two
+courses is reading it.
+
+Seven chapters plus an appendix, and the chapter division is this book's part~\ref{part:can} seen from
+the protocol side:
+
+\begin{booktable}{@{}c>{\raggedright\arraybackslash}p{0.44\linewidth}L@{}}
+  \thead{Ch.} & \thead{Subject} & \thead{Here in this book} \\
+  \midrule
+  1 & The bus: topology, dominant and recessive, wired-AND, termination & \secref{c10:sec:can} \\
+  2 & The frame: the fields, the identifier, RTR, DLC, the acknowledgement &
+    \secref{c10:sec:frameformat} \\
+  3 & Bit stuffing and CRC-15 & \secref{c10:sec:stuffing}, \chapref{c13:ch}, \ref{c14:ch} and
+    \ref{c15:ch} \\
+  4 & Arbitration, bit by bit & \secref{c10:sec:arbitration}, \secref{c17:sec:arbitration} \\
+  5 & Bit timing and synchronisation & \secref{c10:sec:bittiming}, \secref{c12:sec:bittimer} \\
+  6 & Error handling: error frames, error counters, bus-off & \secref{c19:sec:gaps}, as a gap \\
+  7 & The simplified controller, and the three limitations that reach all the way up &
+    \secref{c19:sec:gaps}, \secref{app:project:limits}, appendix~\ref{app:protocol} \\
+  A & Answers to every exercise & \textemdash{} \\
+\end{booktable}
+
+Three things make it worth having open beside this book rather than read once:
+
+\begin{itemize}
+  \item \textbf{Chapters 1--6 are the requirement specification, bit by bit,} for the controller
+    part~\ref{part:can} builds. Where this book says ``the rule is five identical bits in a row'',
+    that book says why the rule exists and what breaks without it.
+  \item \textbf{Chapter 7 describes exactly this design}, from outside: the blocks, what it
+    implements of the standard, what it deliberately leaves out, why a register layer is needed, and
+    the three limitations that reach all the way up into the driver's code. Anyone who wants the whole
+    picture in five pages before \chapref{c11:ch}'s architecture reads that chapter first.
+  \item \textbf{Four exercises per chapter, all pen and paper, all answered in appendix A.} They test
+    the protocol understanding without a line of VHDL being involved, which makes them the best
+    preparation there is for \chapref{c20:ch}'s reading tasks.
+\end{itemize}
+
+The books share an author and are typeset the same way, so a reference looks the same in both. They do
+number their chapters independently of each other, however: ``chapter~3'' with no further
+qualification always means a chapter in \emph{this} book, and a reference to the other is always
+written out in full.
+
+% ------------------------------------------------------------------------------------------
+\section{Standards and specifications}
+\label{app:reading:specs}
+
+The book relates to real CAN throughout without being it, and \canbook{} is the intermediate step: it
+describes the standard in Swedish and at the level of detail a designer needs. If you then want to see
+what the original actually says:
+
+\begin{itemize}
+  \item \textbf{Bosch CAN Specification 2.0} (parts A and B) is the base document: the frame formats,
+    the bit stuffing, the CRC polynomial and the arbitration. Part A is the standard frame with an
+    11-bit identifier, that is, this book's frame; part B adds the extended 29-bit form.
+  \item \textbf{ISO 11898-1} is the standardisation of the same thing, with the data link layer and
+    the physical signalling interface. ISO 11898-2 is the high-speed transceiver, that is, the device
+    that would sit between \code{tx_bus}/\code{bus_en} and a real differential bus.
+  \item \textbf{IEEE 1076-1993} is VHDL-93, the language standard \code{--std=93} selects. It is worth
+    reading as a reference work rather than cover to cover; the packages \code{ieee.std_logic_1164}
+    and \code{ieee.numeric_std} are the two parts you have used throughout the book.
+\end{itemize}
+
+The four points where the book's controller deliberately departs from the standard are collected in
+\secref{c19:sec:gaps}, and \secref{app:project:limits} says which three of them reach all the way out
+into the register map.
+
+% ------------------------------------------------------------------------------------------
+\section{The tools}
+\label{app:reading:tools}
+
+\begin{itemize}
+  \item \textbf{GHDL's documentation} covers considerably more than the three commands
+    appendix~\ref{app:sim} needs: waveform output to VCD or GHW, code coverage, and the other
+    language standard flags. \textbf{GTKWave} is the usual waveform viewer to pair it with, and the
+    first time you debug a timing bug by \emph{looking} at the signals instead of reading
+    \code{report} lines it is worth its installation time.
+  \item \textbf{Quartus Prime Lite's own documentation}, in particular the timing analysis:
+    appendix~\ref{app:quartus} settles for one \code{create_clock}, while a real design also needs
+    input and output constraints and exceptions for crossing clock domains.
+  \item \textbf{The DE0-CV's user manual} from the board manufacturer has the complete pin table, the
+    peripherals and the schematic. It is the answer key when \file{DE0_CV.qsf} does not cover
+    something you want to use.
+  \item \textbf{CircuitVerse} is free and runs in the browser. It is still the fastest way to try a
+    small combinational idea, and \chapref{c9:ch} and \ref{c20:ch} allow it for exactly that reason.
+\end{itemize}
+
+% ------------------------------------------------------------------------------------------
+\section{Further into digital design}
+\label{app:reading:design}
+
+This is a book about one system, not about the whole subject. Four directions that lie close by and
+for which material is not lacking:
+
+\begin{itemize}
+  \item \textbf{Timing analysis and clock domains in earnest.} \Chapref{c4:ch} gives the
+    two-flip-flop synchroniser and \secref{c5:sec:fmax} a first Fmax. The next step is setup and hold
+    analysis, FIFOs between clock domains, and Gray-coded pointers \textemdash{} that is, what you do
+    when a whole bus, and not a single bit, has to pass between two clocks.
+  \item \textbf{Verification beyond a hand-written testbench:} self-checking models, random stimuli
+    and coverage metrics. VHDL's OSVVM and UVVM are the two common frameworks, and the step from
+    there to SystemVerilog and UVM is the one industry takes.
+  \item \textbf{Other interfaces, with the same method.} The book builds CAN; UART, SPI,
+    I\textsuperscript{2}C and Modbus all have the same shape \textemdash{} a bit timer, a shift
+    register, a sequencer \textemdash{} and building one more of them with the book's patterns is the
+    fastest way to notice how much of \chapref{c11:ch}'s split was common property.
+  \item \textbf{Processor design.} A small RISC core is the natural next step for anyone who found the
+    state machine in \chapref{c16:ch} the most interesting part: the same building blocks, an
+    instruction decoder instead of a frame decoder, and a register file interface instead of a bus.
+\end{itemize}
+
+What all four have in common is that they rest on the same five patterns \chapref{c20:ch} lists. That
+is the real takeaway from this book: not CAN, but that you can build the next protocol too.

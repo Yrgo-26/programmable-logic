@@ -1,0 +1,33 @@
+% Kapitel 12, satt ur lectures/L12: Appendix A blir avsnitt 12.1, Appendix B avsnitt 12.2, och
+% Appendix C övningarna.
+
+\chapter{Synkronisering och bittimern}
+\label{c12:ch}
+
+{\large\itshape De två första byggblocken som går in i den tomma arkitekturen: det som inte vet
+någonting alls, och det första som vet något om CAN.\par}
+
+\begin{chapterbox}{I det här kapitlet}
+\begin{itemize}
+  \item \code{meta_prev}: dubbelvippsynkroniseraren, skriven en gång med en breddgeneric, och
+    instansierad två gånger inuti \code{can_controller}, för \code{reset_n} och \code{rx_bus}.
+  \item \code{bit_timer}: en fritt löpande räknare som producerar pulserna \code{sample} och
+    \code{bit_done}.
+  \item Att köra en utdelad testbänk mot vardera modulen och läsa dess rapport. Det här är kapitlet
+    där GHDL-flödet får sitt tredje steg.
+  \item Att instansiera båda inuti \code{can_controller}.
+\end{itemize}
+\end{chapterbox}
+
+Två moduler i stället för en, eftersom båda är små och de är designens enda block som inte håller
+något protokolltillstånd: \code{meta_prev} vet ingenting alls, och \code{bit_timer} vet bara
+\emph{när}.
+
+Konstruera varje modul utifrån kontraktet och beteendet nedan, och verifiera sedan mot den utdelade
+testbänken, utan att gripa efter någon referens. Bilaga~\ref{app:sim} är GHDL-referensen för
+projektet.
+
+\input{chapters/12/metaprev}
+\input{chapters/12/bittimer}
+\input{chapters/12/summary}
+\input{chapters/12/exercises}

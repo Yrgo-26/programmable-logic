@@ -1,0 +1,687 @@
+% Section 8.8, from lectures/L08/appendix/b_exercises.md.
+
+\section{Exercises}
+\label{c8:sec:exercises}
+
+\begin{aside}
+\textbf{How to check your work.} Exercise~\ref{c8:ex:binary} and \ref{c8:ex:moore101} are pen and
+paper: they are about getting a state machine right \emph{before} it becomes code, and nothing in
+them needs VHDL, GHDL or a board.
+
+From Exercise~\ref{c8:ex:mealy101} onwards, every exercise that asks you to write a VHDL module has a
+self-checking testbench handed out under \file{lectures/L08/exercises/}, and nothing else;
+Exercise~\ref{c8:ex:fastblink} changes a module you already have and is checked by hand. Assembling
+the rest of the directory is part of the work: the modules you wrote in earlier chapters
+(\code{reset_sync}, \code{button_sync}, \code{sync}, \code{timer}) are copied in from wherever you
+wrote them. Every exercise writes out the exact commands it needs.
+
+Exercise~\ref{c8:ex:rx} and \ref{c8:ex:tx} are the book's capstones: the two ends of one and the
+same serial link, a receiver and a transmitter. Each composes modules from four different chapters.
+Set aside real time for them, and design each state diagram on paper before you write any VHDL. Do
+the receiver first: it is the harder of the two, since it has to recover the bit timing it is given
+rather than defining it itself.
+\end{aside}
+
+% ------------------------------------------------------------------------------------------
+\exerciseset{State diagrams and state tables}
+
+\exercise{A machine with binary state ordering}{Circuit}
+\label{c8:ex:binary}
+Design a new four-state Moore machine, $\{Q_1, Q_2\}$, controlling an LED via a single synchronised,
+edge-detected pulse \code{X} from a button (produced exactly like \code{X} in the worked example in
+\secref{c8:sec:byhand}).
+
+It differs from the worked example in two ways:
+\begin{itemize}
+  \item The state ordering is the ordinary binary count
+    $00 \to 01 \to 10 \to 11 \to 00$, \textbf{not} the Gray code used in \secref{c8:sec:byhand}.
+  \item The LED (\code{Y}) is lit in \textbf{two} states rather than one: whenever $Q_1 = 1$ (that
+    is, in both \code{10} and \code{11}).
+\end{itemize}
+
+\xpart{a} Draw the state diagram: four states, one transition arrow per state for $X = 1$, and one
+self-loop per state for $X = 0$.
+
+\xpart{b} Fill in the complete state table (all eight rows of $\{Q_1, Q_2, X\}$).
+
+\xpart{c} Derive $Q_1^{+}$, $Q_2^{+}$ and \code{Y} with Karnaugh maps, the same way
+\secref{c8:sec:byhand} derives them for the Gray-coded version.
+
+\xpart{d} Realise the gate network by hand: two D flip-flops for $\{Q_1, Q_2\}$, gates computing
+$Q_1^{+}$, $Q_2^{+}$ and \code{Y}, and build and simulate it in CircuitVerse, with two-flip-flop
+synchronisation and edge detection of the button input exactly as in \secref{c8:sec:cv}.
+
+\xpart{e} Verify it in CircuitVerse, against your own state table. There is no testbench for this
+machine, and there is not meant to be: the state table you derived in \textbf{b)} \emph{is} the
+specification, and checking a circuit against a specification you worked out yourself is the whole
+point of the exercise.
+
+Step the clock by hand and check, in this order:
+\begin{itemize}
+  \item \textbf{The stepping path.} Pulse \code{X} once per step and go a full round,
+    $00 \to 01 \to 10 \to 11 \to 00$. Read the expected next state off your table before every edge.
+    Read $\{Q_1, Q_2\}$ off the flip-flops' outputs after the edge. All four transitions must match.
+  \item \textbf{The holding path.} Step the clock with $X = 0$ in each of the four states and
+    confirm that the machine stays put. That is four more checks, and it is the half people skip; a
+    machine that steps correctly but does not hold is a machine whose $X'$ terms are wrong.
+  \item \textbf{The output.} Check \code{Y} against your table in every state: high in \code{10} and
+    \code{11}, low in \code{00} and \code{01}. Do it as a pass of its own, not while you are looking
+    at the state bits.
+\end{itemize}
+
+Where they differ tells you which gate to look at. A wrong $Q_1^{+}$ shows up only on the
+transitions where $Q_1$ should have changed. A wrong \code{Y} shows up with the state sequence still
+entirely correct, which is why it is worth a pass of its own.
+
+\note[Hint]Since the state ordering changed from Gray code to binary, expect one transition
+($01 \to 10$) where \emph{two} state bits flip at once. Per \secref{c8:sec:byhand} that is harmless
+to the machine itself, since nothing samples the state register between edges, and CircuitVerse's
+ideal simulation shows you nothing either way. What it does affect is \code{Y}, which here is decoded
+combinationally from the state bits: on real hardware \code{Y} can glitch briefly while the two bits
+are skewed. Note which transition it is, and what you would do about it if \code{Y} drove something
+that cared.
+
+% ------------------------------------------------------------------------------------------
+\exerciseset{Sequence detection}
+
+\exercise{A Moore detector for \code{101}}{Reasoning}
+\label{c8:ex:moore101}
+Design a \textbf{Moore} machine detecting the sequence \code{1, 0, 1} as it arrives one bit per
+clock cycle on an input \code{din}, raising its output \code{y} as soon as the hit's third bit has
+been seen. Non-overlapping will do here: after a complete hit, start looking for a new
+\code{1, 0, 1} from the beginning rather than reusing the closing bits.
+
+\xpart{a} Draw the state diagram: one state per how much of the pattern has matched so far, one
+arrow out of every state for \code{din = 0} \emph{and} for \code{din = 1} (a sequence detector is
+never idle, it either steps forward or falls back), and mark which state drives \code{y = 1}.
+
+\xpart{b} Fill in the state table, one row per combination of (state, \code{din}).
+
+\xpart{c} Trace it. Pick a six-bit sequence for \code{din} containing at least one hit, and note,
+cycle by cycle: the state before the edge, the value of \code{din}, and the output \code{y}.
+
+\xpart{d} The trap in this machine is the arrows back, not the ones forward. For every state, say
+what happens on the input that does \emph{not} carry the hit forward: which of them return to the
+start, and is there any input that should send you back to a \emph{partially} matched state instead
+of all the way to the beginning? Justify your answer for this pattern.
+
+\note[Hint]Count your states before you draw them. ``Nothing matched yet'', ``seen \code{1}'',
+``seen \code{10}'', ``seen \code{101}'' is the natural split, and the last of them is what drives
+\code{y}.
+
+\textbf{Keep your answer.} Exercise~\ref{c8:ex:mealy101} implements the same detector in VHDL, as a
+Mealy machine \textemdash{} which, per \secref{c8:sec:mealy}, needs one state fewer than the one you
+just drew. Working out which of your states disappears, and why, is part of that exercise.
+
+% ------------------------------------------------------------------------------------------
+\exerciseset{Finite state machines in VHDL}
+
+\exercise{A fourth state in \code{fsm_led}}{VHDL}
+\label{c8:ex:fastblink}
+Extend \code{fsm_led} with a fourth state, \code{STATE_FAST_BLINK}, blinking at 20~ms instead of
+\code{STATE_BLINK}'s 100~ms. Follow the worked example in \secref{c8:sec:vhdl}.
+
+Work on a \textbf{copy} of the module, not on \file{lectures/L08/fsm_led/fsm_led.vhd} itself. First
+copy the whole directory somewhere of your own, together with the three modules of yours that it
+instantiates:
+
+\begin{shell}
+cp -r lectures/L08/fsm_led /tmp/fsm_led_fast
+cp lectures/L04/exercises/reset_sync/reset_sync.vhd /tmp/fsm_led_fast     # the three you wrote
+cp lectures/L04/exercises/button_sync/button_sync.vhd /tmp/fsm_led_fast   # yourself
+cp lectures/L07/exercises/timer/timer.vhd /tmp/fsm_led_fast
+cd /tmp/fsm_led_fast
+\end{shell}
+
+There is no testbench to run here, but the four-state machine should still analyse, and that is worth
+doing after every change: it catches a missing \code{case} branch, or a \code{state_t} value you
+added in one process but not the other.
+
+\begin{shell}
+ghdl -a --std=93 reset_sync.vhd button_sync.vhd timer.vhd fsm_led.vhd
+\end{shell}
+
+\begin{warning}
+The reason for working on a copy is worth knowing, since it is a real pitfall and not busywork for
+its own sake. \code{fsm_led} has a reference testbench handed out with it,
+\file{fsm_led_tb.vhd}, and Exercise~\ref{c8:ex:readfsm} asks you to run it. That testbench checks
+the \textbf{three}-state cycle: it presses the button once from \code{STATE_BLINK} and checks that
+the LED is steadily on, since the next state in the machine as written is \code{STATE_ON}. In your
+four-state version that press lands in \code{STATE_FAST_BLINK}, the LED is still blinking, and the
+assertion fails. Nothing in the failure says which of the two exercises it belongs to. Keep the
+reference machine intact and that question never arises.
+\end{warning}
+
+There is no testbench for the four-state machine. Check it the way \secref{c8:sec:byhand} had you
+check a state diagram: predict the state sequence for a series of button presses, then read your
+\code{case} branches back and confirm that they agree.
+
+You need to:
+\begin{itemize}
+  \item Add the new value to \code{state_t}.
+  \item Add a branch in every \code{case} statement, in both \code{STATE_PROCESS} and
+    \code{LED_PROCESS}.
+  \item Handle the two blink rates, either by adding a second timer instance, or by having the
+    existing timer's tick count switch on the current state.
+\end{itemize}
+
+\exercise{\code{seq_detect_101_mealy}}{VHDL}
+\label{c8:ex:mealy101}
+Implement the \code{1, 0, 1} detector from Exercise~\ref{c8:ex:moore101} in VHDL, in a new directory
+\file{seq_detect_101_mealy} \textemdash{} this time as a \textbf{Mealy} machine.
+
+Start from your state diagram for the Moore machine and convert it:
+\begin{itemize}
+  \item Your last state, ``seen \code{101}'', exists only to hold the output high for one cycle.
+  \item A Mealy machine does not need it: the output condition can read \code{din} directly in the
+    state that has already matched \code{1, 0}.
+  \item Remove that state, and move its output into the condition for \code{y}.
+\end{itemize}
+
+Then follow the \code{type state_t is (...)} and \code{case} pattern from \secref{c8:sec:vhdl} and
+\ref{c8:sec:mealy}:
+\begin{itemize}
+  \item Reuse \code{reset_sync} for \code{reset_n}, exactly as \file{seq_detect_mealy.vhd} does.
+    There is no button in this design, so \code{button_sync} is simply not instantiated.
+  \item Make sure the assignment of the output \code{y} is a single concurrent statement, outside
+    any clocked process, depending on both \code{state} and \code{din}, not just \code{state}.
+    Otherwise you have silently built a Moore machine instead, and its output comes one cycle too
+    late \textemdash{} which is exactly what the testbench checks.
+\end{itemize}
+
+\modulefig[0.56]{lectures/L08/appendix/images/seq_detect_101_mealy.png}
+
+\begin{selfcheck}
+\textbf{Self-check.} Name your entity \code{seq_detect_101_mealy}, with the ports \code{clock},
+\code{reset_n}, \code{din} (in) and \code{y} (out), declared in that order to match
+\code{seq_detect_mealy}. A testbench is in \file{exercises/seq_detect_101_mealy/}; it checks a
+non-overlapping \code{101} detector. Your module instantiates \code{reset_sync}, which is not handed
+out there since you wrote it in Exercise~\ref{c4:ex:resetsync}: copy your own in.
+
+\begin{shell}
+cd lectures/L08/exercises/seq_detect_101_mealy
+cp ../../../L04/exercises/reset_sync/reset_sync.vhd .     # the one you wrote in L04
+ghdl -a --std=93 reset_sync.vhd seq_detect_101_mealy.vhd seq_detect_101_mealy_tb.vhd
+ghdl -e --std=93 seq_detect_101_mealy_tb
+ghdl -r --std=93 seq_detect_101_mealy_tb --assert-level=error --stop-time=10ms
+\end{shell}
+\end{selfcheck}
+
+% ------------------------------------------------------------------------------------------
+\exerciseset{Reading the worked machine}
+
+\exercise{Blink rate, testbench and state sequence}{Simulation}
+\label{c8:ex:readfsm}
+\code{fsm_led} is demonstrated on the DE0-CV (\secref{c8:sec:board}). This exercise checks that you
+can account for what you saw, and it comes with a reference testbench you can run yourself. It
+reuses your two synchronisers from \chapref{c4:ch} and your \code{timer} from \chapref{c7:ch}, and
+none of them is handed out, so copy them in first:
+
+\begin{shell}
+cd lectures/L08/fsm_led
+cp ../../L04/exercises/reset_sync/reset_sync.vhd .     # the three you wrote yourself
+cp ../../L04/exercises/button_sync/button_sync.vhd .
+cp ../../L07/exercises/timer/timer.vhd .
+ghdl -a --std=93 reset_sync.vhd button_sync.vhd timer.vhd \
+                 fsm_led.vhd fsm_led_tb.vhd
+ghdl -e --std=93 fsm_led_tb
+ghdl -r --std=93 fsm_led_tb --assert-level=error --stop-time=10ms
+\end{shell}
+
+\xpart{a} Work out the blink rate from the source, not from the demonstration. \code{fsm_led}
+instantiates \code{timer} with \code{TIMER_TICK_COUNT} defaulting to \code{5_000_000}, on a
+\code{50 MHz} clock. How long is one timeout period? \code{STATE_BLINK} toggles the LED at every
+timeout. What \textbf{blink} frequency does that give, and why is it half of what you might first
+write down?
+
+\xpart{b} The testbench overrides \code{TIMER_TICK_COUNT} with a much smaller value than the
+default. Find that override in \file{fsm_led_tb.vhd}. Explain why a testbench cannot reasonably use
+the real value, and roughly how long a simulation of one real blink period would have to run.
+
+\xpart{c} Account for the state machine's behaviour:
+\begin{itemize}
+  \item All three states are reachable in both directions. Trace the presses of \code{button_n(0)}
+    and \code{button_n(1)} that visit every state and return to \code{STATE_OFF}.
+  \item Press both buttons during the same clock cycle. What does \code{fsm_led} do, and which two
+    lines in the architecture decide that?
+  \item \code{timer_enable} is driven from \code{state}, so the timer runs only in
+    \code{STATE_BLINK}. Note that \code{timer} is \textbf{frozen} rather than cleared when it is
+    disabled (\secref{c7:sec:module}). What does that mean for the moment you return to
+    \code{STATE_BLINK} after leaving it, and would it be better or worse to hold
+    \code{timer_enable} permanently high?
+\end{itemize}
+
+% ------------------------------------------------------------------------------------------
+\exerciseset{Capstone: a serial link}
+
+\exercise{\code{uart_rx8}: the receiver}{VHDL}
+\label{c8:ex:rx}
+This is the first half of the book's capstone, and it composes four chapters into one design.
+Exercise~\ref{c8:ex:tx} builds the other end of the same serial link, so do not stop here. Nothing in
+it is a new idea; it is all about wiring together modules you already have, around a state machine
+you design yourself:
+\begin{itemize}
+  \item \chapref{c4:ch}'s \code{reset_sync}, synchronising reset.
+  \item \chapref{c5:ch}'s \code{sync}, synchronising the \code{rx} line, which comes from somebody
+    else's crystal and is asynchronous in exactly the sense \chapref{c4:ch} means.
+  \item \chapref{c7:ch}'s \code{timer}, generating the oversampling tick.
+  \item This chapter's state machine, framing all of it and doing its own shifting and bit counting.
+    You built that as a module in \chapref{c6:ch}; here it is four lines inside a machine that
+    already has the counters it needs, which is the more common way a receiver is written.
+\end{itemize}
+
+Write an entity named \code{uart_rx8}: a receiver for one byte of asynchronous serial data, in the
+format a UART sends.
+
+\task{The line's format}
+The \code{rx} line carries frames, and between frames it idles:
+\begin{itemize}
+  \item \textbf{Idle}: the line is held high.
+  \item \textbf{Start bit}: the line goes low for exactly one bit period. That is what marks the
+    beginning of a frame; there is no separate clock line, which is what ``asynchronous serial''
+    means.
+  \item \textbf{Eight data bits}, most significant first, one bit period each.
+  \item \textbf{Stop bit}: the line goes back high for one bit period.
+\end{itemize}
+
+\lecfig[0.78]{lectures/L08/appendix/images/uart_frame.png}{A UART frame: a line idling high, a start
+bit, eight data bits with the most significant first, and a stop bit, with the receiver sampling
+mid-bit.}{c8:fig:uartframe}
+
+The frame above carries \code{10110010}, which is the first byte the testbench sends. The arrows are
+the eight moments where the receiver picks up a \textbf{data bit}: one and a half bit periods after
+the falling edge, and then once per bit period thereafter. It looks at the line in between as well
+\textemdash{} after the falling edge, mid start bit to check that it is still low, and mid stop bit
+\textemdash{} but only the eight arrows contribute bits to the received byte.
+
+The receiver has to recover the bit timing from the start bit's falling edge alone. That is the
+whole problem this exercise solves, and it is why the timer is here.
+
+\begin{aside}
+\textbf{One deliberate departure from a real UART.} A real UART sends its data bits
+\textbf{least} significant first, as \secref{c6:sec:sipo} points out. This exercise sends them most
+significant first:
+\begin{itemize}
+  \item the framing and the timing, which are what these two exercises are actually about, are
+    identical either way.
+  \item it is the direction \secref{c6:sec:sipo}'s SIPO idiom shifts in, so the receiver's shift is
+    one line, and the transmitter in Exercise~\ref{c8:ex:tx} is its mirror image.
+  \item the testbenches handed out send and expect MSB first to match, so the pair is consistent
+    with itself.
+  \item to talk to a real UART you would reverse the shift direction to \secref{c6:sec:shift}'s
+    mirrored form and change nothing else. Worth knowing before you connect this to a computer's
+    serial port and wonder why every byte arrives bit-reversed.
+\end{itemize}
+\end{aside}
+
+\task{Oversampling: sixteen ticks per bit}
+The receiver has to find the middle of a bit whose beginning it can only infer. The technique is
+called \textbf{oversampling}: run \code{timer} at \textbf{sixteen times} the baud rate, so that there
+are sixteen ticks per bit period, and count them.
+\begin{itemize}
+  \item The start bit's falling edge clears the tick count to \code{0}. The timer runs continuously,
+    before, during and after a frame; it is the \emph{count} that is cleared, never the timer.
+  \item \textbf{Tick 8} is half a bit later, in the middle of the start bit. Check that the line is
+    \emph{still low} there. If it has gone high it was a glitch and no start bit, and the receiver
+    returns to idle. That recheck is what keeps noise on an idle line from being read as data.
+  \item From there, every \textbf{sixteenth} tick is the middle of the next bit: sample the line and
+    shift it in. Eight of them are the data bits, and the ninth is the stop bit.
+\end{itemize}
+
+Sampling mid-bit instead of at the edges is what gives the receiver its timing margin. The
+transmitter's clock is a different physical crystal from yours, so the two drift apart over a frame;
+a receiver sampling near the boundaries would read the wrong bit as soon as they did. Sixteen ticks
+is the conventional choice, and the transmitter in Exercise~\ref{c8:ex:tx} runs on the same tick.
+
+\task{The entity}
+
+\begin{booktable}{@{}p{11em}p{4.4em}p{3.4em}L@{}}
+  \thead{Generic} & \thead{Type} & \thead{Default} & \thead{Description} \\
+  \midrule
+  \code{OVERSAMPLE_TICK_COUNT} & \code{natural} & \code{325} & The tick count for \code{timer} for
+    \textbf{one sixteenth} of a bit period. 9600 baud at \code{50 MHz}; part \textbf{b)} asks you to
+    derive it. \\
+\end{booktable}
+
+\begin{booktable}{@{}p{5.6em}p{3.4em}p{10.8em}L@{}}
+  \thead{Port} & \thead{Dir.} & \thead{Type} & \thead{Description} \\
+  \midrule
+  \code{clock} & in & \code{std_logic} & System clock. \\
+  \code{reset_n} & in & \code{std_logic} & Asynchronous, active low; goes through
+    \code{reset_sync}, as always. \\
+  \code{rx} & in & \code{std_logic} & The serial line, straight from a pin and therefore
+    \textbf{asynchronous}. Synchronise it to \code{rx_s2} before anything else reads it. \\
+  \code{data_out} & out & \code{std_logic_vector(7 downto 0)} & The received byte, valid during the
+    cycle where \code{byte_valid} is high. \\
+  \code{byte_valid} & out & \code{std_logic} & A one-cycle pulse: a complete, correctly framed byte
+    is on \code{data_out}. \\
+  \code{frame_err} & out & \code{std_logic} & A one-cycle pulse: the stop bit was not high, so the
+    frame is broken and no byte is handed over. \\
+\end{booktable}
+
+\xpart{a} Design the state machine \textbf{on paper first}, exactly as \secref{c8:sec:byhand} had you
+do. Four states:
+\begin{itemize}
+  \item \code{STATE_IDLE}, waiting for the line to go low.
+  \item \code{STATE_START}, checking at tick 8 that the line is still low.
+  \item \code{STATE_DATA}, sampling one bit every sixteenth tick, eight times.
+  \item \code{STATE_STOP}, sampling the stop bit sixteen ticks after the last data bit and choosing
+    between \code{byte_valid} and \code{frame_err}.
+\end{itemize}
+
+Draw it before you write any VHDL, and on the diagram:
+\begin{itemize}
+  \item Give every state its \textbf{self-loop}: the arrow for ``the tick I am waiting for has not
+    come yet, stay put''. That is the arrow that usually goes missing, and a state without it falls
+    through to wherever \code{else} happens to point.
+  \item Write beside every state \textbf{how many ticks it waits for}, so that the tick bookkeeping
+    is on the paper instead of in your head.
+  \item Mark where \code{ticks} is \textbf{cleared}. The timer itself never stops, so those clears
+    are the only places where the receiver decides what ``the beginning of a bit'' means.
+  \item Label the arrow out of \code{STATE_IDLE} with an \textbf{edge}, not a level: \code{rx_s2}
+    low \emph{and} high at the previous tick. That takes one bit of history, so note down where you
+    intend to keep it.
+\end{itemize}
+
+\xpart{b} Work out the timing before you implement it:
+\begin{itemize}
+  \item The DE0-CV's clock is \code{50 MHz} and 9600 baud means 9600 bits per second. How many clock
+    cycles is one bit period? How many is one sixteenth of one?
+  \item \code{timer} pulses every \code{TICK_COUNT + 1} clock cycles (\secref{c7:sec:concept}).
+    Which \code{OVERSAMPLE_TICK_COUNT} does that give you? The exact answer is not an integer, so
+    there are two candidates either side of it: work out the error each of them leaves, and say
+    which of them the default above is and why.
+  \item That error is a fraction of a percent, and it accumulates over a frame. How far has your
+    sampling point drifted from the middle of the stop bit ten bit periods after the start edge,
+    measured in oversampling ticks? How many ticks of margin did it have to begin with?
+  \item And now the reason the answer is comfortable: you resynchronise at every start bit. What
+    would have to be true of the frame length for that to stop being enough?
+\end{itemize}
+
+\xpart{c} Implement \code{uart_rx8}. It instantiates three modules and does the rest itself:
+\begin{itemize}
+  \item \code{reset_sync} for reset. Everything else in the design takes its \code{reset_s2_n}.
+  \item \textbf{\code{sync}}, the module you wrote in Exercise~\ref{c5:ex:sync}, on the \code{rx}
+    pin, giving the \code{rx_s2} the state machine reads. Instantiate it with \code{SIZE = 1} and
+    \code{PRESET = '1'}: an idle line is high, and a synchroniser coming out of reset reading
+    \code{'0'} would look to this machine like a start bit. \code{rx} comes from a pin driven by a
+    transmitter with its own crystal, so it is asynchronous in exactly the sense \chapref{c4:ch}
+    means, and every rule from there applies unchanged. Note that it takes a one-element
+    \code{std_logic_vector} on each side, so you declare a pair of those and pick \code{rx_s2} out
+    of the output.
+  \item \code{timer}, with \code{OVERSAMPLE_TICK_COUNT} passed straight through, \code{enable} tied
+    to \code{'1'}, and its \code{timeout} as your only notion of elapsed time. Call it
+    \code{baud_tick}. The timer free-runs: it is never stopped, never cleared, and no state ever
+    touches it. What the machine rephases instead is its own counter \code{ticks}.
+  \item No shift register module. The machine needs a bit counter anyway, so it shifts the line
+    straight into a signal \code{frame} itself, one line of VHDL per sampled bit.
+\end{itemize}
+
+\task{The state machine, state by state}
+Two counters: \code{ticks} counting \code{0} to \code{15} within a bit, and \code{bit_count} counting
+the eight data bits. Everything below happens \textbf{only when \code{baud_tick = '1'}}; at every
+other clock edge the machine stands still. Since the timer free-runs, a tick is always on its way, in
+every state including idle.
+
+\begin{booktable}{@{}p{6.6em}p{7em}p{10em}L@{}}
+  \thead{State} & \thead{Waits for} & \thead{Then} & \thead{To} \\
+  \midrule
+  \code{STATE_IDLE} & falling edge on \code{rx_s2} & clear \code{ticks} & \code{STATE_START} \\
+  \code{STATE_START} & \code{ticks = 8} & \code{rx_s2} still low? clear \code{ticks} &
+    \code{STATE_DATA} \\
+   & & \code{rx_s2} high? it was a glitch & \code{STATE_IDLE} \\
+  \code{STATE_DATA} & \code{ticks = 15} & shift \code{rx_s2} into \code{frame}, clear \code{ticks} &
+    \code{STATE_DATA} until 8 bits, then \code{STATE_STOP} \\
+  \code{STATE_STOP} & \code{ticks = 15} & \code{rx_s2} high? \code{data_out <= frame}, pulse
+    \code{byte_valid} & \code{STATE_IDLE} \\
+   & & \code{rx_s2} low? pulse \code{frame_err}, discard the byte & \code{STATE_IDLE} \\
+\end{booktable}
+
+There is no ``done'' state. The stop bit's sample is where the frame is judged, so that is where the
+byte is handed over, and the machine goes straight back to idle.
+
+\task{Why the idle state waits for an edge instead of a level}
+Keep one tick of history for \code{rx_s2}, and leave the idle state only at the transition from high
+to low. Testing the level instead, ``if \code{rx_s2} is low, start a frame'', looks equivalent and
+handles everything except the one case that matters.
+
+Consider a \textbf{break}: the line held low for far longer than a frame, which is what a transmitter
+losing power looks like. A level test rearms the moment the previous frame's stop bit is judged, so
+the receiver spends the whole break marching through frame after frame of all zeros. Each ends on a
+low stop bit and is correctly rejected, and that part is fine. The problem is the frame in the air
+when the break \emph{ends}: its stop bit is sampled after the line has gone back high, so it is a
+perfectly well-formed frame as far as the receiver can tell, and a byte made of nothing is handed
+over as real data. The edge test does not rearm at all during the break, since after the first
+falling edge there is no second one until the line has recovered.
+
+That is the whole difference, it costs one flip-flop, and it is why a receiver that ``works'' on
+clean data can still hand over rubbish the first time a cable is pulled out.
+
+\task{The shift}
+Eight data bits arrive most significant first, so the SIPO idiom from \secref{c6:sec:sipo} handles it
+with no index arithmetic at all:
+
+\begin{vhdlcode}
+frame <= frame(6 downto 0) & rx_s2;
+\end{vhdlcode}
+
+\code{bit_count} then only counts \emph{how many} bits have arrived, never \emph{where} they land.
+Storing with \code{frame(bit_count) <= rx_s2} instead puts the first-arrived bit in bit 0, which
+reverses the byte: that is the least-significant-first order a real UART uses, and it would be the
+right choice if this receiver had to talk to one. Here the MSB comes first on the line, so the shift
+is the one that matches.
+
+Four things decide whether this works:
+\begin{itemize}
+  \item \textbf{Everything is conditioned on \code{baud_tick}.} A state acting on an ordinary clock
+    edge runs sixteen times per tick and about five thousand times per bit.
+  \item \textbf{Every state needs its ``not yet'' path.} If the tick you are waiting for has not
+    arrived, or the count has not reached its target, the machine must \textbf{stay where it is}.
+    Sending it somewhere else in the \code{else} is by far the most common way this design fails, and
+    it fails completely rather than subtly: the machine ends up bouncing back and forth between two
+    states and never reaches the third.
+  \item \textbf{Watch the off-by-one in the counter.} With \code{ticks} starting at \code{0} and
+    incrementing at every tick, the $n$th tick is \code{ticks = n - 1} at the moment you test it.
+    Whether you compare before or after the increment decides which tick you actually sample on, and
+    being one or two ticks late is survivable while eight is not.
+  \item \textbf{The timer free-runs, so your phase comes from \code{ticks}, never from the timer.}
+    The start edge arrives when the transmitter sends it, which is somewhere inside a tick period the
+    receiver did not choose, so the first tick after that edge can come anywhere from a whole tick to
+    almost no time later. Clearing \code{ticks} on the way out of the idle state is what rephases the
+    sampling against the start bit. The leftover fraction of a tick is the price of never stopping
+    the timer, and it is cheap: one sixteenth of a bit, against the half bit of margin part
+    \textbf{b)} asks you to work out.
+\end{itemize}
+
+\xpart{d} Run the testbench. It needs four design files, the subcomponents first, and none of the
+three subcomponents is handed out in the exercise directory: all three are modules you wrote.
+
+\begin{shell}
+cd lectures/L08/exercises/uart_rx8
+cp ../../../L04/exercises/reset_sync/reset_sync.vhd .     # the three you wrote yourself
+cp ../../../L05/exercises/sync/sync.vhd .
+cp ../../../L07/exercises/timer/timer.vhd .
+ghdl -a --std=93 sync.vhd reset_sync.vhd timer.vhd uart_rx8.vhd uart_rx8_tb.vhd
+ghdl -e --std=93 uart_rx8_tb
+ghdl -r --std=93 uart_rx8_tb --assert-level=error --stop-time=10ms
+\end{shell}
+
+It plays transmitter, and checks:
+\begin{itemize}
+  \item two clean frames, arriving as the right byte, with no \code{frame_err}.
+  \item an idle line, before, between and after them, producing nothing.
+  \item a frame whose stop bit is \textbf{low}: \code{frame_err} must pulse and no byte may be handed
+    over.
+  \item the line held low for far longer than a frame, which is a \textbf{break}: every frame the
+    receiver thinks it sees there ends on a low stop bit, so none of them is a byte.
+  \item a frame where every data bit carries its value only in the \textbf{middle} of the bit period
+    and the opposite level either side. A receiver sampling near tick 8 reads it perfectly; one
+    sampling near a boundary reads the neighbouring bit.
+  \item that \code{byte_valid} and \code{frame_err} are each never high for two cycles in a row.
+\end{itemize}
+
+\note[Hint]Build it in stages and run the testbench after each, rather than writing all four states
+and debugging them at once. First get the machine to leave the idle state on a start bit and reach
+\code{STATE_DATA}; if it never gets there it is the ``not yet'' path to look at. Then sample one data
+bit and check that it is the right bit before you worry about the other seven. Then the stop bit and
+the two pulses.
+
+\xpart{e} Now break it deliberately, and think about what the result proves and does not prove:
+\begin{itemize}
+  \item Remove the stop bit state, and hand the byte over as soon as the eighth data bit is in.
+    Predict what should go wrong, then run it. Two checks catch this, and it is worth knowing which
+    fires first: the frame with the low stop bit no longer raises \code{frame_err}, and it hands over
+    a byte that should have been discarded.
+  \item Now the other half of the lesson. Passing is the weaker signal, so find a sabotage the
+    testbench does \textbf{not} catch. Here is one: \textbf{remove the mid-start-bit recheck}, so
+    that \code{STATE_START} moves on to \code{STATE_DATA} at tick 8 without confirming that the line
+    is still low. The testbench never puts a glitch on an idle line, so nothing notices, and on real
+    hardware a single spike of noise starts a phantom frame. Read \file{uart_rx8_tb.vhd} and say what
+    you would add to catch it.
+  \item Here is a second: \textbf{sample at tick 3 instead of tick 8.} Work out why the testbench
+    still passes, and what you have given away. The answer is in the margin calculation in part
+    \textbf{b)}.
+  \item And a third, which is the most important of the three: \textbf{remove the synchroniser for
+    \code{rx}} and read the pin directly. Every check still passes, and it always will, whatever is
+    added to the testbench. Say why, in terms of what a simulator models and what it does not, and
+    then reread \secref{c4:sec:mtbf}. This is the one kind of bug in the book that testing cannot
+    reach, which is exactly why \chapref{c4:ch} gives you a rule to follow rather than a symptom to
+    look for.
+  \item In a few sentences: what does ``passes its testbench'' actually promise, and what does it
+    not?
+\end{itemize}
+
+\modulefig[0.74]{lectures/L08/appendix/images/uart_rx8.png}
+
+\begin{selfcheck}
+\textbf{Self-check.} Name your entity \code{uart_rx8}, with the generic
+\code{OVERSAMPLE_TICK_COUNT} (\code{natural}), the inputs \code{clock}, \code{reset_n}, \code{rx},
+and the outputs \code{data_out} (\code{std_logic_vector(7 downto 0)}), \code{byte_valid} and
+\code{frame_err}, declared in that order. Its testbench is in \file{exercises/uart_rx8/}, and nothing
+else: \textbf{copy in your own \code{reset_sync}, \code{sync} and \code{timer}}, as part \textbf{d)}
+shows. A project directory contains everything it is built from, and assembling it is part of the
+exercise.
+\end{selfcheck}
+
+\exercise{\code{uart_tx8}: the transmitter}{VHDL}
+\label{c8:ex:tx}
+The other half of the link: write \code{uart_tx8}, a transmitter sending a byte in the same format
+Exercise~\ref{c8:ex:rx} receives.
+
+A transmitter is the easier of the two, and the reason is worth understanding before you start:
+\begin{itemize}
+  \item The receiver has to \emph{recover} the bit timing from a start edge it did not control,
+    which is why it sampled mid-bit and why its timer ran at one sixteenth of a bit period.
+  \item The transmitter \textbf{defines} the timing. Nothing has to be recovered, so the timer runs
+    at a whole bit period and the machine simply holds every bit on the line for one timeout.
+\end{itemize}
+
+It sends the most significant bit first, which matches the receiver in Exercise~\ref{c8:ex:rx}
+rather than a real UART, for the reason given there.
+
+\task{The entity}
+
+\begin{booktable}{@{}p{9em}p{4.4em}p{3.4em}L@{}}
+  \thead{Generic} & \thead{Type} & \thead{Default} & \thead{Description} \\
+  \midrule
+  \code{BIT_TICK_COUNT} & \code{natural} & \code{5207} & The tick count for \code{timer} for a
+    \textbf{whole} bit period, 9600 baud at \code{50 MHz}. Sixteen of Exercise~\ref{c8:ex:rx}'s
+    oversampling ticks, give or take the rounding its part \textbf{b)} asks you to work out, so that
+    a \code{uart_tx8} and a \code{uart_rx8} built with the matching defaults talk at the same
+    rate. \\
+\end{booktable}
+
+\begin{booktable}{@{}p{5.4em}p{3.4em}p{10.8em}L@{}}
+  \thead{Port} & \thead{Dir.} & \thead{Type} & \thead{Description} \\
+  \midrule
+  \code{clock} & in & \code{std_logic} & System clock. \\
+  \code{reset_n} & in & \code{std_logic} & Asynchronous, active low; through \code{reset_sync}, as
+    always. \\
+  \code{data_in} & in & \code{std_logic_vector(7 downto 0)} & The byte to send. \\
+  \code{send} & in & \code{std_logic} & A request to send \code{data_in}. Ignored while the
+    transmitter is busy. \\
+  \code{tx} & out & \code{std_logic} & The serial line. \textbf{Idles high}, including during
+    reset. \\
+  \code{busy} & out & \code{std_logic} & High from the moment a frame starts until the stop bit is
+    over. \\
+\end{booktable}
+
+\xpart{a} Draw the state machine first. Four states are the natural split: idle, start bit, data
+bits, stop bit, and each holds the line at a defined level for one bit period.
+\begin{itemize}
+  \item Mark what drives \code{tx} in every state. Note that \code{tx} never depends on \code{send}
+    or any other primary input: it is the state, plus the shift register's current output. That makes
+    this a Moore machine, like everything else in this book.
+  \item Mark where \code{busy} comes from. It is a single comparison against the state.
+  \item Decide where the byte is captured. It has to be latched when the frame starts, not read
+    continuously out of \code{data_in}: the producer is free to change \code{data_in} the moment
+    \code{busy} goes high, and a real one will.
+\end{itemize}
+
+\xpart{b} Shift the byte out most significant bit first, in the machine itself, the mirror image of
+what the receiver does: latch \code{data_in} into a signal \code{frame} when the frame starts, drive
+\code{tx} from the top bit of \code{frame} while in the data state, and shift \code{frame} one place
+up per bit period, counting the eight bits going out.
+
+You wrote this as a module in Exercise~\ref{c6:ex:shiftregs}, and \code{piso8} is worth rereading for
+the idiom's sake. Instantiating it here would work, but the machine already owns the bit counter a
+PISO register needs, so the shift becomes a single line inside the state where it belongs. That is
+how both halves of this link are built, and the same trade-off comes back in \chapref{c14:ch}, where
+\code{tx_shift_reg} is a module of its own precisely because \code{can_controller} does \emph{not}
+already own the counter it needs.
+
+\xpart{c} Implement it, with \code{reset_sync} instantiated for reset and \code{timer} with
+\code{BIT_TICK_COUNT} passed straight through.
+
+Here the timer's \code{enable} \textbf{is} driven from the state, high only while a frame is in the
+air, and that is the one place where this design deliberately differs from Exercise~\ref{c8:ex:rx}.
+The receiver has to let its timer free-run because it does not control when a frame starts: it can
+only rephase its own tick count once the start edge has arrived. The transmitter has the opposite
+problem. It \emph{decides} when the frame starts, so it can start the timer at that moment and get a
+first bit period exactly as long as all the others. Let it free-run here instead and the start bit is
+short by precisely as much of a tick period as happened to remain when \code{send} arrived, which is
+a defect in the one thing a transmitter is responsible for.
+
+Two requirements the testbench is strict about:
+\begin{itemize}
+  \item \textbf{\code{send} is ignored while the transmitter is busy.} Reloading mid-frame would
+    restart the byte and corrupt what is already on the line. A request arriving during a frame is
+    discarded, not queued.
+  \item \textbf{\code{busy} stays high through the whole stop bit}, not just the data bits. The frame
+    is not over until the line has been held high for the last bit period.
+\end{itemize}
+
+\xpart{d} Run the testbench. It plays receiver: it waits for your start bit, samples the middle of
+every bit period, and checks the framing, the byte, the \code{busy} handshake, and that a \code{send}
+applied two bit periods into a frame is ignored.
+
+\begin{shell}
+cd lectures/L08/exercises/uart_tx8
+cp ../../../L04/exercises/reset_sync/reset_sync.vhd .     # the two you wrote yourself
+cp ../../../L07/exercises/timer/timer.vhd .
+ghdl -a --std=93 reset_sync.vhd timer.vhd uart_tx8.vhd uart_tx8_tb.vhd
+ghdl -e --std=93 uart_tx8_tb
+ghdl -r --std=93 uart_tx8_tb --assert-level=error --stop-time=10ms
+\end{shell}
+
+\xpart{e} Answer, in prose:
+\begin{itemize}
+  \item A transmitter skipping the stop bit entirely still leaves the line high afterwards, since
+    idle and stop are the same level. What actually goes wrong, and when does it first show? The
+    testbench catches this one: which of its checks does it, and why could it never have been caught
+    by looking at \code{tx} alone?
+  \item Your receiver in Exercise~\ref{c8:ex:rx} samples mid-bit; your transmitter changes the line
+    at the edges. If both ran on crystals differing by 1~\%, roughly how many bits into a frame would
+    the receiver's sampling point drift into the wrong bit? What does that tell you about why serial
+    formats have a start bit per byte, rather than a single one at the beginning of a long message?
+\end{itemize}
+
+\modulefig[0.66]{lectures/L08/appendix/images/uart_tx8.png}
+
+\begin{selfcheck}
+\textbf{Self-check.} Name your entity \code{uart_tx8}, with the generic \code{BIT_TICK_COUNT}
+(\code{natural}), the inputs \code{clock}, \code{reset_n}, \code{data_in}
+(\code{std_logic_vector(7 downto 0)}), \code{send}, and the outputs \code{tx}, \code{busy}, declared
+in that order. Its testbench is in \file{exercises/uart_tx8/}, and nothing else: copy in your own
+\code{reset_sync} and \code{timer}, as part \textbf{d)} shows.
+\end{selfcheck}

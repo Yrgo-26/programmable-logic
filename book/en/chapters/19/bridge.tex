@@ -1,0 +1,90 @@
+% Section 19.2, from the project specification's section 7.2 and the SPI protocol's transaction
+% section.
+
+\section{The transaction bridge \code{spi_reg_bridge}}
+\label{c19:sec:bridge}
+
+\code{spi_slave} (\secref{c18:sub:slave}) speaks only \emph{bytes}. \code{register_bank}
+(\chapref{c18:ch}) speaks only \emph{register semantics}. Between them sits a layer that speaks
+\emph{transactions}, and that is \code{spi_reg_bridge}. It knows nothing about which registers exist,
+and nothing about what any of them means.
+
+\subsection*{Interface}
+Ten ports, in this order: \code{clock}, \code{reset_s2_n}, \code{ss_active}, \code{rx_data},
+\code{rx_valid}, \code{reg_rdata}, \code{tx_data}, \code{reg_addr}, \code{reg_wdata},
+\code{reg_write}. The first five plus \code{reg_rdata} are inputs; the last four are outputs. The
+binding is positional, as everywhere else.
+
+The first three come from \code{spi_slave}: \code{ss_active} is high while the slave is selected,
+\code{rx_data} carries the most recently received byte, and \code{rx_valid} pulses once per byte.
+\code{tx_data} is the next byte for the slave to shift out. The four register signals connect straight
+to \code{register_bank}'s bridge-facing side.
+
+\subsection*{The transaction}
+Every transaction is exactly \textbf{5 bytes} long: one command byte, then four data bytes. \code{SS}
+falls before the command byte and rises after the fifth byte; it has to stay low for the whole
+transaction.
+
+\begin{textdrawing}
+Bit:      7    6    5    4    3    2    1    0
+        +----+----+----+----+----+----+----+----+
+        | W  | 0  | 0  | 0  |   register index  |
+        +----+----+----+----+----+----+----+----+
+\end{textdrawing}
+
+\begin{itemize}
+  \item \textbf{Bit 7 (\code{W})}: \code{1} = write, \code{0} = read.
+  \item \textbf{Bits 6--4}: reserved, must be \code{0}.
+  \item \textbf{Bits 3--0}: the register index, \code{offset / 4} from the register map (0--12).
+\end{itemize}
+
+\paragraph{Write (\code{W = 1})}
+The master sends the register value in the four data bytes, \textbf{MSB first} (bits 31--24 in the
+first data byte). The slave commits the assembled value to the addressed register \textbf{only once
+the fifth byte is complete}. Whatever the slave drives on \code{MISO} during a write is meaningless;
+the master discards it.
+
+\paragraph{Read (\code{W = 0})}
+At the end of the command byte the slave \textbf{latches} the addressed register's current value
+\textbf{once}, into its response shift register. The four data bytes then clock that value out on
+\code{MISO}, MSB first, while the master sends dummy bytes \code{0x00}. The latch-once rule is not an
+implementation detail but part of the contract: the four bytes always belong to \emph{one} coherent
+sample of the register, taken at a single instant \textemdash{} \code{STATUS} in particular must never
+be stitched together from two separate moments.
+
+\paragraph{Abort}
+If \code{ss_active} goes low before the fifth byte is complete, the transaction is abandoned
+\textbf{with no side effects}: nothing is committed, no trigger fires, and the slave returns to idle,
+ready for the next falling edge on \code{SS}. That is what makes the slave self-healing after a glitch
+or a master that resets.
+
+\paragraph{Invalid commands}
+A read of a reserved index (13--15) gives \code{0x00000000}; a write to one is ignored. A command byte
+with any reserved bit (6--4) set is invalid in the same way: no read is latched and no write is
+committed, and the slave still consumes the whole five-byte frame before returning to idle. Neither
+case is an error the slave reports \textemdash{} there is no error channel at this layer. Enforcing
+the rule about reserved \emph{command} bits is \code{spi_reg_bridge}'s job; \code{register_bank} never
+sees more than a 4-bit index, never a reserved command.
+
+\begin{warning}
+\code{reg_addr} \textbf{holds} the decoded index until the next command byte decodes a new one: it is
+a latched value, not a pulse following the byte in progress. The testbench checks the index once all
+five bytes have been consumed, so a bridge that clears \code{reg_addr} when it returns to idle passes
+the first cases and fails on that one.
+\end{warning}
+
+\subsection*{Verifying it}
+The bridge reads no register at all and therefore needs only \code{spi_def}:
+
+\begin{shell}
+cd bridge
+ghdl -a --std=93 spi_def.vhd spi_reg_bridge.vhd spi_reg_bridge_tb.vhd
+ghdl -e --std=93 spi_reg_bridge_tb
+ghdl -r --std=93 spi_reg_bridge_tb --assert-level=error
+\end{shell}
+
+The testbench models \code{spi_slave} instead of instantiating it: it pulses \code{rx_valid} once per
+byte, framed by \code{ss_active}, so that you can write and check the bridge before any SPI waveform
+is involved. Four cases: a write, a read byte by byte, an abort on \code{ss_active}, and a command
+byte with a reserved bit set. Cases 3 and 4 are the two that make this module more than a byte
+counter \textemdash{} read their comments before you start, not afterwards.

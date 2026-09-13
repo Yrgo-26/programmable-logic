@@ -1,0 +1,44 @@
+% Avsnitt 2.8, ur lectures/L02/README.md.
+
+\section{Sammanfattning}
+\label{c2:sec:review}
+
+\needspace{6\baselineskip}
+\subsection*{Det här ska du kunna nu}
+\begin{itemize}
+  \item Härleda en minimerad ekvation ur ett Karnaughdiagram och göra en VHDL-arkitektur av den.
+  \item Läsa och skriva portar och signaler av typen \code{std_logic_vector}.
+  \item Skriva en \code{process} med korrekt känslighetslista och ett \code{case} som täcker varje
+    indatavärde.
+  \item Bygga en design av mer än en \code{entity} med positionell \code{port map}, och säga
+    varför två instanser av samma modul lägger två kopior av dess grindar på FPGA:n.
+  \item Verifiera en modul genom att köra dess testbänk, och läsa ett misslyckat \code{assert}.
+\end{itemize}
+
+\needspace{6\baselineskip}
+\subsection*{Frågor att testa dig själv med}
+\begin{enumerate}
+  \item Kan du, givet en sanningstabell, härleda dess ekvation både direkt och via ett
+    Karnaughdiagram? Vad skiljer de två resultaten?
+  \item Varför kan ett \code{case} inte stå direkt i en arkitekturkropp?
+  \item Vad skyddar \code{when others} dig mot, när väljaren ”bara kan” vara \code{0} eller
+    \code{1}?
+  \item I \code{display1: entity work.display}, vad namnger \code{display1}, och vad namnger
+    \code{work.display}? Skulle en andra instans kunna återanvända samma etikett?
+  \item \code{hex_display}s arkitektur innehåller ingen logik alls. Var kommer grindarna i den
+    färdiga designen ifrån?
+  \item Du instansierade \code{display} två gånger i stället för att skriva dess \code{case} två
+    gånger. Får FPGA:n en eller två kopior av den logiken? Vad vann du alltså egentligen?
+  \item Boken skriver alltid \code{port map} positionellt. Vad går sönder om en entitets portar
+    deklareras i en annan ordning än den testbänken förväntar sig, och när märker du det?
+\end{enumerate}
+
+\needspace{6\baselineskip}
+\subsection*{Blicken framåt}
+\Chapref{c3:ch} går vidare med:
+\begin{itemize}
+  \item Sekvensnät: kretsar som minns.
+  \item D-låset, och D-vippan byggd av ett par av dem.
+  \item Klockning, och när en signaltilldelning faktiskt får effekt.
+  \item Flankdetektering: en knapptryckning som växlar en lysdiod.
+\end{itemize}

@@ -1,0 +1,47 @@
+% Section 18.10, from lectures/L18/README.md.
+
+\section{Summary}
+\label{c18:sec:review}
+
+\needspace{6\baselineskip}
+\subsection*{What you should be able to do now}
+\begin{itemize}
+  \item Explain the difference between a pulse and a sticky level, and why the register layer has to
+    convert between them.
+  \item Implement \file{register_bank.vhd} per the register map: the STATUS bits' setting and
+    clearing, \code{TX_SEND} as a one-cycle pulse, and the masking on write.
+  \item Read an SPI timing diagram in mode 0 and say which bit is on MOSI at every edge.
+  \item Explain why an SPI slave in an FPGA oversamples SCK instead of using it as a clock.
+  \item Read and use \file{spi_slave.vhd} without writing it.
+\end{itemize}
+
+\needspace{6\baselineskip}
+\subsection*{Questions to test yourself with}
+\begin{enumerate}
+  \item Why can a driver polling every five microseconds not see a 20~ns pulse?
+  \item What sets STATUS bit 0, and what clears it?
+  \item Why does the error bit latch on a \emph{rising edge} of \code{error} and not on the level?
+  \item A second frame is received before the first has been acknowledged. What happens, and why is
+    that a deliberate choice rather than a bug?
+  \item STATUS bit 0 is set by three things during operation, besides reset. Which, and why is
+    \code{tx_done} alone not enough?
+  \item What does \code{TX_ABORT} do, and what does it \emph{not} reach?
+  \item A write of \code{0xFFFFFFFF} to \code{TX_DLC} reads back as \code{0x0000000F}. Where does the
+    masking happen, and why does the bank not validate that the value is at most 8?
+  \item Why does \code{spi_slave} not use SCK as a clock? What would go wrong if it did?
+  \item Why does MISO change value on SCK's falling edge?
+\end{enumerate}
+
+\needspace{6\baselineskip}
+\subsection*{Target}
+\code{register_bank} is a self-contained module with a complete testbench and should be finishable
+during the session and the week after. It does not depend on SPI at all, so it can be written in
+parallel with somebody else in the group reading up on the transaction format. Put the
+\file{spi_slave.vhd} handed out into the repository unchanged, and read through
+\file{spi_reg_bridge_tb.vhd} in preparation for the next chapter: it is the contract for the module
+you write then.
+
+\needspace{6\baselineskip}
+\subsection*{Looking ahead}
+\Chapref{c19:ch} builds the SPI bridge, the top level \code{can_spi_node}, and takes the whole chain
+out onto real hardware. It is the project's last session.

@@ -1,0 +1,383 @@
+% Sections 11.1-11.6, from lectures/L11/appendix/a_architecture_and_register_map.md.
+
+\section{The controller's architecture}
+\label{c11:sec:arch}
+
+Every rule from \chapref{c10:ch} maps onto one of five blocks:
+\begin{itemize}
+  \item \textbf{\code{bit_timer}} owns nothing about \emph{what} is sent, only \emph{when}. It is the
+    only thing in this design that even borders on a clock domain crossing: it free-runs continuously
+    once enabled, and resynchronises exactly once per frame, at SOF (\secref{c10:sec:stuffing}'s
+    clock recovery argument, applied).
+  \item \textbf{\code{tx_shift_reg}} and \textbf{\code{rx_shift_reg}} own the bit stuffing and
+    nothing else: they serialise or deserialise up to 8 real bits at a time and transparently insert
+    or remove stuff bits. They have no idea whether the bits they shift are an ID, a data byte or a
+    CRC value; that is \code{can_controller}'s job.
+  \item \textbf{\code{crc15}} owns the CRC-15 computation, one bit at a time, with no notion of
+    ``frames'' or ``fields'' either; it merely accumulates the bit it is given, when it is told to.
+  \item \textbf{\code{can_controller}} is the only block that knows the actual CAN frame format: it
+    sequences through SOF, arbitration, the control field, data, CRC, ACK and EOF, in order, drives
+    the other four blocks and reads their outputs. Detecting lost arbitration also lives here, since
+    it is specifically about comparing what this controller decided to send against what the bus
+    actually shows.
+\end{itemize}
+
+\lecfig[0.92]{lectures/L11/appendix/images/can_controller_diagram.png}{\code{can_controller}'s block
+architecture.}{c11:fig:arch}
+
+Two conventions keep the picture readable. \code{clock} reaches every subblock, and the synchronised
+\code{reset_s2_n} reaches all but the two \code{meta_prev} instances producing it and its bus
+counterpart; both are left undrawn, as is usual in a block diagram. Every output port
+(\code{tx_done}, \code{tx_bus}, \code{bus_en}, \code{rx_id}, \code{rx_dlc}, \code{rx_data},
+\code{rx_valid}, \code{error}) is driven by the frame state machine and by nothing else.
+
+Three of the eleven internal connections are worth reading twice, since they are the ones people
+redraw wrongly from memory:
+\begin{itemize}
+  \item The two lines at \code{crc15} run in \textbf{opposite} directions. \code{clear},
+    \code{enable} and \code{data} go up into it, one real bit at a time; \code{crc} and \code{valid}
+    come back down out of it. (\code{clear} is \chapref{c13:ch}'s per-frame reset \textemdash{} the
+    engine has to start every frame at zero, and an aborted frame would otherwise leave residue
+    behind; \chapref{c16:ch} drives it from \code{STATE_START}.)
+  \item \code{rx_shift_reg} has \textbf{three} lines arriving: \code{sample} from \code{bit_timer},
+    \code{rx_bus_s2} from the synchroniser \chapref{c12:ch} adds, and \code{bit_count} plus
+    \code{enable} from the frame state machine. Without the first two it has no data source at all.
+  \item \code{tx_shift_reg} and \code{rx_shift_reg} are never connected to each other, and neither is
+    connected to \code{crc15}. The frame state machine carries every bit between them.
+    \code{rx_shift_reg} is likewise the only subblock that reads the bus at all, and even that reads
+    the synchronised copy rather than the port; see \secref{c11:sec:sync}.
+\end{itemize}
+
+\paragraph{How they nest}
+The diagram reads as a layer picture, with the cheapest concern on top, but the actual VHDL hierarchy
+is containment, not a pipeline: \code{can_controller} instantiates all four of \code{bit_timer},
+\code{crc15}, \code{tx_shift_reg} and \code{rx_shift_reg} inside itself, alongside the
+\code{meta_prev} synchroniser \chapref{c12:ch} adds. \code{can_controller} is therefore the only
+entity you ever instantiate by hand, and the whole controller is one component from outside, exactly
+as the register bank in \chapref{c18:ch} will see it.
+
+Two more layers then sit above it: \code{register_bank} (\chapref{c18:ch}), turning those
+register-level ports into the register map a driver polls, and \code{can_spi_node}
+(\chapref{c19:ch}), the top level adding the SPI transport and the board's pins. Both belong to
+reaching the controller, not to speaking CAN, which is why they turn up in the last two chapters
+rather than here.
+
+This split \textemdash{} one block per \emph{responsibility}, not one block per \emph{frame field}
+\textemdash{} is deliberate: \code{tx_shift_reg} is reused for the ID, the control field, every data
+byte and the CRC value, simply reloaded with different data and a different bit count each time,
+instead of writing nearly identical shift logic five separate times.
+
+% ------------------------------------------------------------------------------------------
+\section{Following a frame through the blocks}
+\label{c11:sec:trace}
+
+Naming the five blocks is not the same as knowing how they cooperate. This section takes a concrete
+frame, ID \code{0x123}, DLC \code{2}, data bytes \code{A1 B2}, and follows it through the
+architecture above. There is no VHDL here; the question is only which block does what, and what
+passes between them.
+
+\paragraph{First, the only block that counts time}
+\code{bit_timer} divides the 50 MHz clock into bit periods and emits two pulses per period:
+\code{sample}, 70~\% into the period, once the bus level has had time to settle, and
+\code{bit_done}, at the very end, when the current bit is over. Every other block acts on one of the
+two pulses, and none of them counts clock cycles against the bus itself. Transmission moves on
+\code{bit_done}, at the boundary where a new bit begins. Reception moves on \code{sample}, in the
+middle of a bit already sitting there. That difference in particular is why a receiver reads the
+value a transmitter put out, instead of catching it mid-change.
+
+\paragraph{Transmission: 60 bits, 50 of them through a register}
+With the field widths from \chapref{c10:ch}, this frame is $1$ (SOF) $+\ 11$ (ID) $+\ 1$ (RTR)
+$+\ 2$ (IDE, r0) $+\ 4$ (DLC) $+\ 16$ (data) $+\ 15$ (CRC) $=$ \textbf{50 bits in the stuffed
+region}, followed by an unstuffed tail of $1 + 1 + 1 + 7 =$ \textbf{10 bits}. Sixty bits before any
+stuff bit is inserted.
+
+Those 50 bits reach the bus as \textbf{eight loads of a single \code{tx_shift_reg}}:
+
+\begin{narrowtable}{clr}
+  \thead{\#} & \thead{Group} & \thead{Bits} \\
+  \midrule
+  1 & SOF & 1 \\
+  2 & Identifier, high part & 8 \\
+  3 & Identifier, low part + RTR & 4 \\
+  4 & IDE, r0, DLC & 6 \\
+  5 & Data byte 0 (\code{A1}) & 8 \\
+  6 & Data byte 1 (\code{B2}) & 8 \\
+  7 & CRC, high part & 8 \\
+  8 & CRC, low part & 7 \\
+\end{narrowtable}
+
+\code{can_controller} reloads the same 8-bit register eight times, each time with a different value
+and a different bit count. That is the ``one block per responsibility'' claim above, made concrete:
+the identifier is no field to the shift register, it is group 2. The remaining 10 tail bits never
+reach a shift register at all; they are fixed recessive levels, and \code{can_controller} drives them
+directly while counting \code{bit_done} pulses.
+
+Within a group, four things happen per bit:
+\begin{itemize}
+  \item \code{tx_shift_reg} produces the next bit. The load presents the first one immediately; every
+    \code{bit_done} after that shifts out the next. The register also decides, on its own, whether a
+    stuff bit should be inserted, and announces on \code{stuff} which kind of bit this was.
+  \item \code{can_controller} turns the bit into bus levels. Dominant means \code{bus_en = '1'} with
+    \code{tx_bus = '0'}; recessive means \code{bus_en = '0'}, which releases the bus. A node never
+    drives recessive actively (\secref{c10:sec:can}'s wired-AND).
+  \item \code{crc15} is fed the same bit, but only when it was a real one. Stuff bits are skipped.
+    \code{crc15} has no idea what a stuff bit is; being told when \emph{not} to accumulate is its
+    entire interface on that side.
+  \item \code{can_controller} compares \code{rx_bus} against the bit it has just driven. That
+    comparison is the arbitration, and it stays here rather than in a subblock because it needs both
+    what this node intended and what the bus actually shows, and \code{can_controller} is the only
+    block holding both.
+\end{itemize}
+
+After group 6, \code{crc15} holds the CRC over everything sent so far. \code{can_controller} reads it
+and feeds it straight back into \code{tx_shift_reg} as groups 7 and 8. Note what that means: the
+engine computing the CRC and the register sending it are never connected to each other.
+\code{can_controller} carries the value across, which is why neither block has to know that a CRC
+field exists.
+
+\paragraph{Reception: the same path, mirrored}
+\code{rx_shift_reg} samples \code{rx_bus} at \code{bit_timer.sample}, removes stuff bits and reports
+every real bit on \code{real_bit} and \code{real_bit_valid}. Those two signals feed \code{crc15}
+exactly as \code{tx_shift_reg}'s do during transmission: the same instance, the same rule about
+accumulating real bits only, no mode switch anywhere (which is \chapref{c13:ch}'s point about one
+engine doing both jobs). Completed groups arrive on \code{data}, and \code{can_controller} slices
+them back into \code{rx_id}, \code{rx_dlc} and \code{rx_data}. A stuff bit that fails to appear
+raises \code{stuff_error}, and \code{rx_shift_reg} stops there: it reports the violation without
+deciding what it means. Deciding is \code{can_controller}'s job, and it decides to abort the frame
+and raise \code{error}.
+
+\paragraph{What the walkthrough shows}
+No subblock knows which field it is handling. Each reports facts about \emph{bits}: one is done, that
+one was inserted, a stuff bit was missing, this group is complete. \code{can_controller} supplies
+every bit of the meaning. Three things follow, and all three are worth having:
+\begin{itemize}
+  \item The four subblocks can be tested without CAN. Their testbenches in \chapref{c12:ch} to
+    \ref{c15:ch} drive bit patterns and check bit patterns; not one of them needs a whole frame to be
+    meaningful.
+  \item \code{can_controller} is the only block that would change if the frame format did. Extended
+    29-bit identifiers, for example, would mean different groups, not different blocks.
+  \item Every connection between blocks is a one-bit or one-byte signal with exactly one writer.
+    There is no shared bus or common structure two blocks both reach into, which is what keeps the
+    wiring work in \chapref{c12:ch} to \ref{c15:ch} to one port map at a time rather than a redesign
+    every chapter.
+\end{itemize}
+
+% ------------------------------------------------------------------------------------------
+\section{The controller's interface}
+\label{c11:sec:interface}
+
+\code{can_controller}'s ports are what the outside world sees, and they stay fixed for the rest of
+the book: \chapref{c12:ch} to \ref{c17:ch} add subblocks \emph{inside} this entity without changing a
+single port. Two things connect to it, and every port belongs to one of them.
+
+\lecfig[0.66]{lectures/L11/appendix/images/can_controller.png}{\code{can_controller}'s fifteen
+ports.}{c11:fig:ports}
+
+\paragraph{The bus side, five ports}
+These are the ports reaching the outside world as physical pins; the first three face the CAN
+transceiver:
+\begin{itemize}
+  \item \code{rx_bus} is the current bus level, one bit, straight from the transceiver and
+    asynchronous to \code{clock}. The controller synchronises it itself, with a \code{meta_prev}
+    instance \chapref{c12:ch} builds, so that the board's top level can connect this port to a pin
+    and think no more about it. The controller reads it to receive, and also to monitor its own
+    transmissions during arbitration.
+  \item \code{tx_bus} is the bit this node wants to drive, and \code{bus_en} says whether it is
+    driving at all. The pair models open-drain behaviour: \code{bus_en = '1'} with
+    \code{tx_bus = '0'} pulls the bus dominant, and \code{bus_en = '0'} releases it so that another
+    node can. A node never drives recessive actively; it simply lets go. That is what makes
+    \secref{c10:sec:can}'s wired-AND work.
+  \item \code{clock} is the 50 MHz system clock, and \code{reset_n} a \textbf{raw}, active-low reset,
+    straight from a pin. Like \code{rx_bus} it is asynchronous, and like \code{rx_bus} the controller
+    synchronises it itself. The synchronised copy is an internal signal called \code{reset_s2_n}, the
+    name the \code{reset_sync} exercise gave it in \chapref{c4:ch} and the name every subblock in the
+    project still takes.
+\end{itemize}
+
+\paragraph{The transmit side, five ports}
+These are the ones a caller fills in to send a frame:
+\begin{itemize}
+  \item \code{tx_id}, \code{tx_dlc} and \code{tx_data} carry the frame itself, typed as \code{id_t},
+    \code{dlc_t} and \code{data_t} from \code{can_def}. \code{tx_data} holds byte 0 in its most
+    significant bits, in the same order the bus sends them.
+  \item \code{tx_req} requests transmission. The controller acts on it only when it is itself idle
+    \textbf{and the bus has been idle too}, since a node must not start driving on top of a frame
+    already in progress (\chapref{c16:ch}). A request raised while the bus is busy is discarded
+    rather than queued, so the caller has to ask again.
+  \item \code{tx_done} pulses high for one cycle as soon as this node's own frame has finished
+    sending.
+\end{itemize}
+
+\paragraph{The receive side, five ports}
+They mirror the transmit side exactly:
+\begin{itemize}
+  \item \code{rx_id}, \code{rx_dlc} and \code{rx_data} hold the most recently received frame, the
+    same types and the same byte layout as their \code{tx_} counterparts.
+  \item \code{rx_valid} pulses high for one cycle when a complete, valid frame has arrived.
+  \item \code{error} is the only port that is \emph{not} a pulse: it goes high on lost arbitration, a
+    stuffing violation, a failed CRC check or a received remote frame (a recessive RTR bit), and
+    stays high until the next frame begins. A caller polling it now and then still sees the error.
+\end{itemize}
+
+Four things about this interface are worth noticing now, since they shape everything that follows:
+\begin{itemize}
+  \item \textbf{There is no serialisation in it.} The caller hands over an identifier, a length and
+    bytes. Every bit of the framing, the stuffing and the CRC that \chapref{c10:ch} described happens
+    inside, on the way to \code{tx_bus}. That is the whole point of building a controller.
+  \item \textbf{Transmission and reception are symmetric but not simultaneous.} A node either sends
+    its own frame or receives somebody else's, never both, so the interface's two halves are never
+    active at the same time.
+  \item \textbf{\code{tx_done}, \code{rx_valid} and \code{error} are the whole status interface.}
+    Every status bit the register map offers a driver (\chapref{c18:ch}) is derived from one of the
+    three.
+  \item \textbf{Every port on the register side is assumed synchronous to \code{clock}.}
+    \code{rx_bus} is the exception, and the controller handles that itself with \code{meta_prev}. The
+    rest, the transmit ports a caller drives and the status and receive ports it reads, assume a
+    caller in the same clock domain, which is exactly what \code{register_bank} (\chapref{c18:ch})
+    is. A caller in a \emph{different} domain needs a handshake in front of them, not a wider
+    \code{meta_prev}: running 64 bits of \code{tx_data} through a bit-by-bit synchroniser removes the
+    metastability but still lets the controller latch a value that was never written, the same skew
+    problem \chapref{c19:ch} sets out for the switch bank. A synchronisation chain is the right tool
+    for one bit whose neighbours are independent, and the wrong tool for a value whose bits have to
+    agree.
+\end{itemize}
+
+% ------------------------------------------------------------------------------------------
+\section{Writing \code{can_controller.vhd}}
+\label{c11:sec:writing}
+
+This chapter writes the file from scratch, to \file{controller/can_controller.vhd}, beside the
+\file{can_def.vhd} written in \chapref{c10:ch}.
+
+\textbf{The entity} declares the fifteen ports described above, in exactly this order, which is what
+\code{can_controller_tb} binds to:
+
+\begin{textdrawing}
+ 1 clock       4 tx_id     7 rx_bus     10 bus_en    13 rx_data
+ 2 reset_n     5 tx_dlc    8 tx_done    11 rx_id     14 rx_valid
+ 3 tx_req      6 tx_data   9 tx_bus     12 rx_dlc    15 error
+\end{textdrawing}
+
+\textbf{Every input first, then every output}, which is this book's convention everywhere and is why
+\code{rx_bus} sits seventh rather than beside the bus outputs it conceptually belongs with. Read the
+block diagram above straight down its left column and then its right, and you get 1 to 15 in order.
+The types come from \code{can_def}, so the file opens with \code{use work.can_def.all;} alongside the
+usual \code{ieee.std_logic_1164}, and the port list mixes plain \code{std_logic} with the package's
+subtypes. The first lines set the pattern for all fifteen:
+
+\begin{vhdlcode}
+library ieee;
+use ieee.std_logic_1164.all;
+use work.can_def.all;
+
+entity can_controller is
+    port(clock   : in std_logic;
+         reset_n : in std_logic;
+         tx_req  : in std_logic;
+         tx_id   : in id_t;
+         ...
+\end{vhdlcode}
+
+\begin{warning}
+Get the \textbf{order} exactly right, since it is what everything binds to: \code{can_controller_tb}
+associates its ports positionally, and so does every instantiation in this book. The names are yours.
+A swapped pair analyses perfectly well today, and unlike a misspelled name it will not fail to
+analyse in \chapref{c17:ch} either. It will silently connect the wrong signals together, and the
+testbench will report behaviour that does not add up, six chapters later.
+\end{warning}
+
+\textbf{The architecture starts empty.} Not a placeholder to be replaced later, but genuinely empty:
+
+\begin{vhdlcode}
+architecture behaviour of can_controller is
+begin
+end architecture;
+\end{vhdlcode}
+
+That analyses and elaborates cleanly, and \code{make build} confirms that it does. Write it, check
+it, and look at it for a moment: an entity with no behaviour at all is still a complete design unit.
+Then the rest of the project puts the first thing inside it.
+
+\paragraph{Why write it now, empty?}
+Because the interface is a decision, and it is one this chapter is in a position to make. You know
+what a CAN frame contains (\chapref{c10:ch}), you know which blocks will do the work
+(\secref{c11:sec:arch}), and you know what a driver eventually needs to read and write
+(\secref{c11:sec:regmap}). All that \chapref{c12:ch} onwards adds is \emph{behaviour behind ports
+that already exist}.
+
+The alternative, writing the subblocks first and discovering the top level's interface at the end, is
+how the design would emerge if nobody had thought about it in advance. It also means that the shape
+of what you are building stays a mystery right up until the very last chapter.
+
+\paragraph{What each chapter adds}
+From here on every chapter builds one block and instantiates it here, so that the architecture fills
+in from the inside. \Chapref{c12:ch} does two, since both are small:
+
+\begin{booktable}{@{}p{6em}L@{}}
+  \thead{Chapter} & \thead{Adds to \code{can_controller}} \\
+  \midrule
+  \ref{c12:ch} & \code{meta_prev} twice, synchronising \code{reset_n} and \code{rx_bus}, then
+    \code{bit_timer} \\
+  \ref{c13:ch} & \code{crc15}, and the signals feeding it one bit at a time \\
+  \ref{c14:ch} & \code{tx_shift_reg} \\
+  \ref{c15:ch} & \code{rx_shift_reg} \\
+  \ref{c16:ch} & The frame-sequencing state machine, the transmit path \\
+  \ref{c17:ch} & The receive path and the arbitration, completing the design \\
+\end{booktable}
+
+The file has to analyse cleanly at every one of those steps, not just at the end. \code{make build}
+checks every module separately as soon as it exists, so an entity that does not compile is caught in
+the chapter that wrote it.
+
+% ------------------------------------------------------------------------------------------
+\section{What the controller synchronises, and why that is the controller's job}
+\label{c11:sec:sync}
+
+One decision follows directly from the last point in \secref{c11:sec:interface}, and it is worth
+making explicit here since every later chapter depends on it. \code{rx_bus} arrives from a
+transceiver on another chip, and \code{reset_n} from a button or a supervisor, so nothing in this
+FPGA has ever controlled either of them. Sampling either straight into \code{clock}'s domain can
+leave a flip-flop metastable, the problem \chapref{c4:ch} solved with two flip-flops in series.
+
+Those two are the controller's \emph{only} asynchronous inputs, and they are asynchronous whoever
+instantiates it, so \textbf{the controller synchronises them itself} rather than leaving it to the
+board's top level. Whoever integrates it connects both straight to pins and thinks no more about it.
+Everything else on the entity is the register interface, which is a different contract: one a caller
+in this clock domain satisfies for free, and one a caller in another domain has to satisfy with a
+handshake rather than a wider synchroniser.
+
+Internally the synchronised copies are called \code{reset_s2_n} and \code{rx_bus_s2}, following
+\chapref{c4:ch}'s convention from \code{reset_sync}, and those are the names every subblock from
+\chapref{c12:ch} onwards takes. \textbf{No block ever reads \code{reset_n} or \code{rx_bus}
+directly}, the arbitration comparison in \chapref{c17:ch} included. The module producing them,
+\code{meta_prev}, is \chapref{c12:ch}'s, alongside the bit timer; this chapter establishes that the
+controller owns the problem, and the next builds what solves it.
+
+% ------------------------------------------------------------------------------------------
+\section{A first look at the register map}
+\label{c11:sec:regmap}
+
+A parallel class writes a C++ driver against this controller, and talks to it through
+\textbf{registers accessed over SPI} rather than via VHDL ports directly. You build the layers
+presenting those registers: \code{register_bank} in \chapref{c18:ch} and \code{spi_reg_bridge} in
+\chapref{c19:ch}. The whole map and the transaction format are in appendix~\ref{app:protocol}, and
+together they are the entire contract between the two classes.
+
+It is worth a preview here, seven chapters in advance, because it is exactly the same information
+\code{can_controller}'s ports already carry \textemdash{} the later layers change the information's
+\emph{shape}, never its content:
+
+\begin{booktable}{@{}p{14em}L@{}}
+  \thead{Concept (\code{can_controller})} & \thead{Register in the map} \\
+  \midrule
+  \code{tx_id}, \code{tx_dlc}, \code{tx_data} & \code{TX_ID}, \code{TX_DLC},
+    \code{TX_DATA_LO}/\code{HI} \\
+  \code{tx_req}, \code{tx_done} & \code{TX_SEND}, one bit in \code{STATUS} \\
+  \code{rx_id}, \code{rx_dlc}, \code{rx_data} & \code{RX_ID}, \code{RX_DLC},
+    \code{RX_DATA_LO}/\code{HI} \\
+  \code{rx_valid} & one bit in \code{STATUS}, cleared via \code{RX_ACK} \\
+  \code{error} & \code{ERROR_FLAGS} \\
+\end{booktable}
+
+Keep this correspondence in mind through \chapref{c19:ch}: everything the parallel class's driver
+reads or writes is just this controller's own port-level interface, wrapped in registers.

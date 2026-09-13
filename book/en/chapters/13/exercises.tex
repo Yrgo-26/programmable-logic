@@ -1,0 +1,65 @@
+% Section 13.8, from lectures/L13/appendix/b_exercises.md.
+
+\section{Exercises}
+\label{c13:sec:exercises}
+
+\begin{aside}
+These exercises consolidate the chapter. Design your own \file{crc15.vhd} from
+\secref{c13:sec:iface} to \ref{c13:sec:worked}; the testbench handed out, run per
+appendix~\ref{app:sim}, is the check that it behaves correctly.
+\end{aside}
+
+\exercise{\code{crc15}}{VHDL}
+\label{c13:ex:crc15}
+Write your own \file{crc15.vhd} from the specification in this chapter. Then verify it:
+
+\begin{shell}
+cd controller
+ghdl -a --std=93 can_def.vhd crc15.vhd crc15_tb.vhd
+ghdl -e --std=93 crc15_tb
+ghdl -r --std=93 crc15_tb --assert-level=error
+\end{shell}
+
+If a check fails, read the assertion message (appendix~\ref{app:sim}).
+
+\exercise{CRC by hand, then in simulation}{Simulation}
+\label{c13:ex:byhand}
+\xpart{a} Compute by hand, using \secref{c13:sec:recursion}'s recursion, the CRC-15 result of feeding
+the 4-bit sequence \code{1010} (MSB first) into a just-cleared engine. Show the working one bit at a
+time (feedback, shift, conditional XOR).
+
+\xpart{b} Confirm your hand-computed answer with GHDL: write a short testbench (or adapt the
+structure of \file{crc15_tb.vhd}) that clears \code{crc15}, feeds in \code{1010} and reports the
+resulting \code{crc} value, either via an \code{assert} or via a
+\code{report ... severity note;} you read directly.
+
+\xpart{c} \code{crc15}'s output \code{valid} reads \code{'1'} immediately after reset, before any
+real data at all has been fed in. Explain why that is not a bug, with reference to what
+\code{can_controller} (\chapref{c17:ch}) actually does with \code{valid}, and when.
+
+\exercise{The error a summed checksum misses}{Simulation}
+\label{c13:ex:missed}
+\Secref{c10:sec:framing} claimed that a CRC ``catches a much broader, mathematically well-understood
+class of errors'' than the simple byte-wise sum its own frame format uses. This exercise makes that
+concrete by running a corruption the sum demonstrably cannot see through the engine you just built.
+
+Take the payload \code{0x3C, 0x91} and the corruption \code{0x34, 0x99}: bit 3 cleared in the first
+byte, bit 3 set in the second, so that one byte loses exactly what the other gains.
+
+\xpart{a} Compute the byte-wise checksum of both payloads and confirm that they are
+\textbf{identical}: both come to \code{0xCD}. A simple sum records only the total, so a receiver
+checking it would accept the corrupt frame as intact.
+
+\xpart{b} Now feed all 16 bits of the \emph{original} payload into a just-cleared \code{crc15} (MSB
+first, first byte first) and note the resulting \code{crc} value. Then clear and do the same with the
+\emph{corrupt} payload. Do the two CRC values agree? Use simulation; a \code{report} of both values
+is enough.
+
+\xpart{c} The property that generating and checking are the same operation
+(\secref{c13:sec:twojobs}) says that a frame whose own CRC bits are fed back in returns the register
+to zero. Feed in the \textbf{corrupt} payload followed by the \textbf{original} payload's CRC bits,
+that is, exactly what a receiver would see if this corruption happened in transit. Does the register
+reach zero? Does \code{valid} go high? Explain what the receiver concludes.
+
+\xpart{d} Say in one sentence which property of the CRC recursion makes it notice a change a sum
+cannot, with reference to what every bit does to the register in \secref{c13:sec:recursion}.

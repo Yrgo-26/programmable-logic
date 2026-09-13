@@ -1,0 +1,44 @@
+% Section 3.10, from lectures/L03/README.md.
+
+\section{Summary}
+\label{c3:sec:review}
+
+\needspace{6\baselineskip}
+\subsection*{What you should be able to do now}
+\begin{itemize}
+  \item Say why sequential networks exist, explain the functional difference between a D latch and
+    a D flip-flop, and why synchronous designs are built almost exclusively from the flip-flop.
+  \item Read and write the synchronous process template, and recognise a register as several
+    flip-flops sharing a clock, a reset and an enable.
+  \item Say when a signal assignment takes effect: \code{<=} schedules rather than applies, so two
+    assignments in a clocked process build a chain, and their order relative to each other does not
+    matter.
+  \item Build an edge detector from a flip-flop and a gate, and say exactly which signal it
+    produces and for how long.
+\end{itemize}
+
+\needspace{6\baselineskip}
+\subsection*{Questions to test yourself with}
+\begin{enumerate}
+  \item What is the functional difference between a D latch and a D flip-flop, and under what
+    condition does each change its output?
+  \item Why do synchronous circuits update their state at a single clock edge instead of reacting
+    continuously to their inputs?
+  \item Given a signal and a flip-flop holding its value from one cycle earlier, how do you combine
+    them into a pulse that is high for exactly one clock cycle when the signal goes high?
+  \item Why must \code{clock} be the only signal in a flip-flop process's sensitivity list, unless
+    the design has an asynchronous reset?
+  \item A clocked process contains \code{b <= a;} and after it \code{c <= b;}. What does \code{c}
+    hold after a clock edge, and why is it not \code{a}? What changes if you swap the lines, and
+    why?
+\end{enumerate}
+
+\needspace{6\baselineskip}
+\subsection*{Looking ahead}
+\Chapref{c4:ch} goes on with:
+\begin{itemize}
+  \item Why the raw button feeding this chapter's edge detector can drive a flip-flop into an
+    undefined, unstable state, and why that is a different kind of problem from anything here.
+  \item The two-flip-flop synchroniser, and what it does and does not do about a bouncing button.
+  \item The same LED toggle, rebuilt so that it is actually safe on real hardware.
+\end{itemize}

@@ -1,0 +1,315 @@
+% Section 1.8, from lectures/L01/appendix/b_exercises.md.
+
+\section{Exercises}
+\label{c1:sec:exercises}
+
+\begin{aside}
+\textbf{How to check your work.} Exercise~\ref{c1:ex:sop} is a short pen-and-paper warm-up on the
+notation the book uses throughout; it needs neither VHDL, GHDL nor a board, and it states what a
+good answer covers.
+
+From Exercise~\ref{c1:ex:gates} onwards, every exercise that asks you to write a VHDL module comes
+with a self-checking testbench under \file{lectures/L01/exercises/}. Write your module in its
+directory \file{exercises/<module>/}, with the entity name and the \textbf{port order} the exercise
+states, and then run it with GHDL \textemdash{} see \secref{c2:sec:testbenches} for the three
+commands.
+
+No FPGA board is needed for any exercise. The Quartus synthesis and board programming steps are
+demonstrated during the session; your job afterwards is to get the VHDL right, and the testbench is
+how you confirm it.
+\end{aside}
+
+% ------------------------------------------------------------------------------------------
+\exerciseset{Truth tables and gates}
+
+\exercise{A function that depends on less than it looks like it does}{Circuit}
+\label{c1:ex:sop}
+A function of two inputs \code{A}, \code{B} and one output \code{X} has the truth table below:
+
+\begin{narrowtable}{ccc}
+  \thead{A} & \thead{B} & \thead{X} \\
+  \midrule
+  0 & 0 & 1 \\
+  0 & 1 & 0 \\
+  1 & 0 & 1 \\
+  1 & 1 & 0 \\
+\end{narrowtable}
+
+\xpart{a} Derive the sum-of-products equation for \code{X} straight out of the truth table
+(\secref{c1:sec:boolean}). Two rows have $X = 1$, so you get two AND terms.
+
+\xpart{b} Simplify it algebraically. Factor out what the two terms share, and apply $A + A' = 1$
+and $1 \cdot B' = B'$ from \secref{c1:sec:boolean}. You should end up with a single literal.
+
+\xpart{c} Your answer to \textbf{b)} says something about \code{A}. What? Which single gate from
+the table in \secref{c1:sec:gates} computes the function, and what happens to the input \code{A}
+when you draw it?
+
+\xpart{d} Build that single-gate version in CircuitVerse and confirm that it reproduces every row
+of the truth table above. Leave the input \code{A} unconnected, or simply leave it out of the
+drawing; \textbf{b)} is the justification for doing so.
+
+% ------------------------------------------------------------------------------------------
+\exerciseset{Entities and architectures}
+
+\exercise{\code{and_gate} and \code{nand_gate}}{VHDL}
+\label{c1:ex:gates}
+Write two small gates as complete VHDL modules, \code{and_gate} and \code{nand_gate}.
+
+Neither gate is the point, and you should not expect either of them to be hard. The point is that
+this is where an entity and an architecture stop being something you read about in
+\secref{c1:sec:vhdl} and become something you write, and that the two halves are worth writing in
+that order.
+
+Both entities have the same ports:
+
+\begin{narrowtable}{lll}
+  \thead{Port} & \thead{Direction} & \thead{Type} \\
+  \midrule
+  \code{a} & in & \code{std_logic} \\
+  \code{b} & in & \code{std_logic} \\
+  \code{x} & out & \code{std_logic} \\
+\end{narrowtable}
+
+\xpart{a} Write the \code{entity} declaration for \code{and_gate}, and nothing else. In VHDL a
+module's interface is something you can write down and reason about before any implementation
+exists at all, which is the habit this part exists to build. Identify which ports are required, the
+direction of each, and the type of each.
+
+\xpart{b} Add an \code{architecture} that implements the AND gate with a single concurrent signal
+assignment.
+
+\xpart{c} Now write \code{nand_gate}: the same interface with an inverted output, using VHDL's
+\code{nand} operator directly. Do \textbf{not} write \code{not (a and b)}.
+
+The two are equivalent as Boolean algebra, and on an FPGA they make no difference at all, since
+both end up in the same lookup table. It matters on the kind of hardware Exercise~\ref{c1:ex:nand}
+below is about, where NAND is the gate you physically have and everything else must be built from
+it. Writing what you mean, and letting the tools decide what it costs, is the habit; reaching past
+an operator the language already gives you is what to avoid.
+
+\modulefig[0.52]{lectures/L01/appendix/images/and_gate.png}
+\modulefig[0.52]{lectures/L01/appendix/images/nand_gate.png}
+
+\begin{selfcheck}
+\textbf{Self-check.} Name your entities \code{and_gate} and \code{nand_gate}, each with the ports
+\code{a}, \code{b} (in) and \code{x} (out), declared in that order; their testbenches are in
+\file{exercises/and_gate/} and \file{exercises/nand_gate/}, and each checks all four rows of the
+corresponding truth table.
+\end{selfcheck}
+
+\exercise{\code{xor3}: odd parity with three inputs}{VHDL}
+\label{c1:ex:xor3}
+An XOR gate has three inputs, \code{a}, \code{b}, \code{c}, and one output, \code{x}. The output is
+\code{1} when an odd number of the inputs are \code{1} (three-input XOR, or the parity function).
+
+\xpart{a} Write the truth table for \code{x} over all eight combinations of \code{a}, \code{b},
+\code{c}, and confirm that it matches the description ``an odd number of \code{1}s''.
+
+\xpart{b} Implement the gate in VHDL, as a module of its own with an entity whose ports are three
+\code{std_logic} inputs and one \code{std_logic} output, and an architecture that drives \code{x}
+with a single concurrent assignment. \Secref{c1:sec:vhdl} shows the entity/architecture pattern and
+notes that VHDL's \code{xor} operator works directly on \code{std_logic}; \secref{c1:sec:module}
+shows a complete module from start to finish.
+
+\xpart{c} Build the same gate in CircuitVerse and confirm that it reproduces every row of your
+truth table.
+
+\note[Hint]\code{xor} chains from left to right, so the whole architecture body is a single line,
+\code{x <= a xor b xor c;}, with no need for either an internal \code{signal} or intermediate
+gates.
+
+\modulefig[0.52]{lectures/L01/appendix/images/xor3.png}
+
+\begin{selfcheck}
+\textbf{Self-check.} Name your VHDL entity \code{xor3}, with the ports \code{a}, \code{b},
+\code{c} (in) and \code{x} (out), declared in that order; its testbench is in
+\file{exercises/xor3/}, and \secref{c1:sec:module} lists the three commands that run it.
+\end{selfcheck}
+
+\exercise{\code{majority3}: a triple-redundant vote}{VHDL}
+\label{c1:ex:majority3}
+A \textbf{majority gate} has three inputs, \code{a}, \code{b}, \code{c}, and one output, \code{x}.
+The output is \code{1} when \emph{at least two} of the three inputs are \code{1}.
+
+This is the circuit behind a triple-redundant vote: three sensors report the same measurement, and
+the system acts on the answer two of them agree on, so that a single broken sensor cannot decide
+anything on its own.
+
+\xpart{a} Write the truth table for \code{x} over all eight combinations of \code{a}, \code{b},
+\code{c}.
+
+\xpart{b} Derive the sum-of-products equation for \code{x} straight out of the truth table
+(\secref{c1:sec:boolean}):
+\begin{itemize}
+  \item Four rows have $x = 1$, so you get four AND terms.
+  \item Every term contains all three inputs, primed where the input is \code{0} on its row.
+\end{itemize}
+
+\xpart{c} Implement the gate in VHDL, as a module of its own:
+\begin{itemize}
+  \item An entity with three \code{std_logic} inputs and one \code{std_logic} output.
+  \item An architecture that drives \code{x} with a single concurrent assignment, translating your
+    four AND terms directly (\secref{c1:sec:vhdl}).
+\end{itemize}
+
+\xpart{d} Build the same network in CircuitVerse and confirm that it reproduces every row of your
+truth table.
+
+\note[Hint]Write the equation out on paper before you open either the editor or CircuitVerse. Four
+three-input AND terms plus a four-input OR gate is a lot of wiring to correct after the fact.
+
+\note[Looking ahead]Count the gates your equation calls for, and then convince yourself by
+inspection that $x = ab + ac + bc$ computes the same function with three two-input AND gates
+instead of four three-input ones. Sum of products gave you a \emph{correct} network, not the
+\emph{smallest}; finding the smaller one systematically, rather than by staring at it, is what
+\chapref{c2:ch} is for.
+
+\modulefig[0.52]{lectures/L01/appendix/images/majority3.png}
+
+\begin{selfcheck}
+\textbf{Self-check.} Name your VHDL entity \code{majority3}, with the ports \code{a}, \code{b},
+\code{c} (in) and \code{x} (out), declared in that order; its testbench is in
+\file{exercises/majority3/} and checks all eight rows. Either equation passes \textemdash{} the
+testbench checks the function, not which network you chose.
+\end{selfcheck}
+
+\exercise{\code{half_adder}: the first module with two outputs}{VHDL}
+\label{c1:ex:half_adder}
+Write a \textbf{half adder}: \code{sum} and \code{carry} from two single bits. You know the
+circuit; the reason it is here is that it is the book's first module with \textbf{two outputs}, and
+that is a VHDL question rather than a logic question.
+
+\xpart{a} Implement it, with two concurrent assignments and no internal \code{signal}.
+
+Two outputs do not mean two entities, two architectures or a process. Every output port is driven
+by its own concurrent assignment, and the two are not steps that happen in an order: they describe
+two separate pieces of wire, both live all the time. If you catch yourself reaching for a process
+in order to ``return'' two values, that instinct is the software instinct, and
+\secref{c1:sec:vhdl}'s ``a concurrent assignment describes a wire'' is the correction.
+
+\xpart{b} Build it in CircuitVerse and confirm both outputs, so that you have seen the two-output
+shape as a drawing before you meet it as an entity with several \code{out} ports in
+\chapref{c2:ch}.
+
+\note[Looking ahead]This is the cell the counter in \chapref{c6:ch} is built from. The four-bit
+adder there is four of these chained carry-to-carry, and the counter is that adder with its output
+fed back to its input, which is why the wraparound needs no logic at all.
+
+\modulefig[0.56]{lectures/L01/appendix/images/half_adder.png}
+
+\begin{selfcheck}
+\textbf{Self-check.} Name your entity \code{half_adder}, with the ports \code{a}, \code{b} (in) and
+\code{sum}, \code{carry} (out), declared in that order; its testbench is in
+\file{exercises/half_adder/} and checks \code{sum} and \code{carry} separately, so that a design
+that has one right and the other wrong is told which is which.
+\end{selfcheck}
+
+% ------------------------------------------------------------------------------------------
+\exerciseset{Universal gates}
+
+\exercise{\code{or_from_nand}}{VHDL}
+\label{c1:ex:nand}
+\Secref{c1:sec:gates} states that every Boolean function can be built from \code{NAND} gates
+alone. This exercise has you prove it to yourself for the three operators you have been using.
+
+\xpart{a} Derive the \code{OR} case on paper before you build anything, since De Morgan
+(\secref{c1:sec:boolean}) gives it to you directly. Start from $(A'B')'$ and apply the law; you
+should arrive at $A + B$. Now read that expression back as a circuit: what is $A'B'$ with an
+inversion on its output, and how many \code{NAND} gates is the whole thing?
+
+\xpart{b} Build each of the following in CircuitVerse from \code{NAND} gates alone, checking each
+against its truth table in \secref{c1:sec:gates} as you go:
+\begin{itemize}
+  \item \code{NOT a}: one NAND gate is enough, if you feed the same signal to both its inputs.
+  \item \code{a AND b}: one NAND gate, followed by the \code{NOT} you just built.
+  \item \code{a OR b}: the network you derived in \textbf{a)}. Check your gate count against what
+    you predicted.
+\end{itemize}
+
+\xpart{c} Write the \code{OR} version in VHDL, as a module of its own:
+\begin{itemize}
+  \item An entity with two \code{std_logic} inputs and one \code{std_logic} output.
+  \item An architecture that drives \code{x} with a single concurrent assignment.
+  \item Use VHDL's \code{nand} operator alone: no \code{or}, no \code{and}, no \code{not}
+    anywhere in the expression.
+\end{itemize}
+
+\xpart{d} Explain why this matters in practice. Bear in mind that a chip manufacturing process has
+to physically implement every gate type it offers, and that \code{NAND} is the cheapest gate to
+build in CMOS.
+
+\note[Hint]VHDL's \code{nand} operator does not chain the way \code{and} and \code{or} do:
+\code{a nand b nand c} is not valid. Parenthesise every NAND explicitly, which is what you want
+here anyway, since every pair of parentheses is a physical gate in your CircuitVerse drawing.
+
+\modulefig[0.52]{lectures/L01/appendix/images/or_from_nand.png}
+
+\begin{selfcheck}
+\textbf{Self-check.} Name your VHDL entity \code{or_from_nand}, with the ports \code{a}, \code{b}
+(in) and \code{x} (out), declared in that order; its testbench is in
+\file{exercises/or_from_nand/} and checks it against all four rows of the \code{OR} truth table.
+\end{selfcheck}
+
+% ------------------------------------------------------------------------------------------
+\exerciseset{Putting it all together}
+
+\exercise{The brake assistant in VHDL}{VHDL}
+\label{c1:ex:adas}
+Write the brake assistant from \secref{c1:sec:adas} in VHDL.
+
+\Secref{c1:sec:adas} had you derive its equations, count its gates and sketch its network
+\emph{before} the session, and the session then built it live. This is where you write it yourself,
+and where a testbench decides whether your reading of the requirement matches the one in the truth
+table.
+
+The entity must have:
+
+\begin{booktable}{@{}p{8em}p{3.4em}p{5.6em}L@{}}
+  \thead{Port} & \thead{Dir.} & \thead{Type} & \thead{Description} \\
+  \midrule
+  \code{driver_brake} & in & \code{std_logic} & The driver is on the brake pedal. \\
+  \code{sensor} & in & \code{std_logic} & The distance sensor sees an obstacle. \\
+  \code{radar} & in & \code{std_logic} & The radar sees an obstacle. \\
+  \code{error} & in & \code{std_logic} & The assistance system reports a fault. \\
+  \code{engine_brake} & out & \code{std_logic} & Apply the brakes. \\
+\end{booktable}
+
+\xpart{a} Implement it from \textbf{your own} equations rather than from what was on the screen. If
+the two disagree, that disagreement is the most useful thing this exercise can give you, and the
+testbench says which of them the truth table sides with.
+
+Use two concurrent assignments and one internal \code{signal}:
+\begin{itemize}
+  \item The signal holds the assistance system's own decision, before the driver's pedal is
+    weighed in.
+  \item This is the book's first exercise with an internal signal, and it is the reason the keyword
+    exists: a name for an intermediate result, so that every line still reads as the sentence in
+    the requirement it came from.
+\end{itemize}
+
+\xpart{b} Now break it deliberately, in the specific way \secref{c1:sec:adas} warns about. Feed
+\code{driver_brake} \emph{through} the fault logic instead of letting it go past:
+
+\begin{vhdlcode}
+engine_brake <= (driver_brake or sensor or radar) and (not error);
+\end{vhdlcode}
+
+It is one gate simpler, and it looks reasonable. Run the testbench against it and answer:
+\begin{itemize}
+  \item Which input combination does it fail on first, and what happens physically in the car at
+    that moment?
+  \item How many of the sixteen rows does it get wrong, and what do they all have in common?
+  \item The rows that fail are exactly the ones the safety requirement was written for. What does
+    that tell you about the value of a truth table derived from a requirement, as opposed to one
+    read off a circuit you have already built?
+\end{itemize}
+
+\modulefig[0.72]{lectures/L01/appendix/images/adas.png}
+
+\begin{selfcheck}
+\textbf{Self-check.} Name your entity \code{adas}, with the inputs \code{driver_brake},
+\code{sensor}, \code{radar}, \code{error} and the output \code{engine_brake}, declared in that
+order; its testbench is in \file{exercises/adas/} and checks all sixteen rows of
+\secref{c1:sec:adas}'s truth table.
+\end{selfcheck}

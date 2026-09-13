@@ -1,0 +1,53 @@
+% Chapter 10, typeset from lectures/L10: the framing introduction becomes section 10.1, Appendix A
+% becomes 10.2-10.6, Appendix B becomes 10.7, and Appendix C plus the framing exercises become the
+% exercises.
+
+\chapter{Project start: the CAN bus, the frame and \code{can_def}}
+\label{c10:ch}
+
+{\large\itshape Why protocols need frames, what CAN actually is, and the project's first VHDL.\par}
+
+\begin{chapterbox}{In this chapter}
+\begin{itemize}
+  \item Why protocols need frames at all: payload, length field, checksum, and why sender, receiver
+    and sequence numbers appear as soon as a link is shared by more than two nodes.
+  \item CAN's differential bus and multi-master design.
+  \item Dominant and recessive bits, and why arbitration replaces a bus master.
+  \item Broadcast plus ID filtering instead of addresses.
+  \item The CAN frame field by field: SOF, identifier, RTR, control field, DLC, data, CRC-15, ACK,
+    EOF.
+  \item Bit stuffing: the five rule, and why it exists.
+  \item Wired-AND arbitration, worked through by hand.
+  \item Bit timing and the sample point, conceptually.
+  \item \code{can_def}: the shared package holding every constant the chapter defines.
+\end{itemize}
+\end{chapterbox}
+
+This is the first chapter of the group project. Read the project specification in
+appendix~\ref{app:project} before you start: it describes the way of working, the modules and what is
+assessed. The groups are put together in this session.
+
+\Secref{c10:sec:framing} builds up a small frame format of its own from nothing and motivates every
+field CAN then has. It is the book's only C++ material, and it exists to make the rest of the chapter
+a comparison rather than an enumeration: CAN answers the same four questions, but answers one of them
+entirely differently.
+
+\begin{aside}
+\textbf{The protocol reference.} This book is about \emph{building} a CAN node, not about CAN as a
+standard. The protocol itself is described in \canbook, a short book written for both halves of a
+CAN system \textemdash{} the one building the controller in hardware and the one writing the driver
+in software \textemdash{} and it is the protocol reference throughout part~\ref{part:can}.
+
+This chapter gives the working understanding needed to write \code{can_def} and get started; if you
+get lost in a field, a rule or a timing relationship, that is where you look it up. For whoever is
+building the controller, its \textbf{chapters 1--6 are the requirement specification, bit by bit},
+and its chapter~7 describes exactly the simplified controller part~\ref{part:can} builds: what it
+implements of the standard and what it deliberately leaves out. Appendix~\ref{app:reading} has the
+full chapter map between the two books.
+\end{aside}
+
+\input{chapters/10/framing}
+\input{chapters/10/can}
+\input{chapters/10/candef}
+\input{chapters/10/summary}
+\input{chapters/10/exercises}

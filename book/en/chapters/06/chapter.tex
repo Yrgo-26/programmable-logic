@@ -1,0 +1,34 @@
+% Chapter 6, typeset from lectures/L06: Appendix A becomes sections 6.1-6.7, and Appendix B the
+% exercises.
+
+\chapter{Counters and shift registers}
+\label{c6:ch}
+
+{\large\itshape Building blocks for everything that needs to count or move bits.\par}
+
+\begin{chapterbox}{In this chapter}
+\begin{itemize}
+  \item Counters: a register, an adder and a constant \code{1}, and why the wraparound comes free.
+  \item Shift registers: moving data one bit per clock edge, in a direction used consistently.
+  \item SIPO and PISO, and which suits which job.
+  \item An 8-bit serial receiver: a shift register plus a bit counter, which knows when a byte has
+    arrived.
+  \item Two demonstrations on the board: a row of LEDs counting and wrapping, and a byte shifted in
+    one button press at a time.
+\end{itemize}
+\end{chapterbox}
+
+Before the counter reaches \code{1111}: predict what it will show next, and then find the element in
+the drawing that makes it happen. There is none, which is the point: nothing in the circuit performs
+the wraparound, and it is a consequence of the register's width rather than logic someone put there.
+
+\code{serial_rx8} in \secref{c6:sec:rx8} is the book's first design whose correctness you cannot
+check by eye at full speed: continuously enabled, it swallows a byte in 160~ns. That is why it has a
+reference testbench, and why the board demonstration in \secref{c6:sec:shiftdemo} drives
+\code{shift_enable} from a button instead. Slowing the \emph{clock} down would be the software
+instinct and the wrong move; the module already has the control that lets you take one bit at a
+time.
+
+\input{chapters/06/counters}
+\input{chapters/06/summary}
+\input{chapters/06/exercises}

@@ -1,0 +1,93 @@
+% Section 18.9, from lectures/L18/README.md's SPI walkthrough and the bridge/spi_slave.vhd handed
+% out.
+
+\section{SPI from the waveform upwards}
+\label{c18:sec:spi}
+
+The register bank presents registers. Something has to reach them from outside, and that is SPI. This
+section takes the transport from the waveform upwards, and ends in the \code{spi_slave} handed out,
+which you read rather than write.
+
+\subsection*{Mode 0, MSB first, SS as framing}
+The project runs \textbf{SPI mode 0} (CPOL~=~0, CPHA~=~0) throughout:
+\begin{itemize}
+  \item \code{SCK} idles low. The master generates it; the slave never produces a clock.
+  \item Both sides \textbf{sample on the rising edge}. \code{MISO} therefore changes on the
+    \textbf{falling} edge, so that the value has settled by the next rising one.
+  \item \textbf{MSB first}, in every byte.
+  \item \code{SS} is active low and is the \textbf{framing signal}: one transaction per low period.
+    The master has to raise \code{SS} between transactions.
+  \item \code{SCK} runs at at most 1~MHz. The reason is in \secref{c18:sub:oversample}.
+\end{itemize}
+
+Draw the waveform by hand before you read on: \code{SS} falling, eight rising \code{SCK} edges with
+the byte \code{0xA5} on \code{MOSI}, most significant first, and \code{SS} rising. That is the whole
+picture, and Exercise~\ref{c18:ex:waveform} builds a five-transaction byte out of it.
+
+\subsection{Why the slave does not clock on SCK}
+\label{c18:sub:oversample}
+
+The tempting reading is that \code{SCK} is a clock, so make it \emph{your} clock: clock the shift
+register on it and be done. Do not, for two separate reasons.
+
+\textbf{The first is metastability}, and it is \chapref{c4:ch}'s rule unchanged. \code{SCK},
+\code{MOSI} and \code{SS} all come in on pins driven by a microcontroller with its own crystal. They
+are asynchronous to \code{clock} in exactly the sense \chapref{c4:ch} means, and every one of them has
+to go through two flip-flops before any logic gets to look at it.
+
+\textbf{The second is what a design with two unrelated clocks costs in an FPGA.} A second clock domain
+means a second set of timing constraints, a genuine clock domain crossing on every signal passing
+between them, and a synthesis tool that can no longer analyse the design as a whole. For an interface
+running at 1~MHz against a fabric running at 50, that price is unnecessary.
+
+The answer is \textbf{oversampling}: synchronise \code{SCK} into the 50 MHz domain and \emph{detect
+its edges} instead of clocking on it. At 1~MHz that is at least 50 system cycles per SPI bit, an order
+of magnitude of margin. The protocol therefore guarantees correct operation up to 1~MHz; faster may
+work, and is deliberately not promised.
+
+It costs a few 50 MHz cycles per edge, and that is where the protocol's timing requirements around
+\code{SS} come from: at least 60~ns (three cycles) before the first \code{SCK} edge, between
+transactions, and after the last edge. Appendix~\ref{app:protocol} has the whole table.
+
+\subsection{Reading \code{spi_slave.vhd}}
+\label{c18:sub:slave}
+
+\code{spi_slave} is handed out rather than written: it is transport, not the book's subject. But you
+have to be able to read it, and \chapref{c20:ch} expects that you can.
+
+\vhdlfile{bridge/spi_slave.vhd}
+
+Four things are worth reading closely:
+
+\paragraph{The record \code{sync_t} has three fields, but only two are synchronisation stages}
+\code{s1} and \code{s2} are the two-flip-flop synchroniser; \code{s3} is last cycle's \code{s2}, and
+exists only so that an edge can be detected by comparing the two. \code{sclk} and \code{ss} are used
+for their \emph{edges} and need all three; \code{mosi} is read only at an edge already detected on
+\code{sclk}, so it needs the two synchronisation stages and no history.
+
+\paragraph{The two chains reset to different values}
+\code{sclk_s} is cleared to all zeros and \code{ss_s} to all \textbf{ones}. Every chain resets to the
+level its wire idles at, so that the module comes out of reset believing what is actually true of an
+idle bus: \code{sclk} idles low in mode 0, and \code{ss} is active low and idles \textbf{high}.
+Clearing the \code{ss} chain to \code{'0'} would make \code{ss_active} read \code{'1'} out of reset
+and the bridge see a frame nobody started. It is exactly the same rule \code{button_sync} in
+Exercise~\ref{c4:ex:buttonsync} exists to uphold.
+
+\paragraph{A deselected slave ignores the SPI lines entirely}
+The handling of \code{SCK} edges sits inside the \code{else} arm of a test on \code{ss_s.s2}.
+\code{SCK} belongs to the slave the master is addressing; for this slave it is an asynchronous input
+arriving over a wire on a breadboard, and a disturbance on that wire looks just like an edge. Without
+that gating the branches below would shift in \code{MOSI} and pulse \code{rx_valid} on edges arriving
+while \code{ss} is high, and \code{spi_reg_bridge} would lose byte alignment for every transaction
+thereafter.
+
+\paragraph{\code{ss_falling} is an \code{elsif} before the SCK branches}
+The order matters at exactly one clock edge: the one where \code{SS} has just fallen \emph{and} a
+rising \code{SCK} edge is detected at the same time. Because the \code{ss_falling} arm comes first,
+that \code{SCK} edge cannot step the bit counter past the frame's beginning and scramble every byte in
+it.
+
+\code{spi_slave} hands over one complete byte at a time on \code{rx_data}, with \code{rx_valid} as a
+pulse, and takes the next byte to send on \code{tx_data}. It knows nothing about registers.
+\Chapref{c19:ch} builds \code{spi_reg_bridge}, the layer turning those byte streams into
+five-transaction bytes and into register accesses against the bank you have just written.

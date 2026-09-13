@@ -1,0 +1,379 @@
+% Avsnitt 1.1-1.6, ur lectures/L01/appendix/a_combinational_logic.md (A.1-A.6).
+
+\section{Digitala signaler och logiska grindar}
+\label{c1:sec:gates}
+
+En digital signal antar ett av två värden, \code{0} eller \code{1}, i stället för det
+kontinuerliga intervall en analog signal använder. Allt som ligger tillräckligt nära \code{0}
+eller \code{1} läses som exakt \code{0} eller \code{1}, så små mängder elektriskt brus ändrar
+ingenting. Den brusimmuniteten är anledningen till att nästan all modern beräkning, från
+mikrokontroller till FPGA:er, är digital.
+
+En \textbf{logisk grind} har en eller flera enbitarsingångar, en enbitarsutgång och en fast
+boolesk funktion mellan dem.
+
+\textbf{Kombinatorik}, det här kapitlets ämne, producerar utgångar enbart utifrån de aktuella
+ingångarna, utan minne. \textbf{Sekvensnät} (\chapref{c3:ch}) beror på de aktuella ingångarna
+\emph{och} på tillstånd lagrat i vippor.
+
+Varje grundläggande grind med två ingångar, plus den unära \code{NOT}:
+
+\begin{narrowtable}{cc*{6}{c}}
+  \thead{A} & \thead{B} & \thead{AND} & \thead{OR} & \thead{NAND} & \thead{NOR} & \thead{XOR} &
+    \thead{XNOR} \\
+  \midrule
+  0 & 0 & 0 & 0 & 1 & 1 & 0 & 1 \\
+  0 & 1 & 0 & 1 & 1 & 0 & 1 & 0 \\
+  1 & 0 & 0 & 1 & 1 & 0 & 1 & 0 \\
+  1 & 1 & 1 & 1 & 0 & 0 & 0 & 1 \\
+\end{narrowtable}
+
+\begin{narrowtable}{cc}
+  \thead{A} & \thead{NOT A} \\
+  \midrule
+  0 & 1 \\
+  1 & 0 \\
+\end{narrowtable}
+
+Värt att lägga på minnet direkt ur tabellerna:
+\begin{itemize}
+  \item \code{NAND}, \code{NOR} och \code{XNOR} är inverserna av \code{AND}, \code{OR} och
+    \code{XOR}.
+  \item \code{XOR} är \code{1} när ingångarna skiljer sig åt. Bortom två ingångar generaliseras
+    det till \textbf{udda paritet}: \code{1} när ett udda antal ingångar är \code{1}
+    (Övning~\ref{c1:ex:xor3}).
+  \item Varje boolesk funktion kan byggas av \code{AND}, \code{OR} och \code{NOT}, och även av
+    enbart \code{NAND} eller enbart \code{NOR}.
+\end{itemize}
+
+% ------------------------------------------------------------------------------------------
+\section{Boolesk algebra som notation}
+\label{c1:sec:boolean}
+
+Tre operatorer, som avbildas rakt av på grindarna ovan:
+
+\begin{booktable}{@{}p{5em}L@{}}
+  \thead{Grind} & \thead{Notation i boolesk algebra} \\
+  \midrule
+  AND & multiplikation: $A$ \textbf{AND} $B$ skrivs $AB$ \\
+  OR & addition: $A$ \textbf{OR} $B$ skrivs $A + B$ \\
+  NOT & prim: \textbf{NOT} $A$ skrivs $A'$ \\
+\end{booktable}
+
+En funktion skriven som en OR av AND-termer, till exempel $X = AB' + CD$, står på
+\textbf{summa-av-produkter}-form.
+
+Varje sanningstabell kan läsas av direkt som en summa av produkter:
+\begin{enumerate}
+  \item Leta upp varje rad där utgången är \code{1}.
+  \item Skriv för var och en en AND-term som innehåller samtliga ingångar: direkt om ingången är
+    \code{1} på den raden, primmad om den är \code{0}.
+  \item OR:a ihop de termerna.
+\end{enumerate}
+
+Till exempel:
+
+\begin{narrowtable}{ccc}
+  \thead{A} & \thead{B} & \thead{X} \\
+  \midrule
+  0 & 0 & 0 \\
+  0 & 1 & 1 \\
+  1 & 0 & 1 \\
+  1 & 1 & 0 \\
+\end{narrowtable}
+
+Raden $AB = 01$ bidrar med $A'B$ och raden $AB = 10$ med $AB'$, vilket ger $X = A'B + AB'$. Stäm
+av mot tabellen: det är \code{XOR}, så samma nät är en enda \code{XOR}-grind i stället för två
+\code{AND}-grindar, två \code{NOT}-grindar och en \code{OR}.
+
+\subsection*{Lagarna, som en påminnelse}
+Du har mött dem förut. De står här för att boken ska ha en enda notation för dem och för att
+senare kapitel ska kunna hänvisa till dem, inte för att de behöver läras ut:
+
+\begin{booktable}{@{}p{8em}p{9em}L@{}}
+  \thead{Lag} & \thead{Med OR} & \thead{Med AND} \\
+  \midrule
+  Identitet & $A + 0 = A$ & $A \cdot 1 = A$ \\
+  Dominans & $A + 1 = 1$ & $A \cdot 0 = 0$ \\
+  Idempotens & $A + A = A$ & $A \cdot A = A$ \\
+  Komplement & $A + A' = 1$ & $A \cdot A' = 0$ \\
+  Absorption & $A + AB = A$ & $A(A + B) = A$ \\
+  De Morgan & $(A + B)' = A'B'$ & $(AB)' = A' + B'$ \\
+\end{booktable}
+
+\textbf{De Morgan är den lag boken lutar sig mot}, mindre för minimering än som en regel för hur
+en inversion flyttas genom en grind: en \code{OR} med båda ingångarna inverterade \emph{är} en
+\code{NAND}, och en \code{AND} med båda ingångarna inverterade \emph{är} en \code{NOR}. Det är
+därför en \code{NAND}-grind kan bygga vad som helst, vilket Övning~\ref{c1:ex:nand} låter dig
+skriva i VHDL, och det kommer tillbaka varje gång en aktivt låg signal möter logik skriven för
+aktivt hög. I en kurs där varje reset och varje knapp är aktivt låg är det ofta.
+
+Glappet mellan en rakt avläst summa av produkter och det minsta nätet är vad ett
+\textbf{Karnaughdiagram} sluter, och \secref{c2:sec:kmap} går igenom ett från början till slut.
+Inte för att tekniken är ny för dig, utan för att det är den minimerade ekvationen som skrivs i
+VHDL, och \chapref{c8:ch} härleder sin tillståndsmaskins nästa-tillstånd-logik på precis det
+sättet.
+
+% ------------------------------------------------------------------------------------------
+\section{Att bygga och simulera en krets i CircuitVerse}
+\label{c1:sec:cv}
+
+CircuitVerse (\url{https://circuitverse.org/simulator}) är en gratis, webbläsarbaserad
+logiksimulator. Varje grindnät i den här boken byggs och testas där för hand innan det skrivs i
+VHDL:
+\begin{enumerate}
+  \item Öppna simulatorn och starta ett nytt projekt.
+  \item Placera ett \textbf{input}-element per insignal och ett \textbf{output}-element per
+    utsignal, omdöpta så att de matchar dina variabler.
+  \item Placera de grindar din ekvation kräver, från panelen \emph{Gates}.
+  \item Koppla ihop nätet en grind i taget, enligt din härledda ekvation. Du ska redan veta exakt
+    vilka grindar du behöver innan du öppnar simulatorn, vilket är därför \secref{c1:sec:boolean}
+    kommer först.
+  \item Slå om varje ingång och kontrollera att utgången stämmer med din sanningstabell på
+    \textbf{varje} rad.
+  \item Spara via \code{Project -> Save Online}, eller \code{Project -> Download as image/data}
+    för en återimporterbar \file{.cv}-fil.
+\end{enumerate}
+
+\textbf{Steg 5 är inte valfritt, och ingenting annat gör det åt dig.} Tre regler gör det till en
+kontroll snarare än en formalitet:
+\begin{itemize}
+  \item \textbf{Uttömmande, inte stickprov.} Två ingångar är fyra rader, tre är åtta. Vid de
+    storlekarna finns ingen ursäkt för att sampla. För sekvensnäten längre fram blir det här
+    ”stega klockan och kontrollera vid varje flank”, samma disciplin tillämpad på tid.
+  \item \textbf{Härled först, simulera sedan.} Rita kretsen och bestäm \emph{sedan} vad den ska
+    göra, så kommer du att läsa av dina egna förväntningar ur simuleringen, vilket inte bevisar
+    något.
+  \item \textbf{En avvikelse är information.} Den säger att ritningen och ekvationen är oense, och
+    att en av dem har fel.
+\end{itemize}
+
+Varje hårdvarubugg du kommer att jaga hittas genom att förutsäga ett beteende och sedan
+kontrollera det. Att göra det för hand på en krets med fyra grindar är hur du lär dig göra det på
+en du inte kan överblicka på en gång.
+
+När konstruktionen väl är VHDL tar en självkontrollerande testbänk över det jobbet. Varje
+genomarbetat exempel och varje övning har en utdelad; du kör dem snarare än skriver dem, vilket
+\secref{c2:sec:testbenches} går igenom.
+
+% ------------------------------------------------------------------------------------------
+\section{Precis så mycket VHDL att du kan läsa och skriva ett grindnät}
+\label{c1:sec:vhdl}
+
+VHDL beskriver hårdvara, inte en sekvens av instruktioner. Varje sats nedan körs konkurrent och
+kontinuerligt, precis som grindarna den beskriver. Språket kommer allteftersom det behövs; det här
+avsnittet räcker för ett enkelt kombinatoriskt nät.
+
+Varje VHDL-modul har två delar:
+\begin{itemize}
+  \item En \textbf{entitet}, vyn utifrån: portarna, och ingenting om vad som händer inuti.
+  \item En \textbf{arkitektur}, implementationen bakom den.
+\end{itemize}
+
+Den uppdelningen är ett kontrakt, inte ceremoni. Entiteten är allt en annan konstruktion behöver
+för att kunna använda modulen, vilket är det som låter en konstruktion instansiera en annan utan
+att läsa den, och som låter dig skriva om en implementation utan att röra det som beror på den.
+Formen är en header vid sidan av en källfil, eller ett gränssnitt vid sidan av sin klass;
+skillnaden är att VHDL kräver den för varje modul, utan något sätt att hoppa över gränssnittet
+eller läcka implementationen genom det.
+
+Ta \code{or_gate}: ingångarna \code{a}, \code{b}, utgången \code{x}, och $x = a + b$.
+
+\begin{vhdlcode}
+entity or_gate is
+    port(a, b: in std_logic;
+         x   : out std_logic);
+end entity;
+\end{vhdlcode}
+
+\lecfig[0.62]{lectures/L01/appendix/images/or_gate_entity.png}{Entiteten \code{or_gate}: vyn
+utifrån, och ingenting om vad som händer inuti.}{c1:fig:entity}
+
+\code{std_logic} är signaltypen för en enstaka bit. Den är inte inbyggd i VHDL utan kommer från
+paketet \code{std_logic_1164}, vilket är därför varje fil i den här boken inleds med:
+
+\begin{vhdlcode}
+library ieee;
+use ieee.std_logic_1164.all;
+\end{vhdlcode}
+
+Den har nio värden i stället för två, eftersom verklig hårdvara behöver mer än sant och falskt:
+\begin{itemize}
+  \item \code{'0'} och \code{'1'}: driven låg och driven hög. De enda två du kommer att skriva i
+    den här boken.
+  \item \code{'Z'}: högimpedans, ingenting driver ledningen alls.
+  \item \code{'U'}: oinitierad, det en signal håller innan något har tilldelat den ett värde.
+  \item \code{'X'}: okänd, det en simulator visar när två saker driver samma signal och är oense.
+  \item \code{'-'}, \code{'W'}, \code{'L'}, \code{'H'}: don't-care-värden och svagt drivande
+    värden, sällan skrivna för hand.
+\end{itemize}
+
+Att känna igen de sju du inte kommer att skriva spelar ändå roll: de är hur en simulator talar om
+för dig att något är fel. En signal som ligger kvar på \code{'U'} eller \code{'X'} är en bugg,
+inte ett värde.
+
+Arkitekturen fyller i lådan:
+
+\begin{vhdlcode}
+architecture behaviour of or_gate is
+begin
+    x <= a or b;
+end architecture;
+\end{vhdlcode}
+
+\lecfig[0.62]{lectures/L01/appendix/images/or_gate_arch.png}{Arkitekturen \code{or_gate}:
+implementationen bakom entiteten.}{c1:fig:arch}
+
+Tillsammans utgör de den kompletta modulen:
+
+\lecfig[0.62]{lectures/L01/appendix/images/or_gate_module.png}{Modulen \code{or_gate}: entitet och
+arkitektur tillsammans.}{c1:fig:module}
+
+\code{x <= a or b;} är \secref{c1:sec:boolean}:s booleska algebra nästan ordagrant: VHDL:s
+\code{and}, \code{or}, \code{not} och \code{xor} arbetar direkt på \code{std_logic}, så varje
+ekvation du härlett för hand blir VHDL med knappt någon översättning alls.
+
+Tilldelningen är \textbf{konkurrent}. Den körs inte en gång; den gäller kontinuerligt, som en
+ledning mellan verkliga grindar.
+
+Nyckelordet \code{signal} deklarerar en intern ledning inuti en arkitektur, till skillnad från en
+utifrån synlig port. Du använder en i Övning~\ref{c1:ex:adas} för att namnge ett mellanresultat i
+stället för att nästla in det på plats, och \chapref{c2:ch} lutar sig mot samma idé rakt igenom.
+
+% ------------------------------------------------------------------------------------------
+\section{Den kompletta modulen: \code{or_gate}}
+\label{c1:sec:module}
+
+\Secref{c1:sec:vhdl}:s delar tillsammans blir en komplett, syntetiserbar fil. Det här är hela
+\file{or_gate.vhd}, och det är en riktig konstruktion som syntetiseras och körs på DE0-CV:
+
+\vhdlfile{lectures/L01/or_gate/or_gate.vhd}
+
+\begin{itemize}
+  \item \code{library}/\code{use}-satserna drar in \code{std_logic}.
+  \item \code{entity} deklarerar utsidan: två ingångar, en utgång.
+  \item \code{architecture} implementerar insidan, som en enda konkurrent tilldelning.
+\end{itemize}
+
+Det är den minsta kompletta VHDL-konstruktion som finns, och formen ändras aldrig. Varje modul i
+den här boken, ända upp till CAN-kontrollern i \chapref{c17:ch}, är samma
+\code{library}/\code{entity}/\code{architecture}-skelett. Det som växer är arkitekturkroppen,
+aldrig ramen.
+
+\paragraph{Att kontrollera ditt arbete}
+\code{or_gate} har en utdelad \file{or_gate_tb.vhd}, som driver alla fyra ingångskombinationerna
+och kontrollerar utgången:
+
+\begin{shell}
+cd lectures/L01/or_gate
+ghdl -a --std=93 or_gate.vhd or_gate_tb.vhd
+ghdl -e --std=93 or_gate_tb
+ghdl -r --std=93 or_gate_tb --assert-level=error --stop-time=10ms
+\end{shell}
+
+Ingen utskrift utöver en avslutande notering betyder att varje kontroll gick igenom. Testbänkar
+behandlas ordentligt i \secref{c2:sec:testbenches}; tills vidare, betrakta de här tre kommandona
+som sättet du bekräftar att en modul fungerar på.
+
+% ------------------------------------------------------------------------------------------
+\section{En bromsassistent, från krav till krets}
+\label{c1:sec:adas}
+
+Passet bygger en annan krets än \code{or_gate}, live, så att du får se samma väg gås två gånger:
+en gång här i skrift, och en gång på något du inte redan läst svaret på.
+
+Kravet: \textbf{bilen bromsar om föraren bromsar, eller om assistanssystemet bestämmer sig för
+det.} Assistanssystemet bestämmer sig för det när endera detektorn ser något, om det inte
+samtidigt rapporterar ett fel, i vilket fall det inte anförtros att bromsa alls.
+
+\begin{booktable}{@{}p{8em}p{4em}L@{}}
+  \thead{Port} & \thead{Riktning} & \thead{Betydelse} \\
+  \midrule
+  \code{driver_brake} & in & Föraren står på bromspedalen. \\
+  \code{sensor} & in & Avståndssensorn ser ett hinder. \\
+  \code{radar} & in & Radarn ser ett hinder. \\
+  \code{error} & in & Assistanssystemet rapporterar ett fel. \\
+  \code{engine_brake} & out & Lägg an bromsarna. \\
+\end{booktable}
+
+Tre satser avgör tillsammans hela strukturen:
+\begin{itemize}
+  \item endera detektorn räcker på egen hand, och ingen av dem väger tyngre än den andra.
+  \item ett fel utlöser inget larm; det \emph{hindrar} assistanssystemet från att kunna bromsa.
+  \item föraren kan alltid bromsa, även när assistanssystemet är trasigt och inte gör någonting.
+\end{itemize}
+
+Den sista är ett säkerhetskrav, och det är den att hålla fast vid när du härleder nätet: pedalen
+är inte en ingång till assistanslogiken, den går förbi den. Räkna ut vad som ändras om pedalen i
+stället matas genom fellogiken, så har du hittat buggen som strukturen finns till för att
+förhindra.
+
+\subsection*{Sanningstabellen}
+Sexton rader, i den ordning en fyrabitars räknare skulle producera dem. \code{adas_brake} är ingen
+port; den är assistanssystemets eget beslut, visad som en mellankolumn så att du kan se var
+strukturen kommer ifrån.
+
+\begin{narrowtable}{cccccc}
+  \thead{\code{driver_brake}} & \thead{\code{sensor}} & \thead{\code{radar}} &
+    \thead{\code{error}} & \thead{\code{adas_brake}} & \thead{\code{engine_brake}} \\
+  \midrule
+  0 & 0 & 0 & 0 & 0 & 0 \\
+  0 & 0 & 0 & 1 & 0 & 0 \\
+  0 & 0 & 1 & 0 & 1 & 1 \\
+  0 & 0 & 1 & 1 & 0 & 0 \\
+  0 & 1 & 0 & 0 & 1 & 1 \\
+  0 & 1 & 0 & 1 & 0 & 0 \\
+  0 & 1 & 1 & 0 & 1 & 1 \\
+  0 & 1 & 1 & 1 & 0 & 0 \\
+  1 & 0 & 0 & 0 & 0 & 1 \\
+  1 & 0 & 0 & 1 & 0 & 1 \\
+  1 & 0 & 1 & 0 & 1 & 1 \\
+  1 & 0 & 1 & 1 & 0 & 1 \\
+  1 & 1 & 0 & 0 & 1 & 1 \\
+  1 & 1 & 0 & 1 & 0 & 1 \\
+  1 & 1 & 1 & 0 & 1 & 1 \\
+  1 & 1 & 1 & 1 & 0 & 1 \\
+\end{narrowtable}
+
+Den nedre halvan är genomgående \code{1}: så snart \code{driver_brake} är satt ändrar ingenting
+annat svaret. Det är hur ”åsidosätter allt” ser ut i en tabell.
+
+\subsection*{Fyra svar att ta med sig till passet}
+Allt ovan är specifikationen. Härledningen, grindnätet och VHDL-koden är det som byggs live, och
+det är värt att komma dit med ett eget svar att jämföra mot snarare än ett du redan läst. Så,
+utifrån tabellen ovan:
+\begin{itemize}
+  \item Läs av en summa-av-produkter-ekvation för \code{engine_brake} direkt ur den, på samma sätt
+    som \secref{c1:sec:boolean} gjorde.
+  \item Förenkla den för hand. Kravet är tre satser långt, så det minimala nätet är avsevärt
+    mindre än vad den radvisa avläsningen ger dig. Räkna ut hur mycket mindre innan du får det
+    berättat för dig.
+  \item Räkna grindarna din förenklade ekvation behöver, och skriv ner antalet.
+  \item Skissa nätet, och avgör vilken enda grind säkerhetsargumentet ovan vilar på.
+\end{itemize}
+
+Ta med de fyra svaren till passet. Att ha fel om något av dem är värt mer än att inte ha gissat,
+eftersom du då vet exakt vilket steg du ska granska om när den live-gjorda härledningen når fram
+till det. Det är \secref{c1:sec:cv}:s ”härled först, simulera sedan” tillämpat på en krets du inte
+byggt ännu, och det är den vana resten av boken är byggd på. Efteråt skriver du VHDL-koden själv,
+i Övning~\ref{c1:ex:adas}, och en testbänk avgör om dina ekvationer och sanningstabellen ovan är
+överens.
+
+\subsection*{Varför det finns en testbänk för den}
+Sexton kombinationer är få nog att kontrollera för hand en gång. Det är inte få nog att
+kontrollera varje gång någon redigerar filen, vilket är den situation varje modul i den här boken
+befinner sig i härifrån och framåt.
+
+En \textbf{testbänk} är en andra VHDL-fil som gör kontrollen. Den är inte en del av
+konstruktionen och når aldrig FPGA:n: den driver ingångarna genom varje fall, räknar ut vad
+utgången borde ha varit, jämför och rapporterar. För \code{adas}, som skrivs vid sidan av den
+under passet, är det en loop över de sexton kombinationerna som återger bromsregeln oberoende.
+
+\emph{Oberoende} är det viktiga ordet. En testbänk som läste sitt förväntade svar ur
+konstruktionen skulle stämma med den per konstruktion, även när konstruktionen har fel. Att
+återge kravet separat är det som gör det till en kontroll.
+
+Det är därför nästan varje katalog i kursrepot har en \file{_tb.vhd} vid sidan av modulen: det är
+så du kan få en modul i handen, ändra den, och inom en sekund veta om du gjort sönder den.
+\Secref{c2:sec:testbenches} går igenom hur de körs; du ombeds inte skriva någon någonstans i den
+här boken.

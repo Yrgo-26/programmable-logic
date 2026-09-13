@@ -1,0 +1,331 @@
+% Avsnitt 5.7, ur lectures/L05/appendix/b_exercises.md.
+
+\section{Övningar}
+\label{c5:sec:exercises}
+
+\begin{aside}
+\textbf{Så kontrollerar du ditt arbete.} Varje övning nedan som ber dig skriva en VHDL-modul har en
+självkontrollerande testbänk under \file{lectures/L05/exercises/}. Skriv din modul i dess katalog
+\file{exercises/<module>/}, med det entitetsnamn och den \textbf{portordning} övningen anger, och
+kör den sedan med GHDL \textemdash{} se \secref{c2:sec:testbenches} för de tre kommandona.
+\end{aside}
+
+% ------------------------------------------------------------------------------------------
+\exerciseset{\code{variable} kontra \code{signal}}
+
+\exercise{Spåra ackumulatorbuggen}{Resonemang}
+\label{c5:ex:trace}
+Den trasiga \code{parity_gen}-arkitekturen från \secref{c5:sec:variable} återges nedan:
+
+\begin{vhdlcode}
+architecture broken of parity_gen is
+signal parity_s: std_logic;
+begin
+    parity <= parity_s;
+
+    process(bits) is
+    begin
+        parity_s <= '0';
+        for i in bits'range loop
+            parity_s <= parity_s xor bits(i);
+        end loop;
+    end process;
+end architecture;
+\end{vhdlcode}
+
+Anta att \code{bits} har intervallet \code{7 downto 0}, att \code{bits = "10110110"}, och att
+\code{parity_s} håller \code{'0'} innan processen börjar.
+
+\xpart{a} Spåra processen för hand. Notera, för den inledande tilldelningen och för varje
+loopiteration: det aktuella indexet \code{i}, värdet på \code{bits(i)}, värdet som läses från
+\code{parity_s}, värdet som schemaläggs för \code{parity_s}, och om den schemalagda tilldelningen
+överlever fram till att processen suspenderar.
+
+Kom ihåg att en signaltilldelning inte uppdaterar signalen omedelbart, och att tilldelningar till
+samma signal under ett och samma varv ersätter tidigare schemalagda tilldelningar för samma
+simuleringstidpunkt.
+
+\xpart{b} Bestäm det slutliga värde som tilldelas \code{parity_s} efter att processen suspenderat.
+Beräkna sedan den korrekta XOR-pariteten hos \code{"10110110"} för hand, jämför den med resultatet
+från den trasiga arkitekturen, och förklara varför upprepade tilldelningar till signalen inte
+skapar en ackumulator.
+
+\xpart{c} Spåra den variabelbaserade arkitekturen \code{behaviour} från \file{parity_gen.vhd} med
+samma ingång. Notera, för varje loopiteration: värdet på \code{bits(i)}, värdet på \code{acc} före
+XOR-operationen, och värdet på \code{acc} omedelbart efter den. Bekräfta att \code{acc} behåller
+varje iterations resultat så att nästa iteration kan använda det, och att det slutliga värde som
+tilldelas \code{parity} är den korrekta XOR-pariteten.
+
+\exercise{\code{min_of_two}}{VHDL}
+\label{c5:ex:minoftwo}
+Skriv en entitet med namnet \code{min_of_two}.
+
+\begin{booktable}{@{}p{3.6em}p{3.4em}p{11.4em}L@{}}
+  \thead{Port} & \thead{Riktn.} & \thead{Typ} & \thead{Betydelse} \\
+  \midrule
+  \code{a} & in & \code{std_logic_vector(3 downto 0)} & Första värdet. \\
+  \code{b} & in & \code{std_logic_vector(3 downto 0)} & Andra värdet. \\
+  \code{m} & out & \code{std_logic_vector(3 downto 0)} & Det minsta av de två. \\
+\end{booktable}
+
+Behandla \code{a} och \code{b} som teckenlösa fyrabitarsvärden. Implementera kretsen med en process:
+\begin{itemize}
+  \item Ta med \code{a} och \code{b} i känslighetslistan.
+  \item Deklarera en processlokal variabel som håller det minsta värdet.
+  \item Jämför \code{a} och \code{b} som teckenlösa tal, med faciliteterna i
+    \code{ieee.numeric_std} enligt \secref{c2:sec:vectors}.
+  \item Tilldela variabeln exakt en gång per varv, och tilldela den till \code{m} efter
+    jämförelsen.
+\end{itemize}
+
+Den här övningen kräver ingen loop. Poängen med den är att använda en variabel som tillfällig
+processlokal lagring för något \emph{annat} än en ackumulator: \secref{c5:sec:variable}:s
+genomarbetade exempel bygger upp ett värde över iterationerna i en loop, vilket är det fall en
+variabel oftast introduceras för, och det är lätt att gå därifrån och tro att det är det enda de
+duger till. Här håller variabeln helt enkelt ett mellanresultat under de få rader som skiljer
+beräkningen från användningen, vilket är den vanligare av de två användningarna i verklig kod.
+
+\modulefig[0.62]{lectures/L05/appendix/images/min_of_two.png}
+
+\begin{selfcheck}
+\textbf{Självkontroll.} Döp din entitet till \code{min_of_two}, med portarna \code{a}, \code{b}
+(in) och \code{m} (out), alla \code{std_logic_vector(3 downto 0)}, deklarerade i den ordningen;
+dess testbänk finns i \file{exercises/min_of_two/}.
+\end{selfcheck}
+
+\exercise{\code{ones_count8}}{VHDL}
+\label{c5:ex:ones}
+Skriv en entitet med namnet \code{ones_count8} som räknar hur många bitar i en 8-bitars ingång som
+är ettställda.
+
+Övning~\ref{c5:ex:trace} lät dig spåra ackumulatorbuggen på papper, och Övning~\ref{c5:ex:minoftwo}
+använde en variabel som inte var någon ackumulator alls. Den här är det fall
+\secref{c5:sec:variable} faktiskt handlar om: ett värde som byggs upp över iterationerna i en loop.
+Det är den enda övningen i boken där du skriver en sådan.
+
+\begin{booktable}{@{}p{4em}p{3.4em}p{11.4em}L@{}}
+  \thead{Port} & \thead{Riktn.} & \thead{Typ} & \thead{Betydelse} \\
+  \midrule
+  \code{bits} & in & \code{std_logic_vector(7 downto 0)} & Värdet att räkna över. \\
+  \code{ones} & out & \code{natural range 0 to 8} & Antalet bitar i \code{bits} som är \code{'1'}. \\
+\end{booktable}
+
+Implementera den med en enda kombinatorisk process:
+\begin{itemize}
+  \item Sätt \code{bits} i känslighetslistan.
+  \item Deklarera en processlokal \code{variable} för den löpande räkningen, och sätt den till
+    \code{0} överst i varje varv. En variabel behåller sitt värde mellan varv, så en räkning som
+    aldrig nollställs fortsätter växa.
+  \item Loopa över \code{bits'range} och lägg till \code{1} för varje ettställd bit.
+  \item Tilldela variabeln till \code{ones} en gång, efter loopen.
+\end{itemize}
+
+Svara sedan, med en mening var:
+\begin{itemize}
+  \item Skriv samma sak med en \code{signal} som ackumulator i stället, kör testbänken, och notera
+    vad den rapporterar för ingången \code{00000010}. Förklara talet du får med
+    schemaläggningsregeln, inte genom att gissa.
+  \item Loopen körs åtta gånger. Hur många adderare lägger den här designen på FPGA:n, och hur
+    många klockcykler tar det för den att producera ett svar? Om de två svaren överraskar dig, läs
+    om \secref{c5:sec:variable}.
+  \item \code{ones} är en \code{natural range 0 to 8} snarare än ett
+    \code{std_logic_vector(3 downto 0)}. Båda rymmer svaret. Vad köper intervallet dig, och vad
+    skulle GHDL göra om din räkning någonsin lämnade det?
+\end{itemize}
+
+\modulefig[0.66]{lectures/L05/appendix/images/ones_count8.png}
+
+\begin{selfcheck}
+\textbf{Självkontroll.} Döp din entitet till \code{ones_count8}, med ingången \code{bits}
+(\code{std_logic_vector(7 downto 0)}) och utgången \code{ones} (\code{natural range 0 to 8}),
+deklarerade i den ordningen; dess testbänk finns i \file{exercises/ones_count8/} och sveper igenom
+alla 256 ingångsvärden.
+\end{selfcheck}
+
+% ------------------------------------------------------------------------------------------
+\exerciseset{En modul värd att ha för sig själv}
+
+\exercise{\code{sync}: synkroniseraren som egen modul}{VHDL}
+\label{c5:ex:sync}
+Skriv dubbelvippsynkroniseraren som en egen modul, med namnet \code{sync}.
+
+Du har redan byggt den här kretsen. Det är de två första vipporna i \chapref{c4:ch}:s
+\code{button_sync}, skrivna inline där eftersom det vid den punkten var \emph{idén} som spelade
+roll: en asynkron ingång behöver två vippor innan något annat får titta på den. Här bryter du ut de
+två till en modul, och övningen är inte logiken, som du redan kan, utan allt runt omkring.
+
+Två saker gör det värt att ta en gång till. Den första är att en naken synkroniserare är vad de
+flesta asynkrona ingångar faktiskt behöver: \code{button_sync} lägger till en flankdetektor
+eftersom en knapptryckning är en händelse, men en seriell ledning, en statusflagga från en annan
+klockdomän, eller en strömbrytare vars nivå är allt du någonsin läser, behöver de två vipporna och
+inget mer. \Chapref{c8:ch}:s seriemottagare instansierar precis det här på sin \code{rx}-pinne. Den
+andra är att den tar \textbf{två generics}, och en av dem är inte ett tal.
+
+\begin{booktable}{@{}p{4.4em}p{9.8em}p{4em}L@{}}
+  \thead{Generic} & \thead{Typ} & \thead{Förval} & \thead{Betydelse} \\
+  \midrule
+  \code{SIZE} & \code{natural range 1 to 15} & \code{1} & Hur många oberoende signaler som ska
+    synkroniseras, och därmed bredden på båda vektorportarna. \\
+  \code{PRESET} & \code{std_logic} & \code{'0'} & Värdet som båda stegen antar vid reset. \\
+\end{booktable}
+
+och de här portarna:
+
+\begin{booktable}{@{}p{5.6em}p{3.4em}p{11em}L@{}}
+  \thead{Port} & \thead{Riktn.} & \thead{Typ} & \thead{Betydelse} \\
+  \midrule
+  \code{clock} & in & \code{std_logic} & 50 MHz systemklocka. \\
+  \code{reset_s2_n} & in & \code{std_logic} & Aktiv låg, \textbf{redan synkroniserad} reset. En
+    synkroniserare synkroniserar inte sin egen reset; det gör \chapref{c4:ch}:s
+    \code{reset_sync}. \\
+  \code{async_in} & in & \code{std_logic_vector(SIZE - 1 downto 0)} & Den asynkrona ingången eller
+    ingångarna, rakt utifrån klockdomänen. \\
+  \code{sync_out} & out & \code{std_logic_vector(SIZE - 1 downto 0)} & Samma signaler, säkra att
+    använda, två stigande flanker senare. Varje bit synkroniseras oberoende. \\
+\end{booktable}
+
+\xpart{a} Implementera den:
+\begin{itemize}
+  \item Två interna signaler av typen \code{std_logic_vector(SIZE - 1 downto 0)}, en per steg.
+  \item En process, känslig för \code{clock} och \code{reset_s2_n}.
+  \item Vid reset, driv båda stegen till \code{PRESET}, utanför den klockade grenen.
+  \item Vid en stigande klockflank, skifta \code{async_in} genom de två stegen.
+  \item Driv \code{sync_out} från det andra steget med en konkurrent tilldelning.
+\end{itemize}
+
+\xpart{b} \code{PRESET} är en generic av typen \code{std_logic}, den första i den här boken som
+inte är ett tal, och den finns eftersom det säkra reset-värdet beror på vad signalen \emph{betyder}.
+Bara den instansierande designen vet det. Svara:
+\begin{itemize}
+  \item \code{button_sync} synkroniserar aktivt låga knappar, så den skulle skicka in \code{'1'}.
+    Vad skulle \code{'0'} påstå om knapparna under de två cyklerna efter varje reset?
+  \item En seriell ledning vilar hög, så \chapref{c8:ch}:s mottagare skickar också in \code{'1'}.
+    Hur skulle \code{'0'} se ut för en mottagare som håller utkik efter en startbit?
+  \item Varför är \emph{standardvärdet} ändå \code{'0'} snarare än \code{'1'}, givet båda dessa,
+    och vad säger det om vem som ansvarar för att få det rätt?
+\end{itemize}
+
+\xpart{c} Det här är också en fråga om vad en generic kostar. \code{SIZE} är
+\code{natural range 1 to 15} och \code{PRESET} är \code{std_logic}, och båda är fastlagda innan
+syntesen körs. Använd \secref{c5:sec:fabric}:s bild av vad FPGA:n faktiskt består av och säg hur
+många vippor en instans med \code{SIZE = 4} använder, hur många en instans med \code{SIZE = 1}
+använder, och var i den byggda kretsen \code{PRESET} hamnar. Ingen av de två dyker upp som logik
+någonstans; säg vad som hände med dem i stället.
+
+\xpart{d} Verifiera den med dess testbänk. Den instansierar din modul två gånger, en gång en bit
+bred med \code{PRESET = '1'} och en gång tre bitar bred med \code{PRESET = '0'}, så en design som
+hårdkodar någon av de två generics fallerar. Den kontrollerar att \code{sync_out} följer
+\code{async_in} efter \textbf{exakt} två stigande flanker snarare än efter en eller så småningom,
+att varje bit i en vektor synkroniseras för sig, och att reset laddar \code{PRESET} utan att någon
+klockflank är inblandad.
+
+\note[Tips]Skriv arkitekturen för \code{SIZE = 1} i huvudet först, och kontrollera sedan att varje
+rad redan är korrekt för en vektor. Aggregatet \code{(others => PRESET)} och en vanlig
+vektortilldelning arbetar båda elementvis, så generaliseringen bör inte kosta någon extra kod.
+
+\modulefig[0.76]{lectures/L05/appendix/images/sync.png}
+
+\begin{selfcheck}
+\textbf{Självkontroll.} Döp din entitet till \code{sync}, med generics \code{SIZE}
+(\code{natural range 1 to 15}, standardvärde \code{1}) och \code{PRESET} (\code{std_logic},
+standardvärde \code{'0'}), ingångarna \code{clock}, \code{reset_s2_n}, \code{async_in}
+(\code{std_logic_vector(SIZE - 1 downto 0)}) och utgången \code{sync_out}
+(\code{std_logic_vector(SIZE - 1 downto 0)}), deklarerade i den ordningen; dess testbänk finns i
+\file{exercises/sync/}.
+
+\textbf{Spara den här filen.} \Chapref{c8:ch}:s capstone med seriemottagaren instansierar den på
+\code{rx}-pinnen, och ber dig kopiera in den.
+\end{selfcheck}
+
+% ------------------------------------------------------------------------------------------
+\exerciseset{Från VHDL till hårdvara}
+
+Quartus-flödet demonstreras på ett riktigt DE0-CV-kort under passen \textemdash{} först med
+bromsassistenten redan i \chapref{c1:ch} \textemdash{} och finns nedskrivet i
+bilaga~\ref{app:quartus} som referens. Du behöver varken Quartus eller ett kort själv; övningarna
+nedan handlar om att förstå vad det flödet gör med den VHDL du skriver.
+
+\exercise{Vad verktygskedjan gör}{Resonemang}
+\label{c5:ex:quartus}
+Besvara vart och ett av följande, med hänvisning till bilaga~\ref{app:quartus} och till det du såg
+demonstreras. En eller två meningar var.
+
+\xpart{a} Ett Quartus-projekt behöver en vald \textbf{toppnivåentitet} innan det kompilerar. Vad
+gör verktyget annorlunda med toppnivåentiteten än med någon annan entitet i projektet?
+\code{min_of_two} från Övning~\ref{c5:ex:minoftwo} och dess testbänk är båda giltig VHDL. Varför
+kan bara den ena någonsin vara toppnivåentitet i ett FPGA-projekt?
+
+\xpart{b} Pinntilldelning kopplar ett portnamn till en fysisk pinne. Varför måste pinnarna
+tilldelas \emph{före} kompileringen snarare än efteråt? Vad skulle \code{m} fysiskt vara kopplad
+till om du kompilerade \code{min_of_two} utan att ha tilldelat några pinnar alls?
+
+\xpart{c} Syntesen gör om din arkitektur till grindar på chippet. \Chapref{c2:ch}:s övning
+\code{combo_logic} lät dig skriva $x = ab + c'd$ två gånger: en gång som ett enda uttryck, och en
+gång med $c'd$ namngivet av en intern signal. Vad bör syntesen producera för vardera, och varför är
+ditt svar detsamma för båda? Vilken av de två skulle du hellre läsa om sex månader?
+
+\xpart{d} Kompileringen ger varningar såväl som fel. Varför är ”det kompilerade utan fel” ett mycket
+svagare påstående om en FPGA-design än ”det kompilerade utan fel” är om ett C-program? Nämn en sorts
+varning du aldrig skulle ignorera.
+
+\exercise{Fyra förutsägelser om pariteten}{Simulering}
+\label{c5:ex:parity}
+\code{parity_gen} från \secref{c5:sec:variable} är kapitlets genomarbetade exempel, och till det hör
+en referenstestbänk.
+
+\xpart{a} Förutsäg, innan du kör något, \code{parity} för hand för var och en av de här ingångarna:
+\code{"00000000"}, \code{"10110110"}, \code{"11111111"} och \code{"10000000"}.
+
+\xpart{b} Kör referenstestbänken mot det genomarbetade exemplet och bekräfta dina fyra
+förutsägelser:
+
+\begin{shell}
+cd lectures/L05/parity_gen
+ghdl -a --std=93 parity_gen.vhd parity_gen_tb.vhd
+ghdl -e --std=93 parity_gen_tb
+ghdl -r --std=93 parity_gen_tb --assert-level=error --stop-time=10ms
+\end{shell}
+
+\xpart{c} Ta vilken som helst av de ingångarna och vänd exakt en bit, och lämna de andra sju
+oförändrade. Vad händer med \code{parity}? Förklara varför en ändring av exakt en ingångsbit
+\emph{alltid} måste invertera XOR-paritetsresultatet, vilken bit du än väljer och vilket
+startvärdet än är. Det är den egenskapen som gör en paritetsbit förmögen att upptäcka ett
+enbitsfel vid överföring. Vilken sorts fel missar den, och varför?
+
+\exercise{En avkodare som kompilerar rent och ändå är fel}{Resonemang}
+\label{c5:ex:latch}
+En kollega skickar dig den här kombinatoriska avkodaren för granskning. Den kompilerar, och Quartus
+rapporterar inga fel.
+
+\begin{vhdlcode}
+architecture behaviour of level_decode is
+begin
+    process(sel) is
+    begin
+        case sel is
+            when "00"   => leds <= "0001";
+            when "01"   => leds <= "0010";
+            when "10"   => leds <= "0100";
+            when others => null;
+        end case;
+    end process;
+end architecture;
+\end{vhdlcode}
+
+\xpart{a} Quartus ger \code{Warning: Inferred latch(es) for signal "leds"}. Förklara med hjälp av
+\secref{c5:sec:latch} vad verktyget byggde och varför. Vad bad VHDL-koden om som ett kombinatoriskt
+nät inte kan göra?
+
+\xpart{b} Författarens försvar är att \code{sel} är två bitar, så \code{"11"} är det enda värde
+\code{when others} kan matcha, och designen genererar det aldrig. Ge två skilda skäl till att det
+argumentet inte håller: ett om vad \code{sel} faktiskt kan hålla (\secref{c1:sec:vhdl}), och ett
+som skulle gälla även om \code{sel} verkligen bara kunde vara \code{"00"}, \code{"01"} eller
+\code{"10"}.
+
+\xpart{c} Åtgärda den, på två olika sätt: genom att ändra enbart grenen \code{when others}, och
+genom att lägga till en enda rad \emph{före} \code{case}-satsen och lämna varje gren orörd. Vilken
+av de två skulle du hellre underhålla, och varför? Den andra skalar till ett \code{case} med tjugo
+grenar; den första gör det inte.
+
+\xpart{d} Det här är en varning, inte ett fel, och designen kommer ofta att verka fungera på
+kortet. Varför gör det saken farligare än ett fel snarare än mindre farlig?

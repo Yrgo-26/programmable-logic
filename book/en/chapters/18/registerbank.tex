@@ -1,0 +1,269 @@
+% Sections 18.1-18.8, from lectures/L18/appendix/a_register_bank.md.
+
+\section{Why this layer exists}
+\label{c18:sec:why}
+
+\code{can_controller}'s status outputs are made for a caller in the same clock domain that sees every
+cycle: \code{tx_done} and \code{rx_valid} are \textbf{one-cycle pulses}, 20~ns at 50~MHz
+(\chapref{c11:ch}). A driver polling over SPI samples the system a few \emph{microseconds} at a time
+at best \textemdash{} a pulse is gone thousands of cycles before the next poll arrives. The register
+map (appendix~\ref{app:protocol}) therefore promises something else: \textbf{sticky, pollable levels}
+with explicit clears (\code{RX_ACK}, \code{ERROR_FLAGS}), and write-triggered events
+(\code{TX_SEND}).
+
+Converting between the two worlds is this module's entire job. It contains no protocol knowledge in
+either direction: nothing about CAN frames (that stays in \code{can_controller}) and nothing about
+SPI (that comes later in this chapter, and in \chapref{c19:ch}). It is registers, latches and a pulse
+generator \textemdash{} which is exactly why it can be verified completely during a single session,
+before any SPI exists at all.
+
+You have seen both of its core tricks before, in \chapref{c3:ch} and \ref{c4:ch}. A sticky status bit
+is \chapref{c3:ch}'s flip-flop with the two questions answered explicitly: what sets it, and what
+clears it. And turning a held level into a one-cycle pulse is exactly what \code{button_sync}'s edge
+detection did in \chapref{c4:ch} \textemdash{} here it runs the same way for \code{TX_SEND} (a write
+becomes a pulse) and the opposite way for \code{tx_done} (a pulse becomes a level that stays). This
+chapter promotes both from an exercise to a real architectural layer with a documented contract.
+
+% ------------------------------------------------------------------------------------------
+\section{The interface}
+\label{c18:sec:iface}
+
+Sixteen ports, \textbf{every input first, then every output}, the same convention as every module in
+the project \textemdash{} and, as everywhere else in it, the binding is \emph{positional}, so the
+order below is the contract \code{register_bank_tb} holds you to:
+
+\begin{textdrawing}
+ 1 clock        5 reg_wdata    9 rx_data     13 tx_id
+ 2 reset_s2_n   6 tx_done     10 rx_valid    14 tx_dlc
+ 3 reg_index    7 rx_id       11 error       15 tx_data
+ 4 reg_write    8 rx_dlc      12 reg_rdata   16 tx_req
+\end{textdrawing}
+
+The types come from \code{can_def} (\code{use work.can_def.all;}), so the ports facing the controller
+have exactly the same types as \code{can_controller}'s own. Besides \code{clock} and
+\code{reset_s2_n} (ports 1 and 2), the other fourteen fall into two groups.
+
+\paragraph{The side facing the bridge (ports 3--5 and 12)}
+A deliberately minimal register access port \textemdash{} what \chapref{c19:ch}'s bridge will drive,
+and what the testbench drives directly today:
+\begin{itemize}
+  \item \code{reg_index : std_logic_vector(3 downto 0)} \textemdash{} which register, the protocol's
+    index (offset divided by 4).
+  \item \code{reg_write : std_logic} \textemdash{} a \textbf{one-cycle strobe}; at its rising clock
+    edge \code{reg_wdata} is committed to the addressed register.
+  \item \code{reg_wdata : std_logic_vector(31 downto 0)} \textemdash{} the value to write.
+  \item \code{reg_rdata : std_logic_vector(31 downto 0)} \textemdash{} the addressed register's
+    current value, \textbf{combinationally}: it follows \code{reg_index} with no clock edge involved.
+    The latch-once-on-read rule from the protocol specification is the \emph{bridge's} job
+    (\chapref{c19:ch}), not this module's \textemdash{} the bank always tells the current truth, and
+    the bridge decides when it takes its single atomic sample.
+\end{itemize}
+
+\paragraph{The side facing the controller (ports 6--11 and 13--16)}
+Mirrors \code{can_controller}'s register-side ports one for one: \code{tx_id}, \code{tx_dlc},
+\code{tx_data} and \code{tx_req} out to the controller, and \code{tx_done}, \code{rx_id},
+\code{rx_dlc}, \code{rx_data}, \code{rx_valid} and \code{error} back from it. In \chapref{c19:ch}'s
+top level they are wired straight across, port to port, with nothing in between.
+
+\code{reset_s2_n} is the \emph{synchronised} reset, as for every subblock in the project.
+\Chapref{c19:ch}'s top level owns a \code{meta_prev} for it, exactly as \code{can_controller} owns its
+own internally.
+
+% ------------------------------------------------------------------------------------------
+\section{The three STATUS bits: one latch each}
+\label{c18:sec:status}
+
+Every \code{STATUS} bit is a flip-flop with a named set condition and a named clear condition, and
+nothing more:
+
+\begin{booktable}{@{}p{2.2em}p{5em}L>{\raggedright\arraybackslash}p{9em}@{}}
+  \thead{Bit} & \thead{Meaning} & \thead{Set by} & \thead{Cleared by} \\
+  \midrule
+  0 & TX ready & reset; the controller's \code{tx_done} pulse; \textbf{a rising edge on \code{error}
+    while this bit is low}; \textbf{an accepted write to \code{TX_ABORT}} & an accepted write to
+    \code{TX_SEND} \\
+  1 & RX valid & the controller's \code{rx_valid} pulse & a write of \code{0x1} to
+    \code{RX_ACK} \\
+  2 & Error & a \textbf{rising edge} on the controller's \code{error} level & a write of \code{0x0}
+    to \code{ERROR_FLAGS} \\
+\end{booktable}
+
+Three of them deserve a second look:
+\begin{itemize}
+  \item \textbf{Bit 0 starts at \code{'1'}.} Out of reset the controller is idle, so the bank is ready
+    to take a frame \textemdash{} a driver polling before it has ever transmitted has to see
+    ``ready'', or \code{send()} would fail forever on a freshly powered system.
+  \item \textbf{Bit 2 latches an edge, not a level.} The controller holds \code{error} high until the
+    next frame begins (\chapref{c11:ch}), on its own schedule. Latching the rising edge gives the
+    \emph{driver} a life cycle of its own for the flag: a clear removes it even while the
+    controller's level is still high, and the latch is not set again until a genuinely \emph{new}
+    error produces a new rising edge. Latching the level instead would make the clear appear broken
+    \textemdash{} cleared and immediately set again \textemdash{} for as long as the controller holds
+    the line.
+  \item \textbf{Bit 0 has three ways back up, and that is deliberate.} Read the two extra ones as belt
+    and braces around the one failure that can take the whole node out.
+\end{itemize}
+
+\begin{aside}
+A transmission losing arbitration ends without ever reaching EOF. \Chapref{c17:ch} has the controller
+pulse \code{tx_done} on that path too, precisely so that this bit comes back \textemdash{} but the
+controller is \emph{yours}, and a version that forgets leaves the bit low forever, so every later
+\code{TX_SEND} is discarded and the node cannot transmit again until it is reset. The bank therefore
+does not rely on the controller getting it right. \textbf{A rising edge on \code{error} while bit 0 is
+already low can only mean that a transmission ended badly}, since a node is either transmitting or
+receiving, and a reception error cannot occur while a transmission is in progress. So that edge sets
+the bit too, and no \code{role} port is needed to know it.
+
+\code{TX_ABORT} is the third path: an explicit escape hatch the driver can pull if it judges that it
+has waited long enough. Nothing in the design should ever need it. Build it in anyway \textemdash{}
+the cost is a single write-only register, and the alternative is a node a driver has no way of
+freeing.
+\end{aside}
+
+A single ordering rule ties the latches together: in the clocked process, \textbf{the controller's
+events are applied after the bridge's writes}, so that if a \code{TX_SEND} write and a
+\code{tx_done} pulse ever landed on the same edge the hardware wins and the bank stays ready. A
+conflict that rare should be resolved in the direction that cannot deadlock the system, and that is
+the same principle the paragraph above applies three times over.
+
+% ------------------------------------------------------------------------------------------
+\section{\code{TX_SEND}: a write becomes a pulse}
+\label{c18:sec:txsend}
+
+A \code{TX_SEND} write with \code{reg_wdata(0) = '1'}, arriving while TX ready is set, does exactly
+two things at that clock edge: raises \code{tx_req} \textbf{for one cycle}, and clears TX ready. More
+precisely: \code{tx_req} is high for the single cycle \emph{after} the write's clock edge, and low
+again at the next one \textemdash{} the testbench checks both ends of that claim.
+
+Everything else about this register is what it \emph{ignores}:
+\begin{itemize}
+  \item A write while TX ready is low (a transmission is in progress) is discarded entirely
+    \textemdash{} no pulse, no state change. Overwriting \code{tx_id}, \code{tx_dlc} or
+    \code{tx_data} mid-transmission is the corruption the driver's own ready check guards against
+    from the software side; this is the same guard on the hardware side, and neither side may assume
+    the other is there.
+  \item A write with \code{reg_wdata(0) = '0'} does nothing: the register map says ``write \code{0x1}
+    to trigger'', and the bank holds it to that.
+  \item Reads give zero \textemdash{} \code{TX_SEND} stores nothing, it \emph{does} something.
+\end{itemize}
+
+Why the pulse discipline matters shows most clearly in the failure it prevents. \code{can_controller}
+acts on \code{tx_req} as soon as it is high and the bus is idle (\chapref{c16:ch}), so a \code{tx_req}
+left \emph{held} requests afresh the instant a frame ends, forever, wiping \code{error} at every pass
+back through the start state. The request has to be an event, and something has to make it one. At
+this layer that is easier \textemdash{} a write strobe is already an event, not a level \textemdash{}
+but it still has to be \emph{enforced}: one write, one pulse, whatever the master does next.
+
+% ------------------------------------------------------------------------------------------
+\section{\code{TX_ABORT}: the escape hatch}
+\label{c18:sec:txabort}
+
+Index 12, write-only, and the mirror image of \code{TX_SEND}: a write of \code{0x1} sets TX ready back
+to \code{'1'}. A write of anything else does nothing, and a read gives \code{0x00000000}.
+
+It touches nothing else. It does not reach \code{can_controller} \textemdash{} the controller has no
+abort input, its fifteen ports were fixed in \chapref{c11:ch} and \code{can_controller_tb} binds them
+positionally \textemdash{} and it needs none. A controller that has aborted a transmission is already
+back in \code{STATE_IDLE} and perfectly able to transmit again; the only thing stuck is this bank's
+sticky bit. \code{TX_ABORT} frees it, and that is the whole module.
+
+It is worth a moment's pause, since it is the bug's general form. Nothing in the \emph{hardware} had
+deadlocked. What had deadlocked was a \textbf{status bit whose only set condition hung on an event
+that no longer occurred}. Every sticky flag with one way up and one way down is one missed event away
+from the same failure, and the fix is always the same: make sure every exit from the busy state also
+raises the flag, and give the caller a way to force it in case you are wrong about ``every''.
+
+% ------------------------------------------------------------------------------------------
+\section{The RX side: capturing at the pulse}
+\label{c18:sec:rx}
+
+When \code{rx_valid} pulses, the bank does two things at the same edge: sets STATUS bit 1, and
+\textbf{captures} \code{rx_id}, \code{rx_dlc} and \code{rx_data} into the four \code{RX_*} registers
+\textemdash{} \code{rx_data}'s upper word (bits 63--32, data bytes 0--3, byte 0 in the most
+significant position) into \code{RX_DATA_LO}, its lower word into \code{RX_DATA_HI}.
+
+Capturing, instead of wiring the controller's ports straight to the read multiplexer, is what gives
+the driver a stable frame to read: the \code{RX_*} registers hold their values while the driver works
+its way through four separate SPI read transactions, whatever the controller's ports do meanwhile. A
+write to \code{RX_ACK} clears \emph{only the flag} \textemdash{} the data registers keep their
+contents until the next capture, which is harmless: the register map's contract is that \code{RX_*} is
+meaningful \emph{while RX valid is set}.
+
+What the capture does \textbf{not} give the driver is buffering. A new frame completing before the
+previous one has been acknowledged is simply captured over it \textemdash{} one frame is held, the
+newest wins. That is not this module being lazy; it is a documented gap inherited from the controller
+itself, which holds exactly one received frame and overwrites it at the next (\chapref{c11:ch}). The
+bank makes that gap visible at the register level instead of hiding it, and \chapref{c19:ch} returns
+to what it costs a driver.
+
+% ------------------------------------------------------------------------------------------
+\section{Masking on write}
+\label{c18:sec:mask}
+
+Writable registers store only the bits that exist in hardware, and read back as zeros above them:
+
+\begin{booktable}{@{}p{9em}p{9em}L@{}}
+  \thead{Register} & \thead{Bits stored} & \thead{A write of \code{0xFFFFFFFF} reads back as} \\
+  \midrule
+  \code{TX_ID} & 10--0 (\code{id_t}) & \code{0x000007FF} \\
+  \code{TX_DLC} & 3--0 (\code{dlc_t}) & \code{0x0000000F} \\
+  \code{TX_DATA_LO}/\code{HI} & all 32 & \code{0xFFFFFFFF} \\
+\end{booktable}
+
+Note what the bank does \emph{not} do: validate. A \code{TX_DLC} of \code{0xF} is stored and passed on
+to the controller as it is \textemdash{} rejecting \code{dlc > 8} is the driver's responsibility, in
+the parallel software class, and doing it twice in two languages is exactly how the two copies drift
+apart. The bank masks to the bits that physically exist; the driver enforces the meaning.
+\code{STATUS} and the \code{RX_*} registers ignore writes entirely, and the reserved indices 13--15
+read as zero and ignore writes, exactly as the protocol specification requires.
+
+The outputs to the controller come directly from the TX registers:
+\code{tx_data <= TX_DATA_LO & TX_DATA_HI} \textemdash{} 64 bits with data byte 0 in the most
+significant position, the layout \code{can_controller} expects (\chapref{c16:ch}) and the same packing
+the driver performs on the other side of the map (see the data byte order diagram in
+appendix~\ref{app:protocol}).
+
+% ------------------------------------------------------------------------------------------
+\section{Writing \code{register_bank.vhd}}
+\label{c18:sec:write}
+
+The file lands in \file{bridge/}, beside your copied controller modules. The shape is two processes
+and a handful of concurrent assignments:
+\begin{itemize}
+  \item \textbf{One clocked process} owning every register and latch: the reset values (TX ready
+    \code{'1'}, everything else zero), the write \code{case} over \code{reg_index}, and then the three
+    updates from the controller's events, in that order.
+  \item \textbf{One combinational process} for the read multiplexer: default \code{reg_rdata} to all
+    zeros, and then overwrite the bits every register actually has \textemdash{} the same
+    ``assign a default, override in specific branches'' style as every counter and state machine from
+    \chapref{c6:ch} onwards.
+  \item Concurrent assignments wiring out \code{tx_id}, \code{tx_dlc}, \code{tx_data} and
+    \code{tx_req} from the TX registers and the pulse flip-flop.
+\end{itemize}
+
+Analyse it and then run the testbench handed out. \file{can_def.vhd} is a directory away, in
+\file{controller/}: the bank reads \code{can_def} for its controller-facing types but belongs on the
+SPI side of the protocol boundary.
+
+\begin{shell}
+cd bridge
+ghdl -a --std=93 ../controller/can_def.vhd register_bank.vhd register_bank_tb.vhd
+ghdl -e --std=93 register_bank_tb
+ghdl -r --std=93 register_bank_tb --assert-level=error
+\end{shell}
+
+\paragraph{What the testbench checks}
+\file{register_bank_tb.vhd} works through the contract in eleven cases, in order: the reset state
+(bit 0 set, everything else zero); write and read back with masking on every writable register, and
+the controller-facing outputs following them; \code{TX_SEND}'s one-cycle pulse and the clearing of
+ready; the write discarded while a transmission is in progress; \code{tx_done} restoring ready; a
+\code{TX_SEND} write of \code{0x0} doing nothing; capturing a received frame, that it holds even as
+the inputs change, that it is read-only, and \code{RX_ACK}; the error latch's edge semantics,
+including the write-zero rule and a clear while the level is still high; the reserved indices; and
+last the two recovery paths returning TX ready after a lost arbitration, one automatic and one driven
+by \code{TX_ABORT}.
+
+Every case comment in the file says what a failed case means, so read the testbench before you write
+the module \textemdash{} it is the executable form of this chapter. The last two cases are
+particularly worth reading in advance: without them the node sticks after its first lost arbitration,
+and since a two-node bus provokes that in normal operation it is no corner case.

@@ -1,0 +1,645 @@
+% Appendix C, typeset from project/README.md and info/examination.md.
+
+\chapter{The group project}
+\label{app:project}
+
+This is the project's specification, collected in one place: the way of working, the structure, the
+modules' interfaces, the test plan and the assessment. \Chapref{c10:ch} to \ref{c19:ch} are the
+walkthrough; this is the contract, and where the two differ what is written here applies.
+
+The task is to design, simulate and run a simplified CAN controller in VHDL, and make it reachable
+from a microcontroller over SPI. The parallel class writes the C++ driver against the same registers,
+so what is built is one half of a real hardware and software system, not an exercise ending in the
+simulator.
+
+When the project is finished the group has implemented a \textbf{bit timer} producing sample and
+bit-end pulses, a \textbf{CRC-15 engine} that both computes and verifies the checksum, a
+\textbf{transmit shift register} that serialises and inserts stuff bits, a \textbf{receive shift
+register} that deserialises and removes them, a \textbf{CAN controller} whose state machine sequences
+the frame's fields and handles arbitration, a \textbf{register bank} translating the controller's
+pulses into pollable registers, an \textbf{SPI bridge} making the registers reachable from outside,
+and a \textbf{top level} tying it all together into a node a microcontroller can talk to.
+
+% ------------------------------------------------------------------------------------------
+\section{Way of working}
+\label{app:project:work}
+
+The project is carried out in groups of \textbf{4--5 students}. The group is jointly responsible for
+the whole project, and the way of working follows industrial practice.
+
+\subsection{Git and GitHub}
+\begin{itemize}
+  \item Create a private repository and invite every group member and the supervisor as
+    collaborators.
+  \item Work in feature branches. One branch per module is a reasonable starting point.
+  \item Commit often, with messages that say what the change does and not merely that it exists.
+  \item \textbf{Never push directly to \code{main}.} All code reaches \code{main} through a pull
+    request. Protect the branch in GitHub's settings so that the rule does not depend on everybody
+    remembering it.
+\end{itemize}
+
+\subsection{Code review}
+\begin{itemize}
+  \item Every PR is reviewed by \textbf{at least one other group member} before it is merged.
+  \item The reviewer checks: that the port order matches the interface table, that the module's
+    testbench passes, that no values are hardcoded past \code{can_def}, and that every entity's
+    interface and every important internal signal is commented.
+  \item Put review comments in GitHub, not in chat or verbally. A review that does not exist in
+    writing has not happened.
+  \item A review that just says ``looks good'' is no review. Ask at least one real question, even
+    when the code is good: \emph{why} it does what it does is more often interesting than
+    \emph{that} it does it.
+\end{itemize}
+
+\subsection{Division of work}
+Everybody is to write VHDL and everybody is to review VHDL. The division may be uneven in quantity,
+not in kind. Document the division as you go in \file{CONTRIBUTORS.md} at the repository root.
+
+% ------------------------------------------------------------------------------------------
+\section{How the project is run}
+\label{app:project:drive}
+
+The project has \textbf{no milestones}. Every chapter from \chapref{c10:ch} onwards states a
+\emph{target}, phrased as ``you should be roughly here''. The targets are not requirements and are
+not graded.
+
+That is a deliberate choice and not generosity. After \file{can_def.vhd}, the four leaf modules
+\code{bit_timer}, \code{crc15}, \code{tx_shift_reg} and \code{rx_shift_reg} have \textbf{no
+dependencies on each other}, and each has a testbench of its own handed out. A group of 4--5 can
+therefore build them in parallel, in any order. Fixing an order would only get in the way of that.
+
+But the dependency graph is not flat, and it is worth planning around:
+
+\begin{textdrawing}
+             meta_prev                                    (reads no package at all)
+can_def  ──> bit_timer, crc15, tx_shift_reg, rx_shift_reg (the four leaves, parallel)
+                                    └──> can_controller   (ch 16 transmit, ch 17 receive)
+can_def  ──> register_bank                                (independent, buildable from ch 10)
+spi_def  ──> spi_reg_bridge                               (independent, buildable from ch 10)
+spi_slave                                                 (handed out, not written by the group)
+    can_controller + register_bank + spi_reg_bridge + spi_slave ──> can_spi_node   (ch 19)
+\end{textdrawing}
+
+Two things follow from it:
+
+\begin{itemize}
+  \item \textbf{\code{can_controller} is the critical path.} It has no internal parallelism, it
+    spans two sessions, and its testbench is a system testbench that either passes or does not
+    \textemdash{} no partial green. Whoever is to own it should start reading \chapref{c16:ch}
+    early, and the group should expect it to take the most time of anything.
+  \item \textbf{\code{register_bank} and \code{spi_reg_bridge} are two full work streams that can
+    start straight away.} One needs only \code{can_def}, the other only \code{spi_def}, and both
+    have testbenches handed out. Nobody has to wait for the controller to have something to do, and
+    a group that defers them to \chapref{c18:ch} and \ref{c19:ch} has put its tightest work last.
+\end{itemize}
+
+Two checkpoints are compulsory:
+
+\begin{booktable}{lL}
+  \thead{When} & \thead{What} \\
+  \midrule
+  \Chapref{c15:ch} & \textbf{Code review seminar.} Every group shows a merged PR and a review the
+    group wrote, and talks about one thing in the way of working that has not worked. \\
+  \Chapref{c19:ch} & \textbf{Final presentation and hand-in.} Green testbenches, a walkthrough of
+    \code{can_spi_node}, bring-up on hardware as far as the group got, and the repository's
+    history. \\
+\end{booktable}
+
+What is assessed is the end result and the way of working: the design, the Git history, the PRs and
+the reviews. \textbf{Not the pace.} A group that is behind halfway through the project and hands in a
+complete, well-reviewed node has done the project right.
+
+% ------------------------------------------------------------------------------------------
+\section{Project structure}
+\label{app:project:layout}
+
+Two flat directories, with the modules beside the testbenches that check them:
+
+\begin{textdrawing}
+controller/   can_def.vhd, meta_prev.vhd, bit_timer.vhd, crc15.vhd,
+              tx_shift_reg.vhd, rx_shift_reg.vhd, can_controller.vhd
+              + the six *_tb.vhd handed out
+bridge/       register_bank.vhd, spi_reg_bridge.vhd, can_spi_node.vhd
+              + spi_slave.vhd, spi_def.vhd, register_bank_tb.vhd,
+                spi_reg_bridge_tb.vhd, handed out
+ci/           build_project.sh, copied from the course repository
+Makefile      with the build-project target
+CONTRIBUTORS.md
+.gitignore
+\end{textdrawing}
+
+The boundary between the two directories is the protocol: everything in \file{controller/} knows
+about CAN and nothing about SPI, and \textbf{no module in either directory knows about both}.
+\code{register_bank} is the middle: it knows neither the CAN frame format nor SPI but only register
+semantics, and reads \code{can_def} purely for the port types.
+
+The files handed out are fetched from the course repository and added unchanged. The group does not
+write \file{spi_slave.vhd}: it is transport, not the course's subject, and it is read in
+\chapref{c18:ch} instead.
+
+% ------------------------------------------------------------------------------------------
+\section{Naming conventions and coding style}
+\label{app:project:style}
+
+All the code and all the comments in the code are written in \textbf{English}. So are the
+instructions.
+
+\begin{itemize}
+  \item Module and signal names in \code{snake_case}, for example \code{timer_enable}.
+  \item Constants in capitals, for example \code{TICKS_PER_BIT}.
+  \item \code{std_logic} and \code{std_logic_vector} for everything that is wires; \code{natural}
+    for counters.
+  \item No hardcoded values. Everything that is protocol lives in \code{can_def}.
+  \item Comment every entity's interface and every important internal signal.
+  \item Keep the interfaces stable. The testbenches are handed out and bind positionally.
+\end{itemize}
+
+\begin{warning}
+\textbf{Positional port binding.} Every testbench handed out binds to its module
+\textbf{positionally}, and so does every instantiation inside \code{can_controller}. The contract is
+therefore the \textbf{order and the types} of the ports, exactly as the tables in
+\secref{app:project:controller} and \ref{app:project:bridge} list them. The \emph{names} of the ports
+are the group's own.
+
+Swap two ports of the same type and nothing complains during analysis; the design simply misbehaves
+in simulation. That is the price of letting the interface table be the single source of truth.
+\end{warning}
+
+% ------------------------------------------------------------------------------------------
+\section{The shared package \code{can_def}}
+\label{app:project:candef}
+
+Written in \chapref{c10:ch}, in \file{controller/can_def.vhd}, and read by everything else.
+
+\textbf{Constants:} \code{CLOCK_FREQ_HZ}, \code{BIT_RATE_HZ}, \code{TICKS_PER_BIT},
+\code{SAMPLE_TICK}, \code{ID_WIDTH}, \code{DLC_WIDTH}, \code{DLC_MAX}, \code{CRC_WIDTH},
+\code{DATA_WIDTH}, \code{MAX_RUN}, \code{CRC_POLY}.
+
+\textbf{Subtypes:} \code{byte_t}, \code{id_t}, \code{crc_t}, \code{dlc_t}, \code{data_t}.
+
+Target values for a DE0-CV with a 50 MHz system clock and CAN at 1 Mbit/s:
+
+\begin{booktable}{llL}
+  \thead{Constant} & \thead{Value} & \thead{Comment} \\
+  \midrule
+  \code{CLOCK_FREQ_HZ} & \code{50_000_000} & The system clock. \\
+  \code{BIT_RATE_HZ} & \code{1_000_000} & 1 Mbit/s. \\
+  \code{TICKS_PER_BIT} & \code{CLOCK_FREQ_HZ / BIT_RATE_HZ} & 50 clock cycles per CAN bit. Compute
+    it, do not write it. \\
+  \code{SAMPLE_TICK} & \code{TICKS_PER_BIT * 7 / 10} & The sample point, about 70 \% into the bit
+    period. \\
+  \code{ID_WIDTH} & \code{11} & Standard identifier. \\
+  \code{DLC_WIDTH} & \code{4} & DLC is four bits. \\
+  \code{DLC_MAX} & \code{8} & At most eight data bytes. \\
+  \code{DATA_WIDTH} & \code{DLC_MAX * 8} & 64 bits of payload. \\
+  \code{CRC_WIDTH} & \code{15} & CAN's CRC-15. \\
+  \code{MAX_RUN} & \code{5} & The five rule for bit stuffing. \\
+  \code{CRC_POLY} & \code{"100010110011001"} & Corresponds to $x^{15} + x^{14} + x^{10} + x^{8} +
+    x^{7} + x^{4} + x^{3} + 1$. \\
+\end{booktable}
+
+That \code{TICKS_PER_BIT} and \code{SAMPLE_TICK} are \emph{computed} and not typed in matters: if
+somebody changes the bit rate, everything should follow.
+
+% ------------------------------------------------------------------------------------------
+\section{The modules in \code{controller/}}
+\label{app:project:controller}
+
+The chapters describe the modules in detail; this is the port order collected, since that is what the
+contract is.
+
+\subsection*{\code{meta_prev} (\chapref{c12:ch})}
+One generic, \code{WIDTH} (\code{natural := 1}), and three ports: \code{clock} (in), \code{async_in}
+(in, \code{std_logic_vector(WIDTH-1 downto 0)}), \code{sync_out} (out, the same type). The
+two-flip-flop synchroniser from \chapref{c4:ch}, written once with a width generic. It needs no
+reset: after two clock cycles the contents are replaced anyway. Instantiated twice inside
+\code{can_controller}, for \code{reset_n} and for \code{rx_bus}.
+
+\subsection*{\code{bit_timer} (\chapref{c12:ch})}
+\begin{longbooktable}{cll>{\raggedright\arraybackslash}p{0.24\linewidth}>{\raggedright\arraybackslash}p{0.30\linewidth}}{\thead{\#} & \thead{Port} & \thead{Direction} & \thead{Type} &
+  \thead{Meaning}}
+  1 & \code{clock} & in & \code{std_logic} & System clock. \\
+  2 & \code{reset_s2_n} & in & \code{std_logic} & Synchronised, active-low reset. \\
+  3 & \code{enable} & in & \code{std_logic} & Counts while \code{'1'}, holds while \code{'0'}. \\
+  4 & \code{resync} & in & \code{std_logic} & Forces the counter back to tick 0. \\
+  5 & \code{sample} & out & \code{std_logic} & Pulse at the sample point. \\
+  6 & \code{bit_done} & out & \code{std_logic} & Pulse at the end of the bit period. \\
+\end{longbooktable}
+
+A counter from \code{0} to \code{TICKS_PER_BIT-1} pulsing \code{sample} at \code{SAMPLE_TICK} and
+\code{bit_done} at the end of the period. \code{resync} is used once per frame, at SOF; in between
+the timer free-runs.
+
+\subsection*{\code{crc15} (\chapref{c13:ch})}
+\begin{longbooktable}{cll>{\raggedright\arraybackslash}p{0.24\linewidth}>{\raggedright\arraybackslash}p{0.30\linewidth}}{\thead{\#} & \thead{Port} & \thead{Direction} & \thead{Type} &
+  \thead{Meaning}}
+  1 & \code{clock} & in & \code{std_logic} & System clock. \\
+  2 & \code{reset_s2_n} & in & \code{std_logic} & Synchronised, active-low reset. \\
+  3 & \code{clear} & in & \code{std_logic} & Clears the register without a reset. \\
+  4 & \code{enable} & in & \code{std_logic} & Integrates \code{data} at this edge. \\
+  5 & \code{data} & in & \code{std_logic} & The current bit. \\
+  6 & \code{crc} & out & \code{crc_t} & The register's current value. \\
+  7 & \code{valid} & out & \code{std_logic} & \code{'1'} when the register is all zeros. \\
+\end{longbooktable}
+
+A 15-bit register with feedback. The same engine both generates and checks: the transmitter feeds in
+its bits and reads out \code{crc}; the receiver feeds in the same bits \emph{plus} the received CRC,
+and \code{valid} goes high if everything matches. No mode switch is needed. \code{clear} is needed all
+the same: an aborted frame leaves rubbish in the register.
+
+\subsection*{\code{tx_shift_reg} (\chapref{c14:ch})}
+\begin{longbooktable}{cll>{\raggedright\arraybackslash}p{0.24\linewidth}>{\raggedright\arraybackslash}p{0.30\linewidth}}{\thead{\#} & \thead{Port} & \thead{Direction} & \thead{Type} &
+  \thead{Meaning}}
+  1 & \code{clock} & in & \code{std_logic} & System clock. \\
+  2 & \code{reset_s2_n} & in & \code{std_logic} & Synchronised, active-low reset. \\
+  3 & \code{load} & in & \code{std_logic} & Loads \code{data}/\code{bit_count} \textbf{and} puts out
+    the first bit the same cycle. \\
+  4 & \code{data} & in & \code{byte_t} & The group, with its valid bits at the top. \\
+  5 & \code{bit_count} & in & \code{std_logic_vector(3 downto 0)} & Number of valid bits, 1--8. \\
+  6 & \code{shift} & in & \code{std_logic} & One pulse per CAN bit, from
+    \code{bit_timer.bit_done}. \\
+  7 & \code{tx_bit} & out & \code{std_logic} & The bit to drive next bit period. \\
+  8 & \code{stuff} & out & \code{std_logic} & \code{'1'} on the very shift that puts out a stuff
+    bit. \\
+  9 & \code{done} & out & \code{std_logic} & Pulses when the group has been fully sent. \\
+  10 & \code{bit_valid} & out & \code{std_logic} & \code{'1'} the cycle a new bit was put out. \\
+\end{longbooktable}
+
+Shifts out MSB first, counts identical bits in a row, and inserts a stuff bit of the opposite value
+after \code{MAX_RUN} identical ones. \textbf{The stuffing state survives reloads}: the rule applies to
+the bit stream, not to the individual group. \code{stuff} and \code{bit_valid} exist for
+\code{can_controller}'s sake: the CRC is fed on \code{bit_valid and not stuff}, since a stuff bit is
+not part of the checksum.
+
+\subsection*{\code{rx_shift_reg} (\chapref{c15:ch})}
+\begin{longbooktable}{cll>{\raggedright\arraybackslash}p{0.24\linewidth}>{\raggedright\arraybackslash}p{0.30\linewidth}}{\thead{\#} & \thead{Port} & \thead{Direction} & \thead{Type} &
+  \thead{Meaning}}
+  1 & \code{clock} & in & \code{std_logic} & System clock. \\
+  2 & \code{reset_s2_n} & in & \code{std_logic} & Synchronised, active-low reset. \\
+  3 & \code{sample} & in & \code{std_logic} & One pulse per CAN bit, from
+    \code{bit_timer.sample}. \\
+  4 & \code{rx_bus} & in & \code{std_logic} & The bus level, valid at the sample point. \\
+  5 & \code{bit_count} & in & \code{std_logic_vector(3 downto 0)} & Number of \emph{real} bits to
+    collect, 1--8. \\
+  6 & \code{enable} & in & \code{std_logic} & Decides whether \code{sample} pulses are acted on. \\
+  7 & \code{data} & out & \code{byte_t} & The collected group, right-justified. \\
+  8 & \code{valid} & out & \code{std_logic} & Pulses when \code{bit_count} real bits have been
+    collected. \\
+  9 & \code{stuff_error} & out & \code{std_logic} & Pulses if an expected stuff bit does not
+    invert. \\
+  10 & \code{real_bit} & out & \code{std_logic} & The destuffed bit that was accepted. \\
+  11 & \code{real_bit_valid} & out & \code{std_logic} & \code{'1'} when a real bit was accepted,
+    \code{'0'} for a discarded stuff bit. \\
+\end{longbooktable}
+
+The transmitter's mirror image. After \code{MAX_RUN} identical bits in a row the next bit \emph{must}
+be the opposite; if it is, it is discarded and the count starts over, and if it is not, that is a
+\code{stuff_error}.
+
+\subsection*{\code{can_controller} (\chapref{c11:ch}, \ref{c16:ch}, \ref{c17:ch})}
+The top level of the CAN half, and the only block that knows the frame format. Fifteen ports, in
+exactly this order, every input first:
+
+\begin{textdrawing}
+ 1 clock     4 tx_id    7 rx_bus    10 bus_en   13 rx_data
+ 2 reset_n   5 tx_dlc   8 tx_done   11 rx_id    14 rx_valid
+ 3 tx_req    6 tx_data  9 tx_bus    12 rx_dlc   15 error
+\end{textdrawing}
+
+\textbf{The frame sequence} a transmission goes through: SOF (1 bit), the arbitration field (11-bit
+identifier + RTR), the control field (IDE, r0, DLC = 6 bits), the data field (0--64 bits according to
+DLC), CRC (15 bits + delimiter), ACK (slot + delimiter) and EOF (7 bits). Every field gets a load
+state of its own before its shift state.
+
+\textbf{The bus} is modelled as open drain: \code{bus_en} decides whether the node drives at all,
+\code{tx_bus} what it drives. The bus value is \code{'1'} only if no node pulls it down. During the
+ACK slot the transmitting node releases the bus, and a receiver with a valid CRC pulls it down.
+\textbf{The transmitter never reads the ACK slot back}; a frame nobody acknowledges completes exactly
+like an acknowledged one, and \code{tx_done} pulses all the same.
+
+\textbf{Arbitration:} during the arbitration field every transmitted bit is compared against what is
+actually on the bus. If the node sends a recessive bit and reads back a dominant one it has lost: it
+sets \code{error}, pulses \code{tx_done}, leaves the transmitter role and goes idle. It does
+\textbf{not} receive the frame that won.
+
+That \code{tx_done} pulses here too is deliberate: the pulse means ``the transmission attempt is over
+and the port is yours again'', not ``the frame arrived''. \code{error} says which. Without that pulse
+a caller has no edge to wait for, and the register bank never gets its TX-ready bit back.
+
+\textbf{\code{error}} goes high for four reasons: lost arbitration, \code{stuff_error}, a failed CRC
+check, and a received remote frame. It stays high until the next transmission or reception starts.
+\textbf{\code{tx_done}} and \textbf{\code{rx_valid}} are pulses of exactly one clock cycle, which is
+precisely what makes the register bank necessary.
+
+\subsection{Known limitations the driver notices}
+\label{app:project:limits}
+
+The simplifications against real CAN are listed in full in \secref{c19:sec:gaps}, and from the
+protocol side in \canref{7}. Three of them show all the way out in the register map and therefore have
+to be stated here too, since the parallel class writes code against them \textemdash{} they are the
+same three \canbook{} highlights, and both classes read that book:
+
+\begin{itemize}
+  \item \textbf{A lost arbitration cannot be told from a successful transmission on STATUS bit 0.}
+    Both give the bit back, since the controller pulses \code{tx_done} when it aborts as well. That is
+    deliberate: the bit means ``the port is free'', not ``the frame arrived''. A driver that wants to
+    know the outcome reads \code{ERROR_FLAGS} after bit 0 has come back.
+
+    This was once a real bug, and it is worth knowing why it is not one any more. If bit 0 were set
+    only by \code{tx_done}, and \code{tx_done} pulsed only at EOF, the bit would be left low after
+    every lost arbitration and the node could not transmit again until it was cleared by the reset
+    button \textemdash{} on a two-node bus, that is, in normal operation. Three things keep it from
+    arising again, and they overlap deliberately: the controller pulses \code{tx_done} at aborts too
+    (\chapref{c17:ch}), the bank sets bit 0 on a rising edge of \code{error} while the bit is low as
+    well (\chapref{c18:ch}), and \code{TX_ABORT} exists as an escape hatch.
+    \code{can_controller_tb} case 2 and \code{register_bank_tb} cases 10--11 check the three.
+  \item \textbf{\code{error} is one bit for four causes.} The driver can see \emph{that} something
+    went wrong, never \emph{what}. Retransmission logic distinguishing a lost arbitration from a
+    broken CRC cannot be written against this interface.
+  \item \textbf{No buffering on the receive side.} The controller holds one frame. If the next
+    arrives before the previous has been read out, it is overwritten. The register bank passes the
+    limitation on rather than hiding it; see appendix~\ref{app:protocol}.
+\end{itemize}
+
+% ------------------------------------------------------------------------------------------
+\section{The modules in \code{bridge/}}
+\label{app:project:bridge}
+
+\subsection*{\code{register_bank} (\chapref{c18:ch})}
+Sixteen ports, in this order:
+
+\begin{textdrawing}
+ 1 clock        5 reg_wdata    9 rx_data     13 tx_id
+ 2 reset_s2_n   6 tx_done     10 rx_valid    14 tx_dlc
+ 3 reg_index    7 rx_id       11 error       15 tx_data
+ 4 reg_write    8 rx_dlc      12 reg_rdata   16 tx_req
+\end{textdrawing}
+
+Translates the controller's one-cycle pulses into sticky, pollable levels, and register writes into
+events. The semantics in full are in appendix~\ref{app:protocol}; it is the contract with the parallel
+class and must not be changed unilaterally. \code{reg_rdata} is \textbf{combinational}: latching a
+read value is the bridge's responsibility, not the bank's.
+
+\subsection*{\code{spi_reg_bridge} (\chapref{c19:ch})}
+Ten ports, in this order: \code{clock}, \code{reset_s2_n}, \code{ss_active}, \code{rx_data},
+\code{rx_valid}, \code{reg_rdata}, \code{tx_data}, \code{reg_addr}, \code{reg_wdata},
+\code{reg_write}.
+
+Implements the transaction from appendix~\ref{app:protocol}: one command byte plus four data bytes,
+always exactly five. On a read the \textbf{register value is latched once} at the end of the command
+byte; on a write nothing is committed until the fifth byte is complete. If \code{ss_active} goes low
+before that, the transaction is abandoned entirely, with no side effects. \code{reg_addr}
+\textbf{holds} the decoded index until the next command byte decodes a new one.
+
+\subsection*{\code{can_spi_node} (\chapref{c19:ch})}
+Nine ports, in this order:
+
+\begin{textdrawing}
+ 1 clock      4 mosi     7 rx_bus
+ 2 reset_n    5 ss       8 tx_bus
+ 3 sclk       6 miso     9 bus_en
+\end{textdrawing}
+
+A purely structural top level. Instantiates \code{spi_slave}, \code{spi_reg_bridge},
+\code{register_bank} and \code{can_controller}, plus a \code{meta_prev} for the reset. No functional
+logic here.
+
+The order is SPI's four wires as a group, \code{sclk}/\code{mosi}/\code{ss}/\code{miso}, and then the
+CAN bus's three. \code{miso} therefore sits among the SPI ports and not with the other outputs, so
+that the four pins stand in the same order as in the wiring table. That matters:
+\code{can_spi_node_tb} binds positionally like everything else, and \code{miso} and \code{rx_bus} have
+the same type, so swapping them passes analysis without a word and gives a node that never answers.
+
+% ------------------------------------------------------------------------------------------
+\section{Test plan}
+\label{app:project:tests}
+
+The group writes no testbenches in this project. Nine are handed out, and they are the contract: seven
+module testbenches and two system testbenches.
+
+\begin{booktable}{lL}
+  \thead{Testbench} & \thead{Checks} \\
+  \midrule
+  \code{meta_prev_tb} & Two flip-flops of delay, for both one bit and a vector. \\
+  \code{bit_timer_tb} & \code{sample} and \code{bit_done} at the right tick; \code{resync};
+    \code{enable}. \\
+  \code{crc15_tb} & CRC values for known sequences; \code{valid}; \code{clear}. \\
+  \code{tx_shift_reg_tb} & MSB-first shifting, stuffing after five identical bits, the \code{done}
+    timing. \\
+  \code{rx_shift_reg_tb} & Deserialisation, destuffing, \code{stuff_error}, \code{real_bit}. \\
+  \code{register_bank_tb} & Eleven cases, from the reset state to \code{TX_ABORT} and the two routes
+    back to TX ready. \\
+  \code{spi_reg_bridge_tb} & Four cases: a write, a read byte by byte, an abort on \code{ss_active},
+    and a command byte with a reserved bit set. \\
+\end{booktable}
+
+\code{can_controller_tb} puts two nodes on a shared wired-AND bus and checks that one receives the
+other's frame, and that arbitration is resolved correctly when both transmit at once. It is skipped by
+the build until the controller has a receive path (appendix~\ref{app:sim}).
+
+\code{can_spi_node_tb} does the same thing one layer out: two complete nodes on the same bus, but
+every node driven by a modelled SPI master on its four pins. It plays back the protocol
+specification's worked example through the whole chain and follows a frame from an SPI write on one
+node to an SPI read on the other. Seven cases: the reset state, the worked example, invalid command
+bytes and reserved indices, \code{TX_ABORT}, the abort rule, extra bytes under the same \code{SS},
+and finally the transmission and the reception.
+
+It is the \textbf{only} testbench in the course that drives \code{sclk}, \code{mosi} and \code{ss} as
+real waveforms. \code{spi_reg_bridge_tb} feeds the bridge finished bytes and never touches a pin, so
+everything between the wire and the byte \textemdash{} the synchronisers, the edge detection on SCK,
+the \code{ss_active} framing \textemdash{} is exercised here or nowhere.
+
+\subsection{Verification of your own}
+\label{app:project:ownverify}
+
+\code{can_spi_node_tb} is deliberately kind to the timing requirements: it holds 200 ns of quiet
+around every \code{SS} edge, where the protocol requires at least 60 ns. That is right for a testbench
+meant to separate logic errors from timing errors, but it also means that \textbf{no} testbench handed
+out presses the specification's timing minima.
+
+That is the verification the project asks the group to do itself: copy \code{can_spi_node_tb}, shrink
+the quiet period towards 60 ns, and find out at what value the node stops answering and why. The
+answer is in \code{spi_slave}'s synchronisers, and it is the only place where the course lets you
+\emph{measure} a margin instead of reading one. Exercise~\ref{c19:ex:node}(b) asks the question in
+full.
+
+\subsection{Checklist before hand-in}
+\label{app:project:checklist}
+
+\begin{itemize}
+  \item All nine testbenches handed out pass, \code{can_controller_tb} and \code{can_spi_node_tb}
+    included. \textbf{Check that they really \emph{ran} and were not skipped}, see the box below.
+  \item \code{make build-project} goes green from a clean checkout.
+  \item The port order matches the tables in \secref{app:project:controller} and
+    \ref{app:project:bridge}.
+  \item No values hardcoded past \code{can_def}.
+  \item Every entity's interface is commented.
+  \item \file{CONTRIBUTORS.md} is up to date.
+  \item \code{main} contains no commits that did not go through a reviewed PR.
+\end{itemize}
+
+\begin{warning}
+\textbf{Skipped is not passed.} \code{can_controller_tb} is gated on whether
+\file{can_controller.vhd} contains \chapref{c17:ch}'s CRC gating, found by a text search for the
+internal signal names the chapter uses. If you write a correct receive path with different names, the
+testbench is reported as \emph{skipped}, and since skipped is never failed the checklist looks
+satisfied while the course's pass/fail testbench never ran. So run
+
+\begin{shell}
+CI_BUILD_ALL=1 make build-project
+\end{shell}
+
+at least once before hand-in, and hand in that outcome.
+\end{warning}
+
+% ------------------------------------------------------------------------------------------
+\section{Examination and grades}
+\label{app:project:grading}
+
+The course is examined through \textbf{one group project} and \textbf{two practical exams}. 100 marks
+in total.
+
+\begin{booktable}{lllr}
+  \thead{Element} & \thead{Where} & \thead{Form} & \thead{Marks} \\
+  \midrule
+  Practical exam 1, sequential networks & \chapref{c9:ch} & Individual, 3 h & 25 \\
+  Group project, a CAN node in VHDL & \chapref{c10:ch}--\ref{c19:ch} & Group of 4--5 & 50 \\
+  Practical exam 2, CAN modules & \chapref{c20:ch} & Individual, 3 h & 25 \\
+\end{booktable}
+
+\begin{booktable}{lL}
+  \thead{Grade} & \thead{Requirement} \\
+  \midrule
+  \textbf{F} & Below 50 marks, or a failed project. \\
+  \textbf{P} & At least 50 marks in total \textbf{and} a passed project. \\
+  \textbf{D} & At least 80 marks in total \textbf{and} a distinction-level project. \\
+\end{booktable}
+
+The project is therefore a gate in both directions. It accounts for half the course, it is where most
+of the work lies, and a failed project cannot be compensated for with two strong exams.
+
+\subsection{The project's 50 marks}
+\label{app:project:points}
+
+\begin{booktable}{LrL}
+  \thead{Part} & \thead{Marks} & \thead{What is assessed} \\
+  \midrule
+  The design & 30 & The modules work per the specification and the testbenches pass. \\
+  The way of working & 12 & Git history, PRs, the quality of the reviews, the seminar,
+    \file{CONTRIBUTORS.md}. \\
+  The presentation & 8 & The final presentation: that the group can explain what it built and
+    why. \\
+\end{booktable}
+
+The grade is given to the group. If the effort is markedly uneven, individual grades may be adjusted;
+that is the only reason \file{CONTRIBUTORS.md} is to be kept up to date as you go and not written the
+evening before.
+
+\textbf{A passed project} requires a \textbf{complete node}: all nine testbenches handed out must
+pass, that is, \code{CI_BUILD_ALL=1 make build-project} green throughout. The controller alone is not
+enough, and the reason lies after the course: the node travels on to the CAN labs in the next embedded
+systems course, where a driver has to reach it over SPI. A controller without a register bank and a
+bridge cannot be reached from any driver at all, and neither can a node whose parts work separately
+but not together.
+
+\textbf{Distinction} additionally requires the verification of your own in
+\secref{app:project:ownverify}, that the code is documented throughout and stylistically consistent,
+and that the review culture is visible in the repository's history.
+
+Bring-up on real hardware is \textbf{not} assessed. A broken kit or a broken connection must not cost
+marks. Everything that is assessed can be run in GHDL on an ordinary laptop.
+
+\subsection{The practical exams}
+\label{app:project:exams}
+
+Both are individual, three hours, at the computer with GHDL. The form is the same in both:
+independent tasks, unrelated to each other and ordered roughly by increasing difficulty.
+
+Most of the tasks are \textbf{writing tasks}: a self-checking testbench handed out and a description
+of the module it drives, with port order and behaviour. \Chapref{c20:ch} additionally has
+\textbf{reading tasks}: a timing diagram or an SPI transaction to interpret on paper. They have no
+testbench, for exactly the reason that makes them worth asking \textemdash{} reading a waveform is a
+skill in itself, and it is not examined by writing VHDL. They are marked against an answer key, and
+partly correct answers earn partial marks the same way partly correct logic does.
+
+Partly correct logic earns partial marks: never hand in an empty file because the module did not get
+finished, and the same goes for a half-interpreted timing diagram. The marking reads the code, not
+only the testbench's outcome; a module that passes by doing something other than what was asked does
+not earn full marks.
+
+\Chapref{c9:ch} covers \chapref{c1:ch} to \ref{c8:ch}, with the emphasis on sequential networks:
+registers, counters, shift registers, timers, synchronisers and simple Moore machines. A practice
+paper is handed out in advance. \Chapref{c20:ch} covers the project's modules: bit timing, CRC, bit
+stuffing in both directions, frame sequencing, register semantics and the SPI transaction.
+
+\subsection{Permitted aids}
+\label{app:project:aids}
+
+This section is the \textbf{authoritative} list. If anything else says otherwise anywhere else, what
+is written here applies.
+
+\textbf{Allowed at both exams:}
+\begin{itemize}
+  \item All the course material: this book, the lectures' READMEs and every appendix. At
+    \chapref{c20:ch} the register map and the protocol specification (appendix~\ref{app:protocol})
+    belong there of course; at \chapref{c9:ch} they are available too, but are not examined.
+  \item All the VHDL you wrote yourself during the course, and at \chapref{c20:ch} the group's
+    project code as well.
+  \item Your own computer with GHDL, and CircuitVerse. At both exams: drawing a circuit before you
+    write it is often faster.
+\end{itemize}
+
+\textbf{Not allowed:}
+\begin{itemize}
+  \item \textbf{Communication with others}, in any form.
+  \item \textbf{Tools that generate or explain VHDL for you}: language models, code assistants and
+    the like, whether they write the code or merely reason about it. The line is not drawn at who
+    presses the keys but at whose understanding is being tested.
+  \item \textbf{Searching the internet for solutions.} CircuitVerse runs in a browser, so the computer
+    is online, and that assumes you keep to the course material under your own steam. Looking up
+    GHDL's or VHDL's documentation is allowed; searching for a finished module is not.
+\end{itemize}
+
+If you are unsure whether something is allowed: ask before the exam, not during it.
+
+That the group's project code is allowed at \chapref{c20:ch} is a deliberate choice. You built it. The
+tasks are instead written as variants and repairs, so that they differ from the project's modules at
+precisely the point that requires you to have understood them.
+
+\subsection{Re-examination and absence}
+\label{app:project:reexam}
+
+Both exams can be retaken. The project is handed in once, with the possibility of a resubmission
+after word from the supervisor: a resubmission is marked against a pass, not against a distinction.
+
+The code review seminar in \chapref{c15:ch} and the final presentation in \chapref{c19:ch} are the
+project's two compulsory checkpoints. Missed attendance is made up by agreement with the supervisor.
+Other sessions have no attendance requirement; the group project, on the other hand, has a group
+dynamic that does not survive somebody being absent, which is a different and stronger reason to come.
+
+% ------------------------------------------------------------------------------------------
+\section{Practical tips}
+\label{app:project:tips}
+
+\begin{itemize}
+  \item Draw the timing diagram before you write the shift registers. Most faults there are one-cycle
+    timing errors, not logic errors, and they show up on paper before they show up in the simulator.
+  \item Start with \code{bit_timer} and \code{crc15} if you are unsure where to start. They are the
+    simplest, they depend on nothing, and they can be finished completely.
+  \item Read the testbenches handed out. They say more precisely what every module promises than any
+    prose does, and they are written to be read.
+  \item Test the stuffing carefully, in both directions. It is the project's most common source of
+    failure.
+  \item Keep \code{can_spi_node} structural. As soon as logic creeps into the top level it becomes
+    impossible to test in isolation.
+  \item Talk to the parallel class early, and do it about the register map rather than about your
+    code.
+\end{itemize}
+
+\begin{aside}
+\textbf{Shared documentation.} Two documents are shared with the software group and are the contract
+between the classes: the register map (what the registers mean) and the protocol specification (how
+they are reached), both reproduced in appendix~\ref{app:protocol}. If anything in them changes, both
+classes have to know about it before the change is merged. The documents are updated \emph{before} the
+code, never after.
+\end{aside}

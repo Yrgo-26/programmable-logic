@@ -1,0 +1,33 @@
+% Kapitel 6, satt ur lectures/L06: Appendix A blir avsnitt 6.1-6.7, och Appendix B övningarna.
+
+\chapter{Räknare och skiftregister}
+\label{c6:ch}
+
+{\large\itshape Byggblock för allt som behöver räkna eller flytta bitar.\par}
+
+\begin{chapterbox}{I det här kapitlet}
+\begin{itemize}
+  \item Räknare: ett register, en adderare och en konstant \code{1}, och varför överslaget kommer
+    gratis.
+  \item Skiftregister: att flytta data en bit per klockflank, åt ett håll som används konsekvent.
+  \item SIPO och PISO, och vilket som passar vilket jobb.
+  \item En 8-bitars seriemottagare: ett skiftregister plus en biträknare, som vet när en byte
+    anlänt.
+  \item Två demonstrationer på kort: en rad lysdioder som räknar och slår över, och en byte som
+    skiftas in en knapptryckning i taget.
+\end{itemize}
+\end{chapterbox}
+
+Innan räknaren når \code{1111}: förutsäg vad den kommer att visa härnäst, och leta sedan upp det
+element i ritningen som får det att hända. Det finns inget, vilket är poängen: ingenting i kretsen
+utför överslaget, och det är en konsekvens av registrets bredd snarare än logik någon lagt dit.
+
+\code{serial_rx8} i \secref{c6:sec:rx8} är bokens första design vars korrekthet du inte kan
+kontrollera med ögat i full fart: kontinuerligt aktiverad sväljer den en byte på 160~ns. Det är
+därför den har en referenstestbänk, och därför kortdemonstrationen i \secref{c6:sec:shiftdemo}
+driver \code{shift_enable} från en knapp i stället. Att sakta ned \emph{klockan} vore
+mjukvaruinstinkten och fel drag; modulen har redan den styrning som låter dig ta en bit i taget.
+
+\input{chapters/06/counters}
+\input{chapters/06/summary}
+\input{chapters/06/exercises}

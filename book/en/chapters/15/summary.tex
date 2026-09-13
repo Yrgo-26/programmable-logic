@@ -1,0 +1,52 @@
+% Section 15.7, from lectures/L15/README.md.
+
+\section{Summary}
+\label{c15:sec:review}
+
+\needspace{6\baselineskip}
+\subsection*{What you should be able to do now}
+\begin{itemize}
+  \item Implement a shift register deserialising from the bus and discarding stuff bits.
+  \item Detect a stuffing error and say exactly what condition constitutes one.
+  \item Explain why the receiver samples at \code{sample} and the transmitter shifts at
+    \code{bit_done}.
+  \item Feed the CRC engine from the receive side without counting stuff bits.
+  \item Read somebody else's VHDL and write a review that is useful rather than polite.
+\end{itemize}
+
+\needspace{6\baselineskip}
+\subsection*{Questions to test yourself with}
+\begin{enumerate}
+  \item Why does the receiver sample at \code{sample} rather than at \code{bit_done}?
+  \item What condition exactly constitutes a stuffing error, and why is it six identical bits that is
+    the limit on the receive side when the transmitter counts five?
+  \item What happens to the stuff bit when it is correct?
+  \item Why may \code{crc15} only see \code{real_bit}, and what would a wrongly fed stuff bit do?
+  \item Why is counting received bits not enough to know when a byte is complete?
+\end{enumerate}
+
+\needspace{6\baselineskip}
+\subsection*{The code review seminar}
+About an hour, with the whole class. Every group gets ten minutes and shows a merged pull request
+(what it changed, how it was split up, and what the commit messages say), a review the group wrote
+(what the reviewer looked for, and what actually changed as a result of the comments), and one thing
+that has not worked in the way of working, and what you have done about it.
+
+Pick out, within the group, one merged pull request and one review somebody in the group wrote to
+show. It does not have to be the prettiest one; a PR that got justified criticism is worth more
+showing than one nobody read.
+
+The seminar is compulsory and is one of the project's two fixed checkpoints. It is not graded
+separately, but it feeds into the overall assessment of the way of working described in
+appendix~\ref{app:project}.
+
+\needspace{6\baselineskip}
+\subsection*{Target}
+With \code{rx_shift_reg} finished, all four leaf modules exist, and \code{can_controller} is the only
+one left on the CAN side. Groups that are behind should spend the time here rather than starting on
+the state machine: it needs all four.
+
+\needspace{6\baselineskip}
+\subsection*{Looking ahead}
+\Chapref{c16:ch} takes the frame as a state machine, first explained and then built on the transmit
+side.

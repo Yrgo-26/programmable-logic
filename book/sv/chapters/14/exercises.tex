@@ -1,0 +1,91 @@
+% Avsnitt 14.8, ur lectures/L14/appendix/b_exercises.md.
+
+\section{Övningar}
+\label{c14:sec:exercises}
+
+\begin{aside}
+De här övningarna befäster kapitlet. Konstruera din egen \file{tx_shift_reg.vhd} utifrån
+specifikationen i \secref{c14:sec:iface} till \ref{c14:sec:trace}; den utdelade testbänken, körd
+enligt bilaga~\ref{app:sim}, är kontrollen av att den beter sig korrekt.
+\end{aside}
+
+\exercise{\code{tx_shift_reg}}{VHDL}
+\label{c14:ex:txsr}
+Skriv din egen \file{tx_shift_reg.vhd} utifrån kapitlet. Verifiera den:
+
+\begin{shell}
+cd controller
+ghdl -a --std=93 can_def.vhd tx_shift_reg.vhd tx_shift_reg_tb.vhd
+ghdl -e --std=93 tx_shift_reg_tb
+ghdl -r --std=93 tx_shift_reg_tb --assert-level=error
+\end{shell}
+
+Om en kontroll fallerar, läs assertion-meddelandet; det namnger exakt vilket skift det gäller och
+vad som förväntades.
+
+\exercise{Följ en stoppad sekvens för hand, sedan i simulering}{Simulering}
+\label{c14:ex:trace}
+\xpart{a} Följ för hand \code{tx_shift_reg} laddad med \code{data = "11100000"},
+\code{bit_count = 8}, med start vid en gruppgräns där den föregående gruppens sista bit var \code{0}
+med en följdlängd på 3 (alltså \code{consecutive = 3} och \code{last_bit = '0'} in i gruppen). Skriv
+ut, bit för bit: vad som presenteras vid \code{load}, och sedan vid varje efterföljande
+\code{shift}, med varje instoppad stoppbit markerad och med angivande av vilket skift som höjer
+\code{done}.
+
+\xpart{b} Bekräfta din handföljning i simulering: skriv en kort testbänk (eller återanvänd strukturen
+i \file{tx_shift_reg_tb.vhd}) som förladdar samma startvillkor med följdlängd 3, sedan laddar
+\code{"11100000"} och vid varje skift \code{assert}:ar \code{tx_bit}, \code{stuff} och \code{done}
+mot värdena du förutsade (eller \code{report}:ar dem så att du kan läsa dem). Stämmer dess utfall av
+passera eller fallera med din handföljning?
+
+\exercise{Enbitsgruppen som ändå är skyldig en stoppbit}{Simulering}
+\label{c14:ex:onebit}
+\Secref{c14:sec:timing}:s sista punkt namnger ett gränsfall utan att arbeta igenom det: \emph{om
+\code{bit_count = 1} och den enda biten utlöser en stoppbit, väntar \code{done} ändå på att
+stoppbiten skickas först.} Det är inte hypotetiskt; \code{can_controller} laddar enbitsgrupper (SOF)
+och fyrabitsgrupper (ID:ts undre halva plus RTR), så en grupp kan verkligen sluta mitt i en följd.
+
+Sätt upp det precis som test 2 och 3 i \code{tx_shift_reg_tb} gör, utan reset emellan: ladda
+\code{"00001111"} med \code{bit_count = 8} och skifta ut den helt, så att följdräknaren står på fyra
+\code{'1'}:or i rad. Ladda sedan en \textbf{enbitsgrupp} vars enda bit också är \code{'1'}
+(\code{data = "1-------"}, \code{bit_count = 1}).
+
+\xpart{a} Följ vad som händer, presentation för presentation: vad \code{load} lägger på
+\code{tx_bit}, vad följdräknaren når, och sedan vad varje följande \code{shift} gör. Markera vilken
+presentation som bär stoppbiten och vilken som höjer \code{done}.
+
+\xpart{b} Hur många \code{shift}-pulser förbrukar den här enbitsgruppen totalt, och hur många skulle
+det ha förbrukat om följdräknaren i stället stått på noll? Säg var skillnaden kommer ifrån.
+
+\xpart{c} Anta att \code{done} hade fått pulsa så snart gruppens enda riktiga bit presenterats, utan
+hänsyn till den väntande stoppbiten. \code{can_controller} skulle då ladda nästa grupp under nästa
+bitperiod. Beskriv exakt vad den mottagande noden i så fall skulle se på ledningen, och vilken av
+\code{rx_shift_reg}:s utgångar som till slut skulle rapportera det (\chapref{c15:ch}).
+
+\xpart{d} Bekräfta din genomgång i simulering, genom att utöka mönstret från test 2 och test 3 i
+\file{tx_shift_reg_tb.vhd} med den här enbitsgruppen som ett fjärde fall.
+
+\exercise{Varifrån \code{track_run} anropas}{Simulering}
+\label{c14:ex:trackrun}
+\Secref{c14:sub:tracker} lägger följdräknaren i en procedur och är tydlig med var den proceduren får
+anropas: från en gren som placerar en bit, aldrig från processens toppnivå. Båda halvorna av den
+regeln är värda att bryta med flit, i en kladdkopia av din modul.
+
+\xpart{a} Flytta ut anropet \code{track_run(data(7));} ur grenen \code{load}, så att \code{load}
+låser gruppen och presenterar dess första bit men räknaren aldrig ser den biten. Förutsäg vad
+följdräknaren då visar under resten av ramen, och vilket av testbänkens tre tester som fallerar
+först. Kör det.
+
+\xpart{b} Lägg nu ett enda \code{track_run(tx_bit);} högst upp i grenen
+\code{elsif (rising_edge(clock))}, ovanför standardvärdena, och ta bort alla tre anropen inuti
+grenarna. \code{tx_bit} är en \code{out}-port, så börja med att säga varför det inte ens kompilerar,
+och upprepa sedan experimentet med en intern kopia av den sända biten i dess ställe. Med
+\code{TICKS_PER_BIT} satt till 50, hur många gånger körs räknaren nu per CAN-bit, och vad gör
+\code{consecutive} på den andra klockflanken i den allra första bitperioden?
+
+\xpart{c} \Secref{c14:sub:tracker} säger också att proceduren måste deklareras \emph{inuti} processen
+i stället för i arkitekturen. Flytta ut den till arkitekturens deklarativa del, oförändrad, och
+analysera filen. Den kompilerar inte; läs de fyra felen innan du går vidare. Gör sedan en version på
+arkitektursnivå som \emph{faktiskt} kompilerar, med identiskt beteende och en testbänk som passerar.
+Jämför de två anropsställena och säg vad den andra versionen kostar, och vilken ny fråga den väcker
+som versionen inuti processen inte kan väcka.

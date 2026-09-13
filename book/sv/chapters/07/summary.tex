@@ -1,0 +1,47 @@
+% Avsnitt 7.6, ur lectures/L07/README.md.
+
+\section{Sammanfattning}
+\label{c7:sec:review}
+
+\needspace{6\baselineskip}
+\subsection*{Det här ska du kunna nu}
+\begin{itemize}
+  \item Förklara vad som skiljer en timer från en vanlig räknare, och varför skillnaden är en
+    jämförelse.
+  \item Bygga en timer som grindnät: en likhetsjämförare av en XNOR per bit, och den nollställning
+    som får den att upprepa i stället för att slå över.
+  \item Implementera en timer i VHDL som en återanvändbar modul, omvandla en period i sekunder till
+    ett \code{TICK_COUNT}, och säga varför \code{timeout} är en puls på en klockcykel snarare än en
+    nivå.
+  \item Komponera en design av färdiga moduler i stället för att skriva om dem, och säga varför en
+    knapp som styr en timer ändå måste passera en synkroniserare först.
+\end{itemize}
+
+\needspace{6\baselineskip}
+\subsection*{Frågor att testa dig själv med}
+\begin{enumerate}
+  \item I vilken mening är en timer ”bara en räknare med en jämförelse”?
+  \item Varför måste den interna räknaren nollställas till \code{0} när den når sitt mål, i stället
+    för att lämnas att räkna vidare?
+  \item Varför är \code{timeout} en puls på en enda cykel snarare än en nivå som ligger kvar hög?
+  \item I CircuitVerse-versionen innebär ett ändrat målvärde att jämföraren måste kopplas om. Vad
+    ersätter den omkopplingen i VHDL-versionen, och när låses dess värde fast?
+  \item Varför är det fortfarande nödvändigt att köra en knapp genom en synkroniserare innan dess
+    flank används för att aktivera en timer, trots att knappen inte har med räkningen att göra?
+  \item \code{walking_led} skriver nästan ingen egen logik. Nämn de tre moduler den komponerar och
+    vilket kapitel var och en kom från.
+\end{enumerate}
+
+\needspace{6\baselineskip}
+\subsection*{Blicken framåt}
+\Chapref{c8:ch} går vidare med:
+\begin{itemize}
+  \item Tillståndsmaskiner, bokens sista byggblock, först konstruerade för hand: tillståndsdiagram,
+    tillståndstabell, Karnaughhärledd logik och ett grindnät i CircuitVerse, precis som det här
+    kapitlets timer ritades innan den skrevs.
+  \item Därefter i VHDL, där en uppräkningstyp och ett \code{case} ersätter tillståndstabellen och
+    Karnaughdiagrammen helt.
+  \item En timer är i sig en tillståndsmaskin med två tillstånd och ett enda syfte.
+    \Chapref{c8:ch} generaliserar det till kretsar med många tillstånd och många övergångar mellan
+    dem.
+\end{itemize}

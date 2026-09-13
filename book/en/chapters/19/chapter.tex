@@ -1,0 +1,51 @@
+% Chapter 19, typeset from lectures/L19: Appendix A becomes section 19.1, the bridge's specification
+% 19.2, Appendix B becomes 19.3-19.8, and Appendix C the exercises.
+
+\chapter{The SPI bridge, \code{can_spi_node} and bring-up}
+\label{c19:ch}
+
+{\large\itshape The project's last session, and its capstone: the transaction layer, the top level
+tying everything together, and the whole chain verified first in simulation and then on real
+hardware.\par}
+
+\begin{chapterbox}{In this chapter}
+\begin{itemize}
+  \item System verification: two nodes on a wired-AND bus, and what that testbench does not cover.
+  \item The transaction FSM: command byte, four data bytes, latch once on read, commit on the fifth
+    byte, and abort when SS goes high early.
+  \item \code{can_spi_node}: composing \code{spi_slave}, \code{spi_reg_bridge},
+    \code{register_bank} and \code{can_controller} into one node.
+  \item Bring-up in two halves: two boards on a shared bus line, then a microcontroller as SPI master
+    against them, in eight steps.
+  \item What real CAN controllers do that this design does not.
+\end{itemize}
+\end{chapterbox}
+
+\code{can_controller} is finished as of \chapref{c17:ch}: transmission, reception and arbitration. It
+instantiates \code{bit_timer}, \code{crc15} and both shift registers inside itself, so from outside
+the whole controller is a single component with the 15-port register-level interface
+\chapref{c11:ch} previewed.
+
+Then two layers go in front of it: \code{register_bank} (\chapref{c18:ch}) turns that interface into
+the register map, and \code{spi_reg_bridge} plus the \code{spi_slave} handed out turn the register map
+into a five-byte SPI transaction. What the parallel class writes its driver against is the far end of
+that chain \textemdash{} the register map and the protocol specification in
+appendix~\ref{app:protocol}, never \code{can_controller}'s ports.
+
+\begin{warning}
+This is the book's tightest chapter, and it is worth saying outright: two modules get written, the
+whole chain has to be simulated, the hardware has to come up, and every group presents.
+
+\textbf{So run ahead.} \code{register_bank} and \code{spi_reg_bridge} do not depend on
+\code{can_controller} at all \textemdash{} the former needs only \code{can_def}, the latter only
+\code{spi_def} \textemdash{} so both can be written in parallel with the controller, from
+\chapref{c10:ch} onwards. A group arriving here with the register bank finished and the transaction
+format read has the session for wiring up and debugging. A group starting here will not get through
+it all.
+\end{warning}
+
+\input{chapters/19/verification}
+\input{chapters/19/bridge}
+\input{chapters/19/bringup}
+\input{chapters/19/summary}
+\input{chapters/19/exercises}

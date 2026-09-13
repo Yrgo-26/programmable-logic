@@ -1,0 +1,28 @@
+% Chapter 5, typeset from lectures/L05: Appendix A becomes sections 5.1-5.5, and Appendix B the
+% exercises.
+
+\chapter{Variables and the hardware underneath}
+\label{c5:ch}
+
+{\large\itshape The last construct left, and what the toolchain makes of all of it.\par}
+
+\begin{chapterbox}{In this chapter}
+\begin{itemize}
+  \item \code{variable}: process-local storage, updating immediately where a \code{signal}
+    schedules.
+  \item Why the same accumulation gives two different answers depending on which one you reach for.
+  \item What an FPGA physically consists of: lookup tables and flip-flops, and nothing that is a
+    gate.
+  \item The critical path and Fmax, and what puts a speed limit on a clock.
+  \item The latch you describe by accident, and why it is only a warning.
+\end{itemize}
+\end{chapterbox}
+
+This chapter's point is in its first worked example: code that looks correct, simulates without
+complaint, and is wrong. The only way to see why is to \emph{trace} it rather than read it, one
+loop iteration at a time, all the way to the wrong answer. Do that on paper before you read the
+correction.
+
+\input{chapters/05/variables}
+\input{chapters/05/summary}
+\input{chapters/05/exercises}

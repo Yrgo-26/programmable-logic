@@ -1,0 +1,72 @@
+% Half-title, title and copyright pages.
+%
+% \bookversion is the release the PDF was built for: `make VERSION=book-v2` passes it in, and the
+% release workflow passes the tag. Without it the title page carries only the date of the build.
+\providecommand{\bookversion}{}
+\newcommand{\bookdate}{\number\day\space\ifcase\month\or januari\or februari\or mars\or april\or
+  maj\or juni\or juli\or augusti\or september\or oktober\or november\or december\fi\space
+  \number\year}
+\newcommand{\bookedition}{\ifx\bookversion\empty\else\bookversion\,·\,\fi\bookdate}
+
+\thispagestyle{empty}
+\vspace*{2.2in}
+\begin{flushright}
+  {\Large\bfseries Programmerbar logik}
+\end{flushright}
+\cleardoublepage
+
+\thispagestyle{empty}
+\vspace*{1.1in}
+\begin{flushleft}
+  {\color{accent}\rule{0.9in}{2.5pt}}\par\vspace{1.4ex}
+  {\fontsize{32}{38}\selectfont\bfseries Programmerbar\\[0.15ex] logik\par}
+  \vspace{2.2ex}
+  {\Large\itshape Digital konstruktion i VHDL, från ett\\grindnät till en CAN-nod i en FPGA\par}
+  \vspace{1.2in}
+  {\large Erik Pihl\par}
+  \vfill
+  {\small\scshape\lsstyle qrtech academy\par}
+  \vspace{0.6ex}
+  {\small\color{muted} \bookedition\par}
+\end{flushleft}
+\newpage
+
+\thispagestyle{empty}
+\vspace*{\fill}
+{\small
+\noindent\textit{Programmerbar logik}\\
+Copyright \textcopyright\ 2026 QRTECH Academy.
+
+\medskip
+\noindent Boken är satt ur kursens eget material: tjugo föreläsningar med appendix, deras övningar,
+de genomarbetade exemplen, grupprojektets specifikation och de två dokument som utgör kontraktet
+mot drivrutinskursen. Koden i boken, och all kod i det tillhörande kursrepot, får användas under
+MIT-licensen, som är repots licens:
+
+\medskip
+\noindent\url{https://opensource.org/licenses/MIT}
+
+\medskip
+\noindent Kursrepot håller föreläsningsmaterialet, de genomarbetade exemplen, samtliga utdelade
+testbänkar, byggskripten och Python\-källorna till figurerna. Varje sökväg boken hänvisar till,
+till exempel \file{lectures/L06/serial_rx8/serial_rx8.vhd}, är en sökväg i det repot.
+
+\medskip
+\noindent VHDL-koden i boken är VHDL-93, simulerad med GHDL och syntetiserad med Quartus Prime
+Lite. C++-koden i \secref{c10:sec:framing} är C++17, kompilerad med GCC. DE0-CV, Cyclone~V,
+Quartus, USB-Blaster, AVR och AVR32DB28 är varumärken som tillhör respektive ägare. CAN är
+standardiserat i ISO~11898; den kontroller boken bygger är en medvetet förenklad
+undervisningskonstruktion och ingen certifierbar implementation, och \secref{c19:sec:gaps}
+listar skillnaderna.
+
+\medskip
+\noindent Text och figurer är på svenska. All kod, alla kommentarer i koden och all utskrift från
+verktyg och testbänkar är på engelska, precis som i kursmaterialet.
+
+\medskip
+\noindent Satt i TeX Gyre Pagella och DejaVu Sans Mono med Lua\LaTeX.
+
+\medskip
+\noindent\textcolor{muted}{Denna utgåva: \bookedition.}
+\par}
+\cleardoublepage

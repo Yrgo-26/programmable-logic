@@ -1,0 +1,143 @@
+% Avsnitt 12.4, ur lectures/L12/appendix/c_exercises.md.
+
+\section{Övningar}
+\label{c12:sec:exercises}
+
+\begin{aside}
+Övning~\ref{c12:ex:metaprev} befäster \secref{c12:sec:metaprev}; Övning~\ref{c12:ex:bittimer} till
+\ref{c12:ex:drift} befäster \secref{c12:sec:bittimer}. Konstruera varje modul utifrån
+specifikationen i sitt eget avsnitt; de utdelade testbänkarna, körda enligt bilaga~\ref{app:sim}, är
+kontrollen av att de beter sig korrekt.
+\end{aside}
+
+% ------------------------------------------------------------------------------------------
+\exerciseset{Synkroniseraren}
+
+\exercise{\code{meta_prev}}{VHDL}
+\label{c12:ex:metaprev}
+Du har byggt den här modulen förut, så det mesta här handlar om de två sakerna som är nya.
+
+\xpart{a} Skriv din egen \file{meta_prev.vhd} utifrån \secref{c12:sec:metaprev} och kör dess
+testbänk:
+
+\begin{shell}
+cd controller
+ghdl -a --std=93 meta_prev.vhd meta_prev_tb.vhd
+ghdl -e --std=93 meta_prev_tb
+ghdl -r --std=93 meta_prev_tb --assert-level=error
+\end{shell}
+
+Lägg märke till att ingen \file{can_def.vhd} står med på den första raden. \code{meta_prev} är den
+enda modulen i boken som inte läser något paket alls, vilket också är skälet till att det är den som
+återanvänds tre gånger.
+
+\xpart{b} Ta bort den ena av de två vipporna, så att ett enda register blir kvar, och kör om. Vilken
+kontroll fallerar, och vad säger dess meddelande dig? Sätt tillbaka den. (En version med en vippa är
+inte bara svagare; den är precis den bugg testbänken finns till för att fånga, och den skulle annars
+passera varje funktionell simulering i boken, eftersom ingenting i en simulator någonsin är
+metastabilt.)
+
+\xpart{c} \code{meta_prev} har ingen reset. Säg vad \code{sync_out} läser på den första klockflanken
+efter uppstart, varför det är ofarligt här, och vad som skulle gå fel i \code{can_controller} självt
+om modulen \emph{hade} haft en ingång \code{reset_s2_n}: instansen \code{reset_sync} är den som
+producerar \code{reset_s2_n}, så vad skulle den ta för sin egen reset?
+
+\xpart{d} \code{can_controller} instansierar den två gånger, båda med standardbredden. Säg vilka två
+av dess femton portar det gäller, och varför just de två och inga andra. Säg sedan vad den tredje
+instansen i designen synkroniserar \textemdash{} den som \code{can_spi_node} äger på sin toppnivå i
+\chapref{c19:ch} \textemdash{} och varför just den inte kan ligga inuti \code{can_controller} i
+stället.
+
+\xpart{e} Två omkopplare slås om i samma ögonblick in i en instans med \code{WIDTH = 10}. Förklara
+varför \code{sync_out} under ett kort ögonblick kan visa den ena omkopplarens nya värde och den
+andras gamla, varför det inte är en bugg i \code{meta_prev}, och varför det skulle spela betydligt
+större roll om de tio bitarna vore en räknare som lästes över en klockdomängräns i stället för
+omkopplare som ställs för hand.
+
+% ------------------------------------------------------------------------------------------
+\exerciseset{Bittimern}
+
+\exercise{\code{bit_timer}}{VHDL}
+\label{c12:ex:bittimer}
+Skriv din egen \file{bit_timer.vhd} utifrån \secref{c12:sec:bittimer}. Verifiera den sedan:
+
+\begin{shell}
+cd controller
+ghdl -a --std=93 can_def.vhd bit_timer.vhd bit_timer_tb.vhd
+ghdl -e --std=93 bit_timer_tb
+ghdl -r --std=93 bit_timer_tb --assert-level=error
+\end{shell}
+
+Om en kontroll fallerar, läs assertion-meddelandet (bilaga~\ref{app:sim}); det namnger exakt vilket
+tick och vilket förväntat värde det gäller.
+
+\exercise{En konfigurerbar omsynkroniseringsoffset}{Simulering}
+\label{c12:ex:offset}
+Riktig CAN-hårdvara behöver ibland en bittimer som kan omsynkronisera \emph{och} omedelbart hoppa
+fram ett fast antal tick (en förenklad ersättare för de justeringar av fassegment som riktig
+CAN-bittajmingslogik utför, nämnda i \secref{c10:sec:bittiming}).
+
+\xpart{a} Lägg till en ny generic, \code{RESYNC_OFFSET: natural := 0}, i \code{bit_timer}. När
+\code{resync = '1'} ska räknaren sättas till \code{RESYNC_OFFSET} (i stället för alltid \code{0}) på
+nästa klockflank.
+
+\xpart{b} Med \code{RESYNC_OFFSET = 0} måste din ändrade entitet bete sig exakt som originalet;
+bekräfta det genom att köra den \emph{oförändrade} \file{bit_timer_tb.vhd} mot den; den ska
+fortfarande passera utan några ändringar i testbänken.
+
+\xpart{c} Räkna ut på papper var \textbf{båda} utgångarna hamnar när \code{RESYNC_OFFSET} är
+\code{10}: hur många tick efter en \code{resync}-puls som \code{sample} slår till, och hur många
+tick efter den som \code{bit_done} gör det. Båda flyttar sig, och av samma skäl \textemdash{}
+räknaren startar om på \code{10} i stället för \code{0}, så hela perioden är tio tick kortare.
+
+Låt sedan den utdelade testbänken mäta upp det åt dig. Ändra tillfälligt din generics standardvärde
+till \code{10} och kör om \code{bit_timer_tb}. Den binder ingen generic map, så den plockar upp
+vilket standardvärde du än sätter, och fall 4 är det som märker det:
+
+\begin{console}
+bit_timer_tb.vhd:132:17:@6832ns:(assertion error): bit_timer: unexpected sample at tick 25 after resync!
+\end{console}
+
+Lägg märke till \textbf{vilken} av de två kontrollerna som fallerar först. Fall 4 kontrollerar inte
+bara att \code{bit_done} kommer på rätt tick utan också att sampelpunkten flyttar med om, och
+sampelpunkten ligger först i perioden \textemdash{} så det är den som slår till, fjorton tick innan
+\code{bit_done}-kontrollen skulle ha gjort det. Under \code{--assert-level=error} stannar
+simuleringen där, så meddelandet om \code{bit_done} får du aldrig se.
+
+Meddelandet namnger själv ticket: \code{sample} kom på tick 25, alltså
+\code{SAMPLE_TICK - RESYNC_OFFSET}. Vill du se \code{bit_done} också, sänk sampelkontrollens
+\code{severity error} till \code{severity note} i din egen kopia av testbänken och kör om; den
+rapporterar då tick 39, alltså \code{TICKS_PER_BIT - 1 - RESYNC_OFFSET}. Bekräfta att båda stämmer
+med ditt pappersvar, sätt sedan tillbaka standardvärdet till \code{0} och kontrollera att den
+\emph{oförändrade} testbänken passerar igen.
+
+Det är värt att lägga märke till i sig: en testbänk som fallerar \emph{användbart} säger inte bara
+att en design är fel utan också hur mycket, vilket är skälet till att assertion-meddelandena i det
+här projektet alla namnger det tick eller det värde de förväntade sig.
+
+\exercise{Hur länge kan en bittimer frilöpa?}{Resonemang}
+\label{c12:ex:drift}
+\code{bit_timer} omsynkroniserar \textbf{en gång per ram}, vid SOF, och frilöper därifrån
+(\secref{c10:sec:stuffing}:s resonemang om klockåtervinning). Det fungerar bara om nodens egen
+oscillator håller sig tillräckligt nära varenda annan nods under hela ramen. Den här övningen sätter
+en siffra på ”tillräckligt nära”.
+
+Anta att en nods 50 MHz-oscillator i själva verket går 1~\% för fort, så att dess tick är 1~\%
+kortare än sändarens, och att allt annat är som specificerat: \code{TICKS_PER_BIT = 50},
+\code{SAMPLE_TICK = 35}.
+
+\xpart{a} Hur många tick har den här nodens räknare vunnit på sändarens efter en bitperiod? (Uttryck
+det som en andel av ett tick.)
+
+\xpart{b} Noden samplar vid tick 35 av 50, så i förhållande till den sanna biten kan den driva 15
+tick \emph{senare} innan den samplar bortom bitens slut, eller 35 tick \emph{tidigare} innan den
+samplar innan biten börjar. En snabb klocka driver sampelpunkten tidigare. Efter hur många
+bitperioder har den drivit hela 35 tick?
+
+\xpart{c} En standardram med 8 databytes går på ungefär 110--130 bitar på ledningen när stoppbitarna
+är inräknade. Jämför det med ditt svar på \textbf{b)}: samplar den här noden fortfarande rätt vid
+EOF? Vid ungefär vilket fält börjar den sampla fel bit?
+
+\xpart{d} Riktiga CAN-kontrollrar omsynkroniserar \emph{under} en ram, inte bara vid SOF, med hjälp
+av de fassegment och den synchronization jump width som \secref{c10:sec:bittiming} nämner. Förklara
+med en eller två meningar vad det ger dem, uttryckt i ditt svar på \textbf{b)}.

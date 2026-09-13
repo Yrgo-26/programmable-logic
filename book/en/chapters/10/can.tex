@@ -1,0 +1,294 @@
+% Sections 10.2-10.6, from lectures/L10/appendix/a_can_frame_format.md.
+
+\section{Introduction to CAN}
+\label{c10:sec:can}
+
+CAN was designed for automotive and industrial systems: many independent controllers (engine,
+brakes, instrument cluster, sensors) exchanging short messages reliably, with no single point of
+failure.
+
+Point-to-point wiring stops scaling almost immediately. The framed protocol in
+\secref{c10:sec:framing} assumed a single shared link; one controller talking to an instrument
+cluster, an ABS unit and three sensors would need five separate links, each with its own cabling,
+connectors and transceiver. A single shared bus replaces all of them: every node connects to the
+same pair of wires, and every node can both listen and transmit on it.
+
+\subsection*{The physical bus}
+A real CAN bus is a twisted differential pair, \code{CAN_H} and \code{CAN_L}. A node signals a bit by
+driving the two wires apart (\textbf{dominant}) or letting them float together through a resistor
+(\textbf{recessive}). An external transceiver chip handles the analogue layer.
+
+This book works entirely above it: one logic value per bit, \code{0} for dominant and \code{1} for
+recessive. That is exactly what a transceiver presents to, and accepts from, the digital logic on
+either side.
+
+\subsection*{Dominant and recessive}
+The whole arbitration scheme rests on a single property:
+\begin{itemize}
+  \item \textbf{Recessive (\code{1})} is the bus's idle state. Every node releases the bus and the
+    transceivers' bias networks pull both wires to the same level.
+  \item \textbf{Dominant (\code{0})} is asserted by actively driving the wires apart. If
+    \emph{any} node drives dominant while the rest are recessive, the bus reads dominant, regardless
+    of how many nodes are involved or which asserted it first.
+\end{itemize}
+
+That is exactly a \textbf{wired-AND}: treat every node's output as an input to a bus-wide AND gate,
+and \code{0} dominates. Real transceivers implement it in hardware with open drain; the system
+testbench in \chapref{c17:ch} models identical behaviour digitally by combining every node's pair
+\code{(tx_bus, bus_en)} in the same way.
+
+\subsection*{Multi-master, and why that requires arbitration}
+Most embedded buses answer the question ``who may transmit?'' by decree: SPI has a single master,
+and I2C, which does define a wired-AND arbitration much like the one below, is also nearly always
+run with a single master. CAN makes multi-master the normal case: \textbf{any node may transmit as
+soon as the bus is idle}, and if two start at the same instant the bus itself decides who carries
+on. There is no retransmission back-off and a collision is not a failure at all. This is CAN's
+signature idea, \textbf{arbitration}.
+
+The mechanism in brief; the worked example comes in \secref{c10:sec:arbitration}:
+\begin{enumerate}
+  \item Every message starts with its identifier, sent bit by bit, MSB first.
+  \item Every transmitting node also monitors the bus while it sends each identifier bit.
+  \item As long as the bit it sent matches what the bus reads, it goes on transmitting.
+  \item The moment a node transmits recessive (\code{1}) but observes dominant (\code{0}), some
+    other node is transmitting a \code{0} where it itself sent a \code{1}. It has lost arbitration:
+    it stops transmitting immediately and becomes a receiver. The node that carried on driving
+    dominant wins, without having noticed anything.
+\end{enumerate}
+
+Two consequences of that:
+\begin{itemize}
+  \item \textbf{Lower identifiers always win}, since they carry more leading dominant bits. Hence
+    ``priorities'' in CAN folklore.
+  \item \textbf{Every identifier has to be unique.} CAN puts that requirement on the network
+    designer; the controller does not enforce it in hardware.
+\end{itemize}
+
+\begin{aside}
+\textbf{A simplification to flag early.} Step 4 describes a \emph{production} controller, and
+seamlessly becoming a receiver mid-frame is part of why real CAN treats a collision as a
+non-event. This book's \code{can_controller} (\chapref{c16:ch}--\ref{c17:ch}) stops driving at
+exactly the same moment, which is the part that matters to the bus, but then abandons the frame and
+sets \code{error} instead of decoding the winner's message. \Secref{c19:sec:gaps} returns to it in
+its list of differences from a production controller.
+\end{aside}
+
+\Canref{1} takes the bus on its own: the topology, the dominant and recessive asymmetry, the
+wired-AND, the two termination resistors, and the relationship between bit rate and bus length
+\textemdash{} 1~Mbit/s reaches about 40 m, and the reason is arbitration, which requires a bit to
+travel out to the bus's furthest node and back before the bit is over.
+
+% ------------------------------------------------------------------------------------------
+\section{Broadcast, not addressing}
+\label{c10:sec:broadcast}
+
+The framed protocol in \secref{c10:sec:framing} needed DST and SRC because more than one node could
+listen. CAN faces the same problem on the same kind of bus and answers it entirely differently:
+\textbf{a CAN frame carries no destination address at all.}
+
+Every node sees every frame. The identifier winning arbitration names no receiver; it names the
+\emph{kind of message}, broadcast to everyone and relevant to whoever cares. Every node decides for
+itself whether an identifier means anything, typically by comparing it against a small set it is
+interested in, in software or in the controller's filtering hardware. A node that is not interested
+simply discards the frame; nothing at the protocol level steered it away.
+
+\paragraph{Example}
+Suppose a design reserves identifiers by convention,
+$\mathit{StatusReq} = \code{0x300} + \mathit{nodeId}$ and
+$\mathit{StatusResp} = \code{0x400} + \mathit{nodeId}$. Sensor node 3 is asked for status on
+\code{0x303} and replies on \code{0x403}. Every node receives the frame \code{0x303}; only the one
+recognising it as its own request identifier replies. No field said ``this is for node 3''.
+
+It is a genuinely different design choice. The protocol in \secref{c10:sec:framing} scales addressing
+by widening DST and SRC as the number of nodes grows; CAN scales by convention for how identifiers
+are assigned and filtered, and there is no address field to widen.
+
+% ------------------------------------------------------------------------------------------
+\section{The CAN frame format}
+\label{c10:sec:frameformat}
+
+\lecfig[0.86]{lectures/L10/appendix/images/standard_can_frame_format.png}{CAN's standard data frame,
+field by field, in transmission order.}{c10:fig:canframe}
+
+This book implements CAN's \textbf{standard data frame (base format)}, bit by bit as the standard
+defines it: an 11-bit identifier and up to 8 data bytes. Remote frames, extended 29-bit identifiers
+and everything the standard defines \emph{around} data frames (error and overload frames, and the
+3-bit intermission separating one frame from the next) are outside the book's scope, but every frame
+this controller puts on the wire is a fully standard-compliant data frame. It is the same
+simplification real designs often start from, and it is more than enough to build a genuine, working
+controller.
+
+The diagram gives the transmission order and every field's width. Bit stuffing applies to every field
+from \textbf{SOF through the CRC field}, and not the CRC delimiter, the ACK field or EOF.
+
+\subsection*{Field by field}
+\paragraph{SOF, 1 bit, always dominant}
+Sent out on an otherwise idle, recessive bus, so it produces the single recessive-to-dominant edge
+every node waits for. That edge marks both that a frame is starting and resynchronises every node's
+bit timing against it; \code{bit_timer.resync} in \chapref{c12:ch} is exactly this.
+
+\paragraph{Identifier, 11 bits, MSB first}
+Doubles as the message's arbitration priority. Every transmitting node compares every bit it sends
+against what the bus actually reads, and drops out the moment it sends recessive but observes
+dominant.
+
+\paragraph{RTR, 1 bit, always dominant here}
+The Remote Transmission Request bit ends the 12-bit arbitration field: dominant marks a data frame,
+recessive a \emph{remote frame}, a request for whoever owns the identifier to send its data. This
+book supports data frames only, so its controller always sends RTR dominant, and a receiver sampling
+it recessive abandons the frame and sets \code{error} (\chapref{c17:ch} implements that check).
+Formally, arbitration spans the identifier \emph{and} RTR; in real CAN that is what lets a data frame
+beat a remote frame with the same identifier. With every node here sending RTR dominant, the
+identifier always decides on its own.
+
+\paragraph{Control field, 6 bits: IDE, r0, DLC}
+\code{IDE} is always \code{0} here; \code{1} would mark an extended-identifier frame, outside the
+book's scope. \code{r0} is reserved, always \code{0}. \code{DLC} is the 4-bit-wide length field,
+\code{0}--\code{8} bytes encoded as \code{0000}--\code{1000}. It is the length field from
+\secref{c10:sec:framing} in a new guise: without it a receiver could not tell whether the data field
+ends after this byte or carries on.
+
+\paragraph{Data field, 0 to 8 bytes}
+Sent MSB first, byte 0 first, with the length DLC announced. When DLC is \code{0} the field is absent
+entirely and the CRC follows directly on the control field.
+
+\paragraph{CRC field, 15 bits plus a delimiter}
+The CRC covers every bit from SOF through the end of the data field, and is far more robust than the
+summed checksum in \secref{c10:sec:framing}. One detail matters later on: it covers only the
+\emph{real} bits. Stuff bits are inserted after the CRC has been computed on the way out and
+discarded before it is checked on the way in, so they never enter the computation (\chapref{c14:ch}
+and \ref{c15:ch} are where that gating is built). \Chapref{c13:ch}'s engine computes it bit-serially,
+one bit at a time while the frame is being sent or received, with no separate ``compute the
+checksum'' step at the end.
+
+The \textbf{CRC delimiter} is the 16th bit, always recessive and never stuffed. It exists so that a
+bit independent of the bit stuffing rule always follows the CRC value, which is what lets a receiver
+find the boundary between the CRC and ACK fields.
+
+\paragraph{ACK field, 2 bits}
+The transmitter sends both recessive. Every \emph{other} node that received the frame correctly
+(framing intact, stuffing respected, CRC valid) pulls the ACK slot dominant. The transmitter never
+checks its own CRC against itself, so the dominant bit from somebody else is its only confirmation
+that the frame arrived intact somewhere. The \textbf{ACK delimiter} is recessive and unstuffed, and
+marks the boundary for the same reason as the CRC delimiter.
+
+\paragraph{EOF, 7 recessive bits, unstuffed}
+Seven identical bits in a row are far more than the bit stuffing rule would ever allow inside a
+stuffed field, which is exactly what makes EOF unmistakable. That holds only if every node agrees not
+to stuff it, which is why EOF and the two delimiters are defined as exempt from stuffing.
+
+\Canref{2} goes through the same frame field by field, and includes what lies outside this book's
+controller: the RTR semantics of remote frames, what the ACK slot means to a transmitter reading it
+back, and the three bits of intermission separating one frame from the next.
+
+% ------------------------------------------------------------------------------------------
+\section{Bit stuffing}
+\label{c10:sec:stuffing}
+
+\textbf{The rule.} Throughout every stuffed field, SOF through the CRC field: after \textbf{five
+consecutive bits of the same value} the transmitter inserts an extra bit of the \emph{opposite}
+value. That bit carries no data, and every receiver discards it by counting the same way.
+
+\textbf{Why it exists}, for two related reasons:
+\begin{enumerate}
+  \item \textbf{Clock recovery.} Every node's bit timer runs on its own oscillator. A long run of
+    identical bits contains no transitions, so a receiver has nothing confirming that it is still
+    aligned with the transmitter's bit boundaries. Guaranteeing a transition at least every fifth
+    real bit bounds how far its timing can drift. Real CAN resynchronises on the edges bit stuffing
+    guarantees; this book's controller is simpler and resynchronises only at SOF
+    (\code{bit_timer.resync}, \chapref{c12:ch}), which makes the bounded drift more important still.
+  \item \textbf{Telling real data from EOF.} EOF is seven identical recessive bits, unstuffed. A
+    stuffed field can never accidentally produce that run, which is what makes seven unstuffed
+    recessive bits an unambiguous end of frame rather than something the identifier or the data field
+    could have produced by chance.
+\end{enumerate}
+
+\paragraph{Worked example}
+To send the 8-bit sequence \code{11111000} the rule fires after the fifth consecutive \code{1}:
+insert a \code{0}, then carry on with the real data. Every column below is a bit actually on the
+wire, so the real-bits row leaves a gap where the stuff bit sits:
+
+\begin{textdrawing}
+Real bits:                1  1  1  1  1  -  0  0  0
+Transmitted bit stream:   1  1  1  1  1  0* 0  0  0
+Run length:               1  2  3  4  5  1  2  3  4
+                                         ^ stuff bit - not real data
+\end{textdrawing}
+
+Read the run-length row against the transmitted row, not against the real-bits row: the rule counts
+bits on the wire. The stuff bit is itself the first bit of the new run, which is why the count reads
+\code{1} under it and \code{2} under the first real \code{0} that follows. \Chapref{c14:ch} builds
+exactly this counter in hardware.
+
+A receiver counts the same five \code{1}s, expects the next bit to be a stuff bit, and discards it if
+it inverts the run. If a \emph{sixth} consecutive \code{1} turns up instead where the stuff bit
+should have been, that is a stuffing violation: a detected framing error, treated as fatal, reported
+by \code{rx_shift_reg.stuff_error} in \chapref{c15:ch}.
+
+\begin{warning}
+\textbf{A subtlety worth mentioning now, since it surprises people later.} The run count is
+\emph{not} cleared at field boundaries. A run beginning in one field and carrying on into the next is
+counted straight through, and can trigger a stuff bit right at the boundary. Stuffing cares only
+about the bits actually on the wire, never about which named field they belong to.
+\end{warning}
+
+\Canref{3} derives the five rule from the clock recovery problem and takes the CRC-15 in the same
+chapter, for the reason \chapref{c13:ch} and \ref{c14:ch} then live with: stuffing and the checksum
+share a bit stream but not bits, and whoever understands one without the other gets the wrong CRC.
+
+% ------------------------------------------------------------------------------------------
+\section{Arbitration, worked through in full}
+\label{c10:sec:arbitration}
+
+Nodes P (identifier \code{0x0F0}) and Q (identifier \code{0x100}) start transmitting at the same SOF.
+Both send SOF as \code{0}, so no contest arises yet. Then the identifiers, MSB first:
+
+\begin{textdrawing}
+             bit:  1  2  3  4  5  6  7  8  9 10 11
+ P (0x0F0) sends:  0  0  0  1  1  1  1  0  0  0  0
+ Q (0x100) sends:  0  0  1  -  -  -  -  -  -  -  -   (loses at bit 3, stops driving)
+       bus reads:  0  0  0  1  1  1  1  0  0  0  0
+\end{textdrawing}
+
+Bits 1--2 match for both nodes, so nothing happens. At bit 3, P sends dominant and Q recessive, so
+the bus reads dominant. Q, monitoring while it transmits, sees its own \code{1} against a bus reading
+\code{0}: \textbf{Q has lost arbitration} and stops driving immediately. P sees \code{0} on a bus
+reading \code{0}, exactly what it expected, and carries on without ever finding out that a contest
+took place.
+
+In a production controller Q would now receive the rest of P's frame. This book's
+\code{can_controller} stops driving at the same moment but abandons the frame, as flagged above and
+as \secref{c19:sec:gaps} returns to.
+
+The mechanism generalises to any number of simultaneous transmitters: the numerically lowest
+identifier wins (equivalently: the longest run of leading dominant bits), and every loser drops out
+the moment its recessive bit is overruled, never later than exactly that bit.
+
+\Canref{4} works through both the two-node and the three-node case, and then takes the two questions
+this chapter does not ask: what starvation and priority inversion mean on a bus where low identifiers
+always win, and what a transmitter never gets to find out about why it lost.
+
+% ------------------------------------------------------------------------------------------
+\section{Bit timing and the sample point}
+\label{c10:sec:bittiming}
+
+Arbitration works only if every node agrees on \emph{when} a bit is on the bus, which raises a
+question: at what point within a bit period does a node read it?
+
+Every node divides its own clock into bit periods of fixed length using its own local bit timer.
+Because those oscillators are independent, and because signals take time to propagate along the bus,
+a node does \textbf{not} sample at the start of the period. It waits until a \textbf{sample point}
+further into the period, by which time the transmitted level has had time to settle.
+
+This book samples 70~\% into every bit period, a reasonable and simple choice for a short bus on a
+single board at 1~Mbit/s.
+
+Real CAN controllers make the sample point configurable and divide the bit period into named segments
+(propagation segment, phase segments) tuned against bus length, propagation delay and oscillator
+tolerance. That lies outside this book's fixed sample point, but not outside \canref{5}, which
+divides the bit period into its segments, works out the timing from a clock frequency and a bit rate,
+and describes the resynchronisation at every edge that this controller replaces with a single pulse
+at SOF.
+
+\Secref{c10:sec:candef} turns those 70~\% into the concrete VHDL constant \code{SAMPLE_TICK}, derived
+from the clock frequency and the bit rate rather than hardcoded.

@@ -1,0 +1,28 @@
+% Kapitel 4, satt ur lectures/L04: Appendix A blir avsnitt 4.1-4.9, och Appendix B övningarna.
+
+\chapter{Metastabilitet och synkronisering}
+\label{c4:ch}
+
+{\large\itshape Att göra en asynkron ingång säker att använda i ett synkront system.\par}
+
+\begin{chapterbox}{I det här kapitlet}
+\begin{itemize}
+  \item Varför en asynkron ingång kan förstöra de rena flankdetektorer och register som byggdes i
+    \chapref{c3:ch}.
+  \item Metastabilitet: vad det är, och varför det inte helt enkelt går att konstruera bort.
+  \item Dubbelvippsynkroniseraren, och mönstret ”aktivera asynkront, släpp synkront” för reset.
+  \item Att återanvända samma kedja för flankdetektering, och vad den gör och inte gör åt studs.
+  \item Generics: en modul som betjänar flera storlekar.
+  \item \code{led_toggle_sync}, driven av en riktig, studsande tryckknapp.
+\end{itemize}
+\end{chapterbox}
+
+Innan synkroniseraren sätts in: förutsäg vad en riktig, asynkron knapp gör med \chapref{c3:ch}:s
+flankdetektor. Den förutsägelsen är skälet till hela kapitlet.
+
+Argumentet som är värt att hålla fast vid är varför två vippor gör felet \emph{osannolikt} snarare
+än omöjligt. Det är den delen som inte överlever att bli ihågkommen som en tumregel.
+
+\input{chapters/04/metastability}
+\input{chapters/04/summary}
+\input{chapters/04/exercises}

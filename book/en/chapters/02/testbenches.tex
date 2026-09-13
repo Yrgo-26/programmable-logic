@@ -1,0 +1,204 @@
+% Section 2.7, from lectures/L02/appendix/a_larger_networks.md (A.7) and
+% lectures/L02/appendix/c_testbenches.md (C.1-C.6).
+
+\section{Verifying your VHDL with a testbench}
+\label{c2:sec:testbenches}
+
+Every VHDL module you write for an exercise comes with a \textbf{self-checking testbench}: a small
+VHDL file that drives your inputs, checks your outputs and says which case failed.
+\Chapref{c1:ch}'s exercises already handed such things out, and \secref{c1:sec:module} gave you the
+three commands that run one.
+
+You are not asked to write the testbench that verifies a module you build; every single one of them
+is handed out. Running them is enough to verify every exercise on your own laptop, with no FPGA
+board. (A couple of project exercises from \chapref{c13:ch} onwards invite a short test rig of your
+own, but nothing you are assessed on rests on a testbench you wrote yourself.)
+
+This section is the book's introduction, and every later chapter's exercises refer back here.
+Appendix~\ref{app:sim} is the fuller version, written for the group project; come back here for the
+introduction and go there for the details.
+
+\subsection{What you need}
+\label{c2:sub:need}
+\textbf{GHDL}, the open-source VHDL analyser and simulator. Check with \code{ghdl --version};
+install on WSL or Ubuntu with \code{sudo apt -y install ghdl}.
+
+Every command below uses \code{--std=93}, the VHDL standard the book targets.
+
+\subsection{What a testbench is}
+\label{c2:sub:what}
+A testbench is itself a VHDL module, but a special one:
+\begin{itemize}
+  \item Its entity has \textbf{no ports}: nothing connects to the outside world, since it is the
+    top of the simulation.
+  \item Its architecture \textbf{instantiates your design}, the ``device under test'', labelled
+    \code{dut}, and drives its inputs.
+  \item It \textbf{checks} every output with an \code{assert}. If an output is wrong the assertion
+    fires with a message and the simulation stops.
+\end{itemize}
+
+So instead of you reading a waveform diagram to decide whether the output is right, the testbench
+decides it, and speaks up only when something is wrong.
+
+\subsection{Running a testbench: analyse, elaborate, run}
+\label{c2:sub:run}
+Three steps. Pass \code{--std=93} to all three, and give the \textbf{testbench's entity name}, not
+a file name, to the last two:
+
+\begin{shell}
+ghdl -a --std=93 <module>.vhd <module>_tb.vhd        # analyze both files (module first)
+ghdl -e --std=93 <module>_tb                         # elaborate the testbench
+ghdl -r --std=93 <module>_tb --assert-level=error --stop-time=10ms   # run it
+\end{shell}
+
+\begin{itemize}
+  \item \code{--assert-level=error} makes a failed check stop the run and return a
+    \textbf{non-zero exit code}, a real pass/fail that you can check with \code{echo $?}. The
+    testbenches in this book's first part raise failures with \code{severity failure}, which stops
+    the run by itself, so you get a real pass/fail even without the flag. Keep it on anyway: it is
+    the habit that also works with testbenches reporting at a lower severity level, and the group
+    project's testbenches are exactly those (appendix~\ref{app:sim}).
+  \item \code{--stop-time=10ms} caps how long the simulation may run. A testbench often waits for
+    your module to do something, with a line like \code{wait until tx = '0';}. If your module never
+    does, that wait never finishes, and without a stop time the simulation hangs: no output, no
+    error, just a terminal sitting there waiting. 10\,ms of \emph{simulated} time is far more than
+    any testbench here needs, and takes well under a second in real time.
+  \item A passing run prints its ``all checks passed'' note and exits with 0. Every testbench in
+    this book ends with that note, so if you do not see it the run did not finish: it either failed
+    a check or hit the stop time.
+\end{itemize}
+
+\subsection{Checking an exercise}
+\label{c2:sub:exercise}
+Every VHDL exercise has its testbench in a directory of its own. This chapter's
+Exercise~\ref{c2:ex:xyz}, for example, has
+\file{lectures/L02/exercises/xyz_logic/xyz_logic_tb.vhd}. Write your module in the \textbf{same
+directory}, with exactly the name the exercise asks for, and then run the three commands from
+there:
+
+\begin{shell}
+cd lectures/L02/exercises/xyz_logic
+ghdl -a --std=93 xyz_logic.vhd xyz_logic_tb.vhd
+ghdl -e --std=93 xyz_logic_tb
+ghdl -r --std=93 xyz_logic_tb --assert-level=error --stop-time=10ms
+\end{shell}
+
+Every testbench's file header lists exactly these commands.
+
+The testbench connects to your module \textbf{positionally}, not by name, so your entity must
+declare its ports in the \textbf{same order} as the exercise lists them. The names are yours to
+choose, but use the given ones anyway, so that your module and the testbench's error messages speak
+about the same signals.
+
+A port declared in the wrong order fails in one of two ways, neither of which says ``wrong order'':
+\begin{itemize}
+  \item if the misplaced ports have \textbf{different} types or widths, analysis stops with
+    \code{can't associate "sel" with port "sel"}, pointing at the testbench's \code{port map} line.
+  \item if they have the \textbf{same} type, say several \code{std_logic} ports, it analyses and
+    elaborates perfectly well, and then fails at run time as an ordinary assertion failure, which
+    reads exactly like a logic bug in your design.
+\end{itemize}
+
+So when a testbench fails on the very first case it checks: reread your port order before you go
+through your architecture. The same goes for \textbf{generics}: a module that carries them must
+declare exactly the ones the exercise states, in order.
+
+\subsection{When the design needs more than one file}
+\label{c2:sub:multifile}
+Some exercises build one module out of another, so the \code{ghdl -a} line names several files
+instead of two. The elaboration and run steps are unchanged: they still take only the testbench's
+\textbf{entity name}.
+
+\begin{shell}
+ghdl -a --std=93 <subcomponent>.vhd <module>.vhd <module>_tb.vhd
+ghdl -e --std=93 <module>_tb
+ghdl -r --std=93 <module>_tb --assert-level=error --stop-time=10ms
+\end{shell}
+
+\begin{itemize}
+  \item \textbf{Order matters on the analysis line}: name a module before anything that
+    instantiates it, so that GHDL has already seen the entity when it reaches the
+    \code{entity work.<name>} referring to it. Subcomponents first, your top level after them, the
+    testbench last.
+  \item No exercise directory has a subcomponent handed out with it. Every module a design
+    instantiates is one you wrote in an earlier exercise and copy in yourself; the exercise says
+    which, and from where.
+  \item The exercises that need this are this chapter's \code{hex_display} (which instantiates your
+    \code{display}), \chapref{c4:ch}'s \code{led_toggle_sync2}, \chapref{c7:ch}'s \code{blinker}
+    and \code{walking_led}, and all of \chapref{c8:ch}'s, where the receiver names five files and
+    the transmitter four.
+  \item Every testbench's file header lists the exact command for its own exercise.
+\end{itemize}
+
+\subsection{Reading the result}
+\label{c2:sub:result}
+A failed check looks like this:
+
+\begin{console}
+xyz_logic_tb.vhd:38:13:@10ns:(assertion failure): xyz_logic: wrong X with a='0' b='0' c='0' d='0', expected '0' but got '1'!
+ghdl:error: assertion failed
+\end{console}
+
+Read it in order: \code{file:line} is where the assertion is, \code{@time} is when it fired, and
+after that comes the message. It is the same shape as a compilation error from GHDL, so it maps
+onto something you already know. No error means every case matched.
+
+\subsection{A complete example}
+\label{c2:sub:example}
+A combinational testbench in the form every testbench in this book uses, here for
+\chapref{c1:ch}'s \code{or_gate}:
+
+\begin{vhdlcode}
+library ieee;
+use ieee.std_logic_1164.all;
+use ieee.numeric_std.all;
+
+entity or_gate_tb is
+end entity;
+
+architecture behaviour of or_gate_tb is
+signal a, b, x: std_logic;
+begin
+    dut: entity work.or_gate
+        port map(a, b, x);   -- positional: same order as or_gate's port clause.
+
+    SIM_PROCESS: process is
+    begin
+        for i in 0 to 3 loop
+            (a, b) <= std_logic_vector(to_unsigned(i, 2));   -- apply inputs
+            wait for 10 ns;                                  -- let them settle
+            assert x = (a or b)                              -- check AFTER the wait
+                report "or_gate: wrong output with a=" & std_logic'image(a)
+                     & " b=" & std_logic'image(b)
+                     & ", expected " & std_logic'image(a or b)
+                     & " but got " & std_logic'image(x) & "!"
+                severity failure;
+        end loop;
+        report "or_gate: all checks passed!" severity note;
+        wait;                                                -- end the simulation
+    end process;
+end architecture;
+\end{vhdlcode}
+
+Two rules keep a combinational testbench correct:
+\begin{itemize}
+  \item \textbf{Apply, wait, check, in that order.} A signal assignment only \emph{schedules} a
+    value, so the inputs and the output are not updated until the \code{wait}. Checking before it
+    tests the previous round's values.
+  \item \textbf{End with \code{wait;}} so that the stimulus process suspends and the simulation
+    stops by itself.
+\end{itemize}
+
+Clocked designs need a little more, a clock-generating process and a way to stop it, which is
+exactly the machinery the testbenches handed out already contain. For the exercises you write only
+the module.
+
+\paragraph{Run one now}
+Against this chapter's first worked example:
+
+\begin{shell}
+cd lectures/L02/gate_network
+ghdl -a --std=93 gate_network.vhd gate_network_tb.vhd
+ghdl -e --std=93 gate_network_tb
+ghdl -r --std=93 gate_network_tb --assert-level=error --stop-time=10ms
+\end{shell}

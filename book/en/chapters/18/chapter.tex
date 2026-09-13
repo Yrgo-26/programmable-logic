@@ -1,0 +1,34 @@
+% Chapter 18, typeset from lectures/L18: Appendix A becomes sections 18.1-18.8, the SPI walkthrough
+% 18.9, and Appendix B the exercises.
+
+\chapter{The register bank and SPI from the waveform}
+\label{c18:ch}
+
+{\large\itshape This is where the half begins that makes the controller reachable from a
+microcontroller.\par}
+
+\begin{chapterbox}{In this chapter}
+\begin{itemize}
+  \item Why \code{tx_done} and \code{rx_valid} as one-cycle pulses are unusable for a polling driver,
+    and what the register map promises instead: sticky, pollable levels with explicit clears.
+  \item \code{register_bank}: the STATUS latching, \code{TX_SEND} as a write-triggered event,
+    capturing a received frame, and masking on write.
+  \item SPI from the waveform upwards: modes, MSB first, SS as framing.
+  \item Why the slave does \textbf{not} clock on SCK but oversamples it in the 50 MHz domain.
+  \item The \code{spi_slave} handed out: the byte engine getting \code{SCK}, \code{MOSI} and
+    \code{SS} safely into the system clock domain and handing over one clean byte at a time.
+\end{itemize}
+\end{chapterbox}
+
+\code{can_controller} is finished as of \chapref{c17:ch}. This chapter builds the first of the two
+layers that make it reachable from outside. The module can be written long before the controller is
+finished \textemdash{} it needs only \code{can_def} \textemdash{} so it is a full work stream that can
+start in parallel.
+
+The authoritative source for every register number in this chapter is appendix~\ref{app:protocol}.
+Where the chapter and the specification disagree, the specification wins.
+
+\input{chapters/18/registerbank}
+\input{chapters/18/spi}
+\input{chapters/18/summary}
+\input{chapters/18/exercises}

@@ -1,0 +1,328 @@
+% Section 5.7, from lectures/L05/appendix/b_exercises.md.
+
+\section{Exercises}
+\label{c5:sec:exercises}
+
+\begin{aside}
+\textbf{How to check your work.} Every exercise below that asks you to write a VHDL module has a
+self-checking testbench under \file{lectures/L05/exercises/}. Write your module in its directory
+\file{exercises/<module>/}, with the entity name and the \textbf{port order} the exercise states,
+and then run it with GHDL \textemdash{} see \secref{c2:sec:testbenches} for the three commands.
+\end{aside}
+
+% ------------------------------------------------------------------------------------------
+\exerciseset{\code{variable} versus \code{signal}}
+
+\exercise{Trace the accumulator bug}{Reasoning}
+\label{c5:ex:trace}
+The broken \code{parity_gen} architecture from \secref{c5:sec:variable} is reproduced below:
+
+\begin{vhdlcode}
+architecture broken of parity_gen is
+signal parity_s: std_logic;
+begin
+    parity <= parity_s;
+
+    process(bits) is
+    begin
+        parity_s <= '0';
+        for i in bits'range loop
+            parity_s <= parity_s xor bits(i);
+        end loop;
+    end process;
+end architecture;
+\end{vhdlcode}
+
+Assume \code{bits} has the range \code{7 downto 0}, that \code{bits = "10110110"}, and that
+\code{parity_s} holds \code{'0'} before the process starts.
+
+\xpart{a} Trace the process by hand. Note, for the initial assignment and for every loop iteration:
+the current index \code{i}, the value of \code{bits(i)}, the value read from \code{parity_s}, the
+value scheduled for \code{parity_s}, and whether that scheduled assignment survives until the
+process suspends.
+
+Remember that a signal assignment does not update the signal immediately, and that assignments to
+the same signal during one and the same round replace earlier assignments scheduled for the same
+simulation time.
+
+\xpart{b} Determine the final value assigned to \code{parity_s} after the process suspends. Then
+compute the correct XOR parity of \code{"10110110"} by hand, compare it with the result from the
+broken architecture, and explain why repeated assignments to the signal do not create an
+accumulator.
+
+\xpart{c} Trace the variable-based architecture \code{behaviour} from \file{parity_gen.vhd} with the
+same input. Note, for every loop iteration: the value of \code{bits(i)}, the value of \code{acc}
+before the XOR operation, and the value of \code{acc} immediately after it. Confirm that \code{acc}
+keeps each iteration's result so that the next iteration can use it, and that the final value
+assigned to \code{parity} is the correct XOR parity.
+
+\exercise{\code{min_of_two}}{VHDL}
+\label{c5:ex:minoftwo}
+Write an entity named \code{min_of_two}.
+
+\begin{booktable}{@{}p{3.6em}p{3.4em}p{11.4em}L@{}}
+  \thead{Port} & \thead{Dir.} & \thead{Type} & \thead{Meaning} \\
+  \midrule
+  \code{a} & in & \code{std_logic_vector(3 downto 0)} & First value. \\
+  \code{b} & in & \code{std_logic_vector(3 downto 0)} & Second value. \\
+  \code{m} & out & \code{std_logic_vector(3 downto 0)} & The smaller of the two. \\
+\end{booktable}
+
+Treat \code{a} and \code{b} as unsigned four-bit values. Implement the circuit with a process:
+\begin{itemize}
+  \item Include \code{a} and \code{b} in the sensitivity list.
+  \item Declare a process-local variable holding the smaller value.
+  \item Compare \code{a} and \code{b} as unsigned numbers, using the facilities in
+    \code{ieee.numeric_std} per \secref{c2:sec:vectors}.
+  \item Assign the variable exactly once per round, and assign it to \code{m} after the comparison.
+\end{itemize}
+
+This exercise needs no loop. Its point is to use a variable as temporary process-local storage for
+something \emph{other} than an accumulator: \secref{c5:sec:variable}'s worked example builds a value
+up across the iterations of a loop, which is the case a variable is most often introduced for, and
+it is easy to leave thinking that is the only thing they are good for. Here the variable simply
+holds an intermediate result for the few lines separating the computation from its use, which is the
+more common of the two uses in real code.
+
+\modulefig[0.62]{lectures/L05/appendix/images/min_of_two.png}
+
+\begin{selfcheck}
+\textbf{Self-check.} Name your entity \code{min_of_two}, with the ports \code{a}, \code{b} (in) and
+\code{m} (out), all \code{std_logic_vector(3 downto 0)}, declared in that order; its testbench is in
+\file{exercises/min_of_two/}.
+\end{selfcheck}
+
+\exercise{\code{ones_count8}}{VHDL}
+\label{c5:ex:ones}
+Write an entity named \code{ones_count8} that counts how many bits in an 8-bit input are set.
+
+Exercise~\ref{c5:ex:trace} had you trace the accumulator bug on paper, and
+Exercise~\ref{c5:ex:minoftwo} used a variable that was no accumulator at all. This one is the case
+\secref{c5:sec:variable} is actually about: a value built up across the iterations of a loop. It is
+the only exercise in the book where you write one.
+
+\begin{booktable}{@{}p{4em}p{3.4em}p{11.4em}L@{}}
+  \thead{Port} & \thead{Dir.} & \thead{Type} & \thead{Meaning} \\
+  \midrule
+  \code{bits} & in & \code{std_logic_vector(7 downto 0)} & The value to count over. \\
+  \code{ones} & out & \code{natural range 0 to 8} & The number of bits in \code{bits} that are
+    \code{'1'}. \\
+\end{booktable}
+
+Implement it with a single combinational process:
+\begin{itemize}
+  \item Put \code{bits} in the sensitivity list.
+  \item Declare a process-local \code{variable} for the running count, and set it to \code{0} at
+    the top of every round. A variable keeps its value between rounds, so a count that is never
+    cleared keeps growing.
+  \item Loop over \code{bits'range} and add \code{1} for every bit that is set.
+  \item Assign the variable to \code{ones} once, after the loop.
+\end{itemize}
+
+Then answer, in one sentence each:
+\begin{itemize}
+  \item Write the same thing with a \code{signal} as the accumulator instead, run the testbench, and
+    note what it reports for the input \code{00000010}. Explain the number you get using the
+    scheduling rule, not by guessing.
+  \item The loop runs eight times. How many adders does this design put on the FPGA, and how many
+    clock cycles does it take to produce an answer? If either answer surprises you, reread
+    \secref{c5:sec:variable}.
+  \item \code{ones} is a \code{natural range 0 to 8} rather than a
+    \code{std_logic_vector(3 downto 0)}. Both hold the answer. What does the range buy you, and what
+    would GHDL do if your count ever left it?
+\end{itemize}
+
+\modulefig[0.66]{lectures/L05/appendix/images/ones_count8.png}
+
+\begin{selfcheck}
+\textbf{Self-check.} Name your entity \code{ones_count8}, with the input \code{bits}
+(\code{std_logic_vector(7 downto 0)}) and the output \code{ones} (\code{natural range 0 to 8}),
+declared in that order; its testbench is in \file{exercises/ones_count8/} and sweeps all 256 input
+values.
+\end{selfcheck}
+
+% ------------------------------------------------------------------------------------------
+\exerciseset{A module worth having on its own}
+
+\exercise{\code{sync}: the synchroniser as a module of its own}{VHDL}
+\label{c5:ex:sync}
+Write the two-flip-flop synchroniser as a module of its own, named \code{sync}.
+
+You have already built this circuit. It is the first two flip-flops of \chapref{c4:ch}'s
+\code{button_sync}, written inline there because at that point it was the \emph{idea} that mattered:
+an asynchronous input needs two flip-flops before anything else gets to look at it. Here you factor
+those two out into a module, and the exercise is not the logic, which you already know, but
+everything around it.
+
+Two things make it worth doing again. The first is that a bare synchroniser is what most
+asynchronous inputs actually need: \code{button_sync} adds an edge detector because a button press
+is an event, but a serial line, a status flag from another clock domain, or a switch whose level is
+all you ever read, need the two flip-flops and nothing more. \Chapref{c8:ch}'s serial receiver
+instantiates exactly this on its \code{rx} pin. The second is that it takes \textbf{two generics},
+and one of them is not a number.
+
+\begin{booktable}{@{}p{4.4em}p{9.8em}p{4em}L@{}}
+  \thead{Generic} & \thead{Type} & \thead{Default} & \thead{Meaning} \\
+  \midrule
+  \code{SIZE} & \code{natural range 1 to 15} & \code{1} & How many independent signals to
+    synchronise, and therefore the width of both vector ports. \\
+  \code{PRESET} & \code{std_logic} & \code{'0'} & The value both stages take at reset. \\
+\end{booktable}
+
+and these ports:
+
+\begin{booktable}{@{}p{5.6em}p{3.4em}p{11em}L@{}}
+  \thead{Port} & \thead{Dir.} & \thead{Type} & \thead{Meaning} \\
+  \midrule
+  \code{clock} & in & \code{std_logic} & 50 MHz system clock. \\
+  \code{reset_s2_n} & in & \code{std_logic} & Active-low, \textbf{already synchronised} reset. A
+    synchroniser does not synchronise its own reset; \chapref{c4:ch}'s \code{reset_sync} does
+    that. \\
+  \code{async_in} & in & \code{std_logic_vector(SIZE - 1 downto 0)} & The asynchronous input or
+    inputs, straight from outside the clock domain. \\
+  \code{sync_out} & out & \code{std_logic_vector(SIZE - 1 downto 0)} & The same signals, safe to
+    use, two rising edges later. Every bit is synchronised independently. \\
+\end{booktable}
+
+\xpart{a} Implement it:
+\begin{itemize}
+  \item Two internal signals of type \code{std_logic_vector(SIZE - 1 downto 0)}, one per stage.
+  \item One process, sensitive to \code{clock} and \code{reset_s2_n}.
+  \item At reset, drive both stages to \code{PRESET}, outside the clocked branch.
+  \item At a rising clock edge, shift \code{async_in} through the two stages.
+  \item Drive \code{sync_out} from the second stage with a concurrent assignment.
+\end{itemize}
+
+\xpart{b} \code{PRESET} is a generic of type \code{std_logic}, the first in this book that is not a
+number, and it exists because the safe reset value depends on what the signal \emph{means}. Only the
+instantiating design knows that. Answer:
+\begin{itemize}
+  \item \code{button_sync} synchronises active-low buttons, so it would pass \code{'1'} in. What
+    would \code{'0'} claim about the buttons during the two cycles after every reset?
+  \item A serial line idles high, so \chapref{c8:ch}'s receiver also passes \code{'1'} in. What
+    would \code{'0'} look like to a receiver watching for a start bit?
+  \item Why is the \emph{default} \code{'0'} rather than \code{'1'} all the same, given both of
+    those, and what does that say about whose job it is to get it right?
+\end{itemize}
+
+\xpart{c} This is also a question about what a generic costs. \code{SIZE} is
+\code{natural range 1 to 15} and \code{PRESET} is \code{std_logic}, and both are fixed before
+synthesis runs. Use \secref{c5:sec:fabric}'s picture of what the FPGA actually consists of and say
+how many flip-flops an instance with \code{SIZE = 4} uses, how many an instance with
+\code{SIZE = 1} uses, and where in the built circuit \code{PRESET} ends up. Neither of the two turns
+up as logic anywhere; say what happened to them instead.
+
+\xpart{d} Verify it with its testbench. It instantiates your module twice, once one bit wide with
+\code{PRESET = '1'} and once three bits wide with \code{PRESET = '0'}, so a design that hardcodes
+either generic fails. It checks that \code{sync_out} follows \code{async_in} after \textbf{exactly}
+two rising edges rather than after one or eventually, that every bit in a vector is synchronised
+separately, and that reset loads \code{PRESET} with no clock edge involved.
+
+\note[Hint]Write the architecture for \code{SIZE = 1} in your head first, then check that every line
+is already correct for a vector. The aggregate \code{(others => PRESET)} and an ordinary vector
+assignment both work element by element, so the generalisation should cost no extra code.
+
+\modulefig[0.76]{lectures/L05/appendix/images/sync.png}
+
+\begin{selfcheck}
+\textbf{Self-check.} Name your entity \code{sync}, with the generics \code{SIZE}
+(\code{natural range 1 to 15}, default \code{1}) and \code{PRESET} (\code{std_logic}, default
+\code{'0'}), the inputs \code{clock}, \code{reset_s2_n}, \code{async_in}
+(\code{std_logic_vector(SIZE - 1 downto 0)}) and the output \code{sync_out}
+(\code{std_logic_vector(SIZE - 1 downto 0)}), declared in that order; its testbench is in
+\file{exercises/sync/}.
+
+\textbf{Keep this file.} \Chapref{c8:ch}'s serial receiver capstone instantiates it on the \code{rx}
+pin, and asks you to copy it in.
+\end{selfcheck}
+
+% ------------------------------------------------------------------------------------------
+\exerciseset{From VHDL to hardware}
+
+The Quartus flow is demonstrated on a real DE0-CV board during the sessions \textemdash{} first with
+the brake assistant back in \chapref{c1:ch} \textemdash{} and is written down in
+appendix~\ref{app:quartus} for reference. You need neither Quartus nor a board yourself; the
+exercises below are about understanding what that flow does with the VHDL you write.
+
+\exercise{What the toolchain does}{Reasoning}
+\label{c5:ex:quartus}
+Answer each of the following, with reference to appendix~\ref{app:quartus} and to what you saw
+demonstrated. One or two sentences each.
+
+\xpart{a} A Quartus project needs a chosen \textbf{top-level entity} before it compiles. What does
+the tool do differently with the top-level entity than with any other entity in the project?
+\code{min_of_two} from Exercise~\ref{c5:ex:minoftwo} and its testbench are both valid VHDL. Why can
+only one of them ever be the top-level entity in an FPGA project?
+
+\xpart{b} Pin assignment connects a port name to a physical pin. Why must the pins be assigned
+\emph{before} compilation rather than afterwards? What would \code{m} physically be connected to if
+you compiled \code{min_of_two} having assigned no pins at all?
+
+\xpart{c} Synthesis turns your architecture into gates on the chip. \Chapref{c2:ch}'s exercise
+\code{combo_logic} had you write $x = ab + c'd$ twice: once as a single expression, and once with
+$c'd$ named by an internal signal. What should synthesis produce for each, and why is your answer
+the same for both? Which of the two would you rather read in six months' time?
+
+\xpart{d} Compilation gives warnings as well as errors. Why is ``it compiled without errors'' a much
+weaker claim about an FPGA design than ``it compiled without errors'' is about a C program? Name one
+kind of warning you would never ignore.
+
+\exercise{Four predictions about the parity}{Simulation}
+\label{c5:ex:parity}
+\code{parity_gen} from \secref{c5:sec:variable} is the chapter's worked example, and it comes with a
+reference testbench.
+
+\xpart{a} Predict, before you run anything, \code{parity} by hand for each of these inputs:
+\code{"00000000"}, \code{"10110110"}, \code{"11111111"} and \code{"10000000"}.
+
+\xpart{b} Run the reference testbench against the worked example and confirm your four predictions:
+
+\begin{shell}
+cd lectures/L05/parity_gen
+ghdl -a --std=93 parity_gen.vhd parity_gen_tb.vhd
+ghdl -e --std=93 parity_gen_tb
+ghdl -r --std=93 parity_gen_tb --assert-level=error --stop-time=10ms
+\end{shell}
+
+\xpart{c} Take any of those inputs and flip exactly one bit, leaving the other seven unchanged. What
+happens to \code{parity}? Explain why changing exactly one input bit \emph{always} has to invert the
+XOR parity result, whichever bit you pick and whatever the starting value. That property is what
+makes a parity bit capable of detecting a single-bit error in transmission. What kind of error does
+it miss, and why?
+
+\exercise{A decoder that compiles cleanly and is still wrong}{Reasoning}
+\label{c5:ex:latch}
+A colleague sends you this combinational decoder for review. It compiles, and Quartus reports no
+errors.
+
+\begin{vhdlcode}
+architecture behaviour of level_decode is
+begin
+    process(sel) is
+    begin
+        case sel is
+            when "00"   => leds <= "0001";
+            when "01"   => leds <= "0010";
+            when "10"   => leds <= "0100";
+            when others => null;
+        end case;
+    end process;
+end architecture;
+\end{vhdlcode}
+
+\xpart{a} Quartus gives \code{Warning: Inferred latch(es) for signal "leds"}. Using
+\secref{c5:sec:latch}, explain what the tool built and why. What did the VHDL ask for that a
+combinational network cannot do?
+
+\xpart{b} The author's defence is that \code{sel} is two bits, so \code{"11"} is the only value
+\code{when others} can match, and the design never generates it. Give two separate reasons why that
+argument does not hold: one about what \code{sel} can actually hold (\secref{c1:sec:vhdl}), and one
+that would apply even if \code{sel} really could only be \code{"00"}, \code{"01"} or \code{"10"}.
+
+\xpart{c} Fix it, in two different ways: by changing only the \code{when others} branch, and by
+adding a single line \emph{before} the \code{case} statement and leaving every branch untouched.
+Which of the two would you rather maintain, and why? The second scales to a \code{case} with twenty
+branches; the first does not.
+
+\xpart{d} This is a warning, not an error, and the design will often appear to work on the board.
+Why does that make it more dangerous than an error rather than less?

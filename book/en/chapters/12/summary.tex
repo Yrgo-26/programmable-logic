@@ -1,0 +1,45 @@
+% Section 12.3, from lectures/L12/README.md.
+
+\section{Summary}
+\label{c12:sec:review}
+
+\needspace{6\baselineskip}
+\subsection*{What you should be able to do now}
+\begin{itemize}
+  \item Implement a width-generic two-flip-flop synchroniser, and explain why it needs no reset and
+    what widening it does \emph{not} solve.
+  \item Implement a counter-based bit timer producing correctly timed \code{sample} and
+    \code{bit_done} pulses, with a \code{resync} input.
+  \item Explain what \code{resync} does and why \code{sample} comes before \code{bit_done}.
+  \item Read a tick-level trace over one bit period and say for every tick what every output should
+    be.
+  \item Run a testbench handed out all the way through and trace a failure back to the tick in the
+    design that caused it.
+\end{itemize}
+
+\needspace{6\baselineskip}
+\subsection*{Questions to test yourself with}
+\begin{enumerate}
+  \item Why does a synchroniser need two flip-flops rather than one, and why does it need no reset?
+  \item A widened \code{meta_prev} removes metastability but not skew between the bits. What is the
+    difference, and when does a synchroniser stop being the right tool?
+  \item What does \code{bit_timer.resync} do, and when is it used?
+  \item Why does \code{sample} come before \code{bit_done} rather than the other way round?
+  \item \code{bit_timer} holds its counter while \code{enable = '0'}. Which state in
+    \code{can_controller} is the only one that would ever want that, and why does it turn out not to
+    want it either?
+  \item When a testbench handed out fails, what does GHDL print, and how do you find which check
+    failed?
+\end{enumerate}
+
+\needspace{6\baselineskip}
+\subsection*{Target}
+\code{meta_prev} and \code{bit_timer} should be finished and merged within about a week. Both are
+short, and they are the only modules no other module can substitute for. These are also the first
+real pull requests: use the review, and check the port order, that the testbench passes, and that no
+constants are hardcoded past \code{can_def}.
+
+\needspace{6\baselineskip}
+\subsection*{Looking ahead}
+\Chapref{c13:ch} builds \code{crc15}, a bit-serial checksum engine that both generates and checks a
+CRC with the same logic and with no mode switch.

@@ -1,0 +1,391 @@
+% Sections 19.3-19.8, from lectures/L19/appendix/b_fpga_bringup_and_review.md and
+% lectures/L19/README.md.
+
+\section{Designing \code{can_spi_node}}
+\label{c19:sec:node}
+
+\code{can_controller} is \textbf{not} the entity that goes onto the board, and it is worth being
+precise about that. Its interface is at register level: \code{tx_id} is 11 bits, \code{tx_dlc} 4,
+\code{tx_data} 64, plus \code{tx_req} and five status outputs. Nothing on a DE0-CV offers an
+interface that wide, and in the finished system those inputs come from the driver's registers rather
+than from a human hand.
+
+\Chapref{c18:ch} built the layer making them reachable, and \secref{c19:sec:bridge} the transport in
+front of it. The last module the book writes is therefore \file{can_spi_node.vhd}: the top level
+tying \code{spi_slave}, \code{spi_reg_bridge}, \code{register_bank} and \code{can_controller}
+together into one node, and exposing exactly two things to the outside world, SPI and the CAN bus.
+
+Unlike every other module in the project it comes with no module-level testbench of its own, and that
+is deliberate: every block inside it already has one, and what remains \textemdash{} pins, wiring and
+voltage levels \textemdash{} is exactly what a simulation cannot model. The board is its testbench,
+and the bring-up steps in \secref{c19:sec:bringup} are how you read it. (There is a system testbench
+handed out, \code{can_spi_node_tb}, driving two complete nodes from modelled SPI masters; it is the
+only one in the book that drives \code{sclk}, \code{mosi} and \code{ss} as real waveforms.)
+
+\subsection*{Interface}
+
+\begin{booktable}{@{}p{4.6em}p{3.4em}p{5.2em}L@{}}
+  \thead{Port} & \thead{Dir.} & \thead{Type} & \thead{Meaning} \\
+  \midrule
+  \code{clock} & in & \code{std_logic} & The board's 50 MHz oscillator. The design's only clock. \\
+  \code{reset_n} & in & \code{std_logic} & Raw, active-low reset, straight from a pin. Asynchronous;
+    this level synchronises it. \\
+  \code{sclk} & in & \code{std_logic} & The SPI clock from the master. Never used as a clock. \\
+  \code{mosi} & in & \code{std_logic} & Out from the master, into the slave. \\
+  \code{ss} & in & \code{std_logic} & Chip select, active low. Frames the transaction. \\
+  \code{miso} & out & \code{std_logic} & Out from the slave, into the master. \\
+  \code{rx_bus} & in & \code{std_logic} & The CAN bus's level, straight from the pin and
+    asynchronous. \code{can_controller} synchronises it itself. \\
+  \code{tx_bus} & out & \code{std_logic} & The bit this node wants to drive. \\
+  \code{bus_en} & out & \code{std_logic} & Whether it is driving at all. \\
+\end{booktable}
+
+The three bus ports are the digital-side interface a real CAN transceiver presents
+(\chapref{c10:ch}), and that is why they leave the design as three separate signals rather than one
+wire. Turning them into a single physical wire is a board-level job, and \secref{c19:sec:wire} is
+about that.
+
+The order is SPI's four wires as a group, \code{sclk}/\code{mosi}/\code{ss}/\code{miso}, and then the
+CAN bus's three. \code{miso} therefore sits among the SPI ports and not with the other outputs, so
+that the four pins stand in the same order as in the wiring table in \secref{c19:sec:bringup}. That
+matters: \code{can_spi_node_tb} binds positionally like everything else, and \code{miso} and
+\code{rx_bus} have the same type, so swapping them passes analysis without a word and gives a node
+that never answers.
+
+There are no generics. Everything the design needs that a pin cannot deliver is either a constant in
+\code{can_def} or a register the driver writes.
+
+\subsection*{Behaviour: structural, and that is the point}
+\code{can_spi_node} has no state machine, no protocol knowledge and almost no logic at all. It has
+exactly three jobs:
+\begin{itemize}
+  \item \textbf{Instantiate the four blocks and wire them in a row.} \code{spi_slave} turns
+    SCK/MOSI/SS into bytes; \code{spi_reg_bridge} turns bytes into register accesses;
+    \code{register_bank} turns register accesses into controller-level signals;
+    \code{can_controller} turns them into a frame. Every boundary is one of the contracts already
+    verified by a testbench handed out, so if the chain misbehaves the fault is in a connection here,
+    not in a block.
+  \item \textbf{Synchronise the reset.} A single \code{meta_prev} instance takes the raw
+    \code{reset_n} and produces the \code{reset_s2_n} every subblock takes. \code{can_controller} is
+    the exception that proves the rule: it owns its reset synchroniser internally, alongside the one
+    for \code{rx_bus}, so this level feeds it the raw \code{reset_n} and synchronises only for the
+    SPI-side blocks. That makes three \code{meta_prev} instances in the whole design \textemdash{}
+    two inside \code{can_controller}, one here.
+  \item \textbf{Let the controller-facing ports go straight across.} \code{register_bank}'s
+    \code{tx_id}, \code{tx_dlc}, \code{tx_data} and \code{tx_req} to \code{can_controller}, and its
+    \code{tx_done}, \code{rx_id}, \code{rx_dlc}, \code{rx_data}, \code{rx_valid} and \code{error}
+    back. Port to port, nothing in between. \Chapref{c18:ch} designed the two interfaces to mirror
+    each other precisely so that this works out.
+\end{itemize}
+
+If a rule in this file ever has to mention a CAN field or an SPI byte, it belongs in another file.
+That is the test to apply while you write it.
+
+% ------------------------------------------------------------------------------------------
+\section{Getting the bus out onto a wire}
+\label{c19:sec:wire}
+
+\code{tx_bus} and \code{bus_en} are a \emph{pair}, not one signal: the design says ``drive
+dominant'', ``release'', never ``drive recessive''. Two nodes' push-pull outputs tied to one wire
+would fight each other the moment one drove low and the other high. Two ways to make the shared wire
+behave:
+
+\paragraph{With a transceiver}
+Which is what a real node uses: \code{tx_bus} goes to its TXD, its RXD comes back as \code{rx_bus},
+and the transceiver does the open-drain work in the analogue domain.
+
+\paragraph{Without one}
+With two DE0-CVs wired directly together for the two-node demo, the FPGA's own I/O does the job. Pick
+a GPIO pin and drive it open-drain:
+
+\begin{vhdlcode}
+GPIO_0(2) <= '0' when ((bus_en = '1') and (tx_bus = '0')) else 'Z';
+rx_bus    <= GPIO_0(2);
+\end{vhdlcode}
+
+with a pull-up restoring \code{'1'} while every node has released the wire \textemdash{} the FPGA's
+weak pull-up enabled on that pin in the Pin Planner, or an external resistor. That is
+\secref{c10:sec:can}'s wired-AND rule made physical, in a single concurrent assignment.
+\code{GPIO_0(0)} and \code{GPIO_0(1)} are worth driving with \code{tx_bus} and \code{bus_en}
+unregistered as well, purely so that a logic analyser can see what the node \emph{intended} beside
+what the wire actually did; every unused index is driven \code{'Z'}.
+
+Nothing here is synchronised, for the same reason \code{reset_n} is not synchronised before it reaches
+\code{can_controller}: the controller owns its own asynchronous inputs, so the pin is run straight to
+the \code{rx_bus} port.
+
+The pin indices are a convenience in the Pin Planner, not a requirement. Any three pins on the header
+work, as long as two connected boards agree; see appendix~\ref{app:quartus}.
+
+% ------------------------------------------------------------------------------------------
+\section{Optional: a board-level wrapper for debugging}
+\label{c19:sec:wrapper}
+
+All of the above is reachable only over SPI, which means that when the link does not work you have no
+way of seeing into it. A small wrapper with buttons and LEDs, standing beside \code{can_spi_node}
+rather than replacing it, is worth an hour if the bring-up gets stuck \textemdash{} and the three
+decisions it forces are worth understanding whether or not you build it.
+
+The wrapper drives \code{register_bank}'s ports directly from buttons and switches and latches its
+status outputs onto LEDs:
+
+\lecfig[0.86]{lectures/L19/appendix/images/can_demo.png}{A board-level wrapper: buttons and switches
+into the register bank, the status bits out onto LEDs.}{c19:fig:demo}
+
+\begin{itemize}
+  \item \textbf{A held button has to become a one-cycle pulse}, and not just for neatness. A button
+    held for a few milliseconds is hundreds of thousands of clock cycles at 50~MHz. Feed that straight
+    into \code{tx_req} and the controller starts a new frame the moment the previous one ends, over
+    and over \textemdash{} and every pass through the start state wipes \code{error} before anything
+    has read it. So: \textbf{synchronise} the raw pin with a \code{meta_prev}, \textbf{debounce} the
+    synchronised level with a counter accepting a new value only once it has held for about 10~ms, and
+    \textbf{then} edge-detect it. All three, in that order: edge-detecting before the debounce gives
+    one pulse per bounce, and debouncing before the synchronisation feeds the counter a signal that
+    was never safely sampled. This is the same conversion \code{register_bank} performs for
+    \code{TX_SEND} (\chapref{c18:ch}), and it is why the bank makes the wrapper optional rather than
+    necessary.
+  \item \textbf{A switch bank is the judgement call.} Ten switches crossing into the clock domain are
+    synchronised bit by bit, which removes the metastability but not the \emph{skew}: two switches
+    flipped at the same time can land one clock apart, so \code{tx_id} could briefly read a value that
+    was never on the switches. That is acceptable only because a human sets them and then leaves them
+    alone. Connect the same ten bits to something that changes every cycle and a bit-by-bit
+    synchroniser is entirely the wrong tool \textemdash{} that takes a handshake, or an encoding where
+    only one bit changes at a time. Worth saying outright, since ``just widen the synchroniser'' is a
+    habit that bites sooner or later.
+  \item \textbf{Status LEDs need latching}, since \code{tx_done} and \code{rx_valid} are 20~ns pulses.
+    That is the same problem \code{register_bank} solves for the driver, and solving it twice in two
+    places is exactly how the two copies drift apart \textemdash{} so drive the LEDs from the bank's
+    STATUS bits rather than from the controller's pulses, and the wrapper stays a wrapper.
+\end{itemize}
+
+% ------------------------------------------------------------------------------------------
+\section{Bring-up}
+\label{c19:sec:bringup}
+
+The bring-up has two halves: the CAN side between two boards, and the SPI side between a
+microcontroller hat and the board. Take them in that order. The CAN half needs no microcontroller at
+all, so it can be run while the hat is still on the soldering bench, and it rules out a whole class of
+faults before there is any SPI wire to suspect.
+
+Once the design passes simulation in full, synthesise and program \code{can_spi_node}: New Project
+Wizard, device \code{5CEBA4F23C7N}, Pin Planner, Compile, Programmer. The steps are in
+appendix~\ref{app:quartus}, which is the authoritative reference for that flow, right down to the
+add-on for Cyclone V devices and to getting the USB-Blaster visible to the Programmer. Note that
+\code{CLOCK_50} is the one pin you may not choose freely.
+
+\subsection*{The CAN half: two boards on one bus}
+Two boards, their bus lines on \code{GPIO_0(2)} tied together into \textbf{one} wire with a common
+ground, and the open-drain driving from \secref{c19:sec:wire} makes the shared wire a wired-AND.
+
+\begin{enumerate}
+  \item \textbf{One board alone.} The bus line carries nothing but the pull-up, so the node reads back
+    exactly the level it drives: a loopback. \code{tx_bus} and \code{bus_en} should toggle field by
+    field on a logic analyser via \code{GPIO_0(0)}/\code{GPIO_0(1)}, \code{tx_done} pulse at the end
+    of EOF, and \code{error} never go high.
+  \item \textbf{Two boards, one wire.} Press a button on one board and an LED should light on the
+    other. That is the first time the design meets two \emph{independent} oscillators; in
+    \code{can_controller_tb} the nodes shared one \code{clock}.
+  \item \textbf{Arbitration for real.} Have both boards transmit at once and watch the one with the
+    lower identifier win, and the loser back off.
+\end{enumerate}
+
+A loopback is also where \secref{c10:sec:bittiming}'s 70~\% sample point quietly earns its keep. The
+node's own signal now takes a real round trip, out through a pad, along the wire, back in, and through
+the \code{rx_bus} synchroniser's two flip-flops, at a cost of a handful of clock cycles. With
+\code{TICKS_PER_BIT = 50} and \code{SAMPLE_TICK = 35}, the node reads the bus 35 ticks into a bit it
+began driving at tick 0, so its own echo has long since settled and the arbitration monitoring never
+misreads it. Sampling at the bit period's \emph{start} would instead read the echo of the previous
+bit, and the arbitration monitoring (sent recessive, read dominant, \chapref{c17:ch}) would report a
+false loss at the first recessive bit following a dominant one.
+
+A loopback deliberately cannot show the node \emph{receiving} that frame. \code{can_controller}
+latches \code{role = '1'} for the whole frame and \code{rx_shift_reg} runs only while
+\code{role = '0'} (\chapref{c17:ch}), so a transmitter never decodes its own traffic; that is exactly
+why the system testbench needs two nodes.
+
+\textbf{The second board closes the gap \secref{c19:sub:gaps-tb} calls the largest.} The testbench's
+two nodes share one \code{clock}: \code{resync} still phases them at every SOF, but their timers can
+never \emph{drift apart} mid-frame. Two boards have two crystals, running at 50~MHz only within the
+tolerance the components are specified to, so their bit periods genuinely differ, and the receiver
+free-runs on its own timer for the rest of the frame after its single \code{resync} at SOF. Honest
+arithmetic keeps expectations in check: at typical crystal tolerances of a few tens of ppm the drift
+over a frame is a small fraction of a tick, so what that demo visibly proves is that the whole chain
+works across genuinely independent clocks from an arbitrary starting phase; how much drift the design
+would tolerate before the sample point wanders off the bit is the calculation in
+Exercise~\ref{c12:ex:drift}.
+
+\subsection*{The SPI half: a microcontroller hat against the board}
+The wiring, per node. It is not yours to choose: it is in appendix~\ref{app:protocol}, since the
+parallel class writes its driver against the same table.
+
+\begin{booktable}{@{}p{6em}p{6em}L@{}}
+  \thead{Signal} & \thead{AVR32DB28} & \thead{DE0-CV} \\
+  \midrule
+  \code{SCK} & \code{PC2} & \code{sclk} \\
+  \code{MOSI} & \code{PC0} & \code{mosi} \\
+  \code{MISO} & \code{PC1} & \code{miso} \\
+  \code{SS} & \code{PC3} & \code{ss} \\
+  I/O supply & \code{VDDIO2} & 3.3 V \\
+  Core supply & \code{VDD} & (the hat's own 5 V) \\
+  GND & \code{GND} & GND \\
+\end{booktable}
+
+No level shifter is needed, and that is a choice and not a simplification: the AVR32DB28's
+\code{PORTC} is a voltage domain of its own, supplied from \code{VDDIO2} rather than \code{VDD}, so it
+is put on the DE0-CV's 3.3~V while the core stays at 5~V. Every level the FPGA sees is then a level it
+is specified for, and the 3.3~V the FPGA drives back is read against a 3.3 V threshold rather than a
+5 V one. SPI0 is moved there with \code{PORTMUX.SPIROUTEA = ALT1}.
+
+\begin{warning}
+\textbf{Three requirements on the hat, and they have to be in place before it is etched.}
+\begin{itemize}
+  \item \textbf{\code{PC0}--\code{PC3} are reserved.} They are SPI0's ALT1 mux and must carry no other
+    peripheral. No LED, no button, and above all no decoupling capacitor on \code{SS} \textemdash{} a
+    button with 100~nF on the pin makes the \code{SS} edge unusable at 1~MHz.
+  \item \textbf{Nothing else on \code{PORTC}.} The whole port sits in the \code{VDDIO2} domain at
+    3.3~V, so a 5 V peripheral there would both stop working and feed 5~V into a 3.3 V domain.
+  \item \textbf{\code{VDDIO2} is a track of its own.} It must not be tied to \code{VDD} on the board,
+    but brought out to a pin where the DE0-CV's 3.3~V is connected, with 100~nF near the chip.
+\end{itemize}
+
+Whether the domain is separate at all is moreover controlled by \code{MVSYSCFG} in
+\code{FUSE.SYSCFG1}: in single-supply mode \code{VDDIO2} is tied internally to \code{VDD},
+\code{PORTC} becomes a 5 V port, and the wiring above then puts 5~V straight into inputs that are not
+5 V tolerant \textemdash{} on a hat that looks exactly like a correctly built one. Check the fuse
+before the first connection. It is the one fault in this chapter that can cost a board.
+\end{warning}
+
+The steps are taken in this order, and in no other. Every step rules out a source of failure, so that
+whatever still does not work after step $n$ is certainly in step $n+1$:
+
+\begin{enumerate}
+  \setcounter{enumi}{3}
+  \item \textbf{SPI loopback on the hat alone}, with \code{PC1} connected to \code{PC0} and the FPGA
+    disconnected. Proves that the master works, and along the way that \code{PORTMUX} and
+    \code{VDDIO2} are set correctly.
+  \item \textbf{Register echo}: write \code{TX_ID}, read it back. Proves that the whole transaction
+    chain carries.
+  \item \textbf{\code{STATUS} polling}: read \code{STATUS} and see that bit 0 is set after reset.
+  \item \textbf{One node transmits on command}: write a frame and trigger \code{TX_SEND}, and watch
+    \code{STATUS} bit 0 go low and back \textemdash{} now triggered over SPI instead of by a button.
+  \item \textbf{Two nodes, the whole chain}: one transmits on an SPI command, the other receives and
+    acknowledges with \code{RX_ACK}. That is the system.
+\end{enumerate}
+
+\paragraph{What remains}
+By the end of the session both halves have run on real hardware. What remains is not the wiring but
+the \textbf{counterpart}: your node has answered a test program written to succeed, not a driver
+written by somebody else against the specification alone. That is why the protocol specification's
+timing requirements \textemdash{} the 60~ns around \code{SS}, the rule about what \code{MISO} carries
+during the command byte, and the abort rule \textemdash{} are written as requirements and not as
+advice: a test program that never does anything unexpected never confirms them, and a driver that does
+will fail you on them.
+
+% ------------------------------------------------------------------------------------------
+\section{How production CAN controllers go further}
+\label{c19:sec:gaps}
+
+This book's controller is deliberately simplified: a teaching design rather than a certifiable one.
+The list below is this book's version of it; \canref{7} sets out the same list from the protocol side,
+together with the block overview and the three limitations reaching all the way up into the driver's
+code, and \canref{6} describes the error handling \textemdash{} error frames, error counters,
+error-passive and bus-off \textemdash{} that this design lacks entirely.
+
+Notable gaps, worth naming explicitly:
+\begin{itemize}
+  \item \textbf{Standard data frames only:} the wire format is a bit-exact standard CAN data frame,
+    RTR included, but there are no 29-bit extended identifiers (the receiver does not even check IDE,
+    so an extended frame would be misinterpreted until its CRC check failed), and a remote frame (a
+    recessive RTR) is rejected with \code{error} instead of being answered with the requested data.
+  \item \textbf{No error frames and no bus-off recovery:} a real CAN node counts transmit and receive
+    errors and enters progressively more restricted states (error-passive, bus-off) to protect a
+    healthy bus from a broken node; this book's \code{can_controller} merely aborts the frame in
+    progress locally.
+  \item \textbf{No bit or form error detection:} this transmitter compares what it sent against what
+    the bus read only during arbitration (\chapref{c17:ch}). A real controller monitors every bit it
+    sends, flags a bit error the moment the bus disagrees outside the arbitration field and the ACK
+    slot, and on reception checks that the tail's fixed fields have their prescribed values.
+  \item \textbf{No retransmission on a missing acknowledgement:} a real controller retries
+    automatically. This design does not even notice, since the transmitter never reads the ACK slot
+    back.
+  \item \textbf{No acceptance filtering and no receive buffering:} every frame on the bus lands in the
+    same single set of \code{rx_*} ports, and a second frame arriving before the driver has read the
+    first simply overwrites it. Production controllers offer identifier filters in hardware and a
+    receive FIFO or a set of mailboxes. This is the gap the parallel class's driver feels most
+    directly, and \chapref{c18:ch} shows exactly where it becomes visible at register level.
+  \item \textbf{A fixed bit timing model:} this book samples at a fixed 70~\% point; production
+    controllers expose configurable propagation and phase segments and a synchronisation jump width,
+    tuned to bus length and node count.
+  \item \textbf{An aborted reception (after lost arbitration) is simply discarded}, rather than
+    seamlessly continuing to receive the frame that won; a real node goes on receiving whoever won the
+    bus. This design's node waits out the rest of the frame in \code{STATE_IDLE}
+    (\secref{c16:sec:roles}) and picks up from the next one.
+  \item \textbf{A simplified bus-idle rule:} this design requires eleven recessive bit periods, the
+    same number real CAN asks of a node joining bus traffic, before any node may leave
+    \code{STATE_IDLE}. Real CAN is finer-grained: a node that has just taken part in a frame may
+    transmit again after the 3-bit intermission following EOF, and a node that has been bus-off waits
+    out 128 occurrences of eleven recessive bits before it may join again.
+\end{itemize}
+
+% ------------------------------------------------------------------------------------------
+\section{The design, seen in the rear-view mirror}
+\label{c19:sec:review-design}
+
+Every chapter from \chapref{c10:ch} onwards added exactly one responsibility, never duplicated
+anywhere else:
+
+\begin{booktable}{@{}p{9.6em}Lp{5.4em}@{}}
+  \thead{Block} & \thead{Owns} & \thead{Built in} \\
+  \midrule
+  \code{can_def} & Shared constants and subtypes every other block agrees on & \chapref{c10:ch} \\
+  \code{meta_prev} & Getting an asynchronous signal safely into this clock domain, with no idea what
+    the signal means & \chapref{c12:ch} \\
+  \code{bit_timer} & \emph{When} to sample or shift, with no idea what is being sent &
+    \chapref{c12:ch} \\
+  \code{crc15} & The CRC-15 computation, one bit at a time, with no idea what a ``frame'' is &
+    \chapref{c13:ch} \\
+  \code{tx_shift_reg} / \code{rx_shift_reg} & Bit stuffing and destuffing, with no idea what an ID or
+    a data byte is & \chapref{c14:ch}--\ref{c15:ch} \\
+  \code{can_controller} & The only block that knows the actual CAN frame format, arbitration included
+    & \chapref{c11:ch} (ports), \chapref{c16:ch}--\ref{c17:ch} (behaviour) \\
+  \code{register_bank} & Pulses to pollable levels, and the register map's semantics; no idea what SPI
+    or CAN is & \chapref{c18:ch} \\
+  \code{spi_slave} & Bytes off a serial wire, safely into the 50 MHz domain; no idea what a register
+    is & handed out, read in \chapref{c18:ch} \\
+  \code{spi_reg_bridge} & The five-byte transaction; no idea what any individual register means &
+    \chapref{c19:ch} \\
+  \code{can_spi_node} & The connections, and the pins the bus lives on. No logic of its own &
+    \chapref{c19:ch} \\
+\end{booktable}
+
+That is the whole node: four small blocks with one responsibility each and one shared package composed
+inside \code{can_controller}, and then three more layers in front of it, each knowing only the one
+below it. \code{can_spi_node} stands outside them all, since adapting to a particular board is a
+different matter from speaking CAN, or SPI, or registers.
+
+Read the table top to bottom and it is also a list of what would have to change to reach a different
+system. Swap \code{spi_slave} and \code{spi_reg_bridge} for an I2C pair and everything beneath them is
+untouched. Swap \code{can_controller} for another protocol engine and the register map moves but the
+transport does not. That is what the boundaries bought.
+
+\paragraph{The register map in summary}
+Every port on \code{can_controller}'s register side corresponds to a register the parallel class's C++
+driver reads or writes; the remaining five (\code{clock}, \code{reset_n} and the three bus signals)
+are physical and no driver ever sees them. The correspondence is no longer a plan, as it was when
+\secref{c11:sec:regmap} first drew this table \textemdash{} \code{register_bank} is the module that
+realises it, so read the right-hand column as ``the register the bank presents at that index'':
+
+\begin{booktable}{@{}p{14em}L@{}}
+  \thead{\code{can_controller} port} & \thead{Register in the map} \\
+  \midrule
+  \code{tx_id}, \code{tx_dlc}, \code{tx_data} & \code{TX_ID}, \code{TX_DLC},
+    \code{TX_DATA_LO}/\code{HI} \\
+  \code{tx_req}, \code{tx_done} & \code{TX_SEND}, one bit in \code{STATUS} \\
+  \code{rx_id}, \code{rx_dlc}, \code{rx_data} & \code{RX_ID}, \code{RX_DLC},
+    \code{RX_DATA_LO}/\code{HI} \\
+  \code{rx_valid} & one bit in \code{STATUS}, cleared via \code{RX_ACK} \\
+  \code{error} & \code{ERROR_FLAGS} \\
+\end{booktable}
+
+That correspondence is where the driver work begins: everything the parallel class writes against is in
+appendix~\ref{app:protocol}, and nothing in this design's VHDL.

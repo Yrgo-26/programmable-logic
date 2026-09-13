@@ -1,0 +1,34 @@
+% Kapitel 18, satt ur lectures/L18: Appendix A blir avsnitt 18.1-18.8, SPI-genomgången 18.9, och
+% Appendix B övningarna.
+
+\chapter{Registerbanken och SPI från vågformen}
+\label{c18:ch}
+
+{\large\itshape Här börjar den halva som gör kontrollern nåbar från en mikrokontroller.\par}
+
+\begin{chapterbox}{I det här kapitlet}
+\begin{itemize}
+  \item Varför \code{tx_done} och \code{rx_valid} som encykelspulser är oanvändbara för en pollande
+    drivrutin, och vad registerkartan lovar i stället: klibbiga, pollbara nivåer med uttryckliga
+    nollställningar.
+  \item \code{register_bank}: STATUS-låsningen, \code{TX_SEND} som en skrivutlöst händelse,
+    infångning av mottagen ram, och maskning vid skrivning.
+  \item SPI från vågformen och uppåt: lägen, MSB först, SS som ramning.
+  \item Varför slaven \textbf{inte} klockar på SCK utan översamplar den i 50 MHz-domänen.
+  \item Den utdelade \code{spi_slave}: byte-motorn som får \code{SCK}, \code{MOSI} och \code{SS}
+    säkert in i systemklockdomänen och lämnar över en ren byte i taget.
+\end{itemize}
+\end{chapterbox}
+
+\code{can_controller} är färdig från och med \chapref{c17:ch}. Det här kapitlet bygger det första av
+de två lager som gör den nåbar utifrån. Modulen kan skrivas långt innan kontrollern är färdig
+\textemdash{} den behöver bara \code{can_def} \textemdash{} så den är ett fullvärdigt arbetsspår som
+kan starta parallellt.
+
+Den auktoritativa källan för varje registernummer i det här kapitlet är bilaga~\ref{app:protocol}.
+Där kapitlet och specifikationen är oense vinner specifikationen.
+
+\input{chapters/18/registerbank}
+\input{chapters/18/spi}
+\input{chapters/18/summary}
+\input{chapters/18/exercises}

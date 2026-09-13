@@ -1,0 +1,308 @@
+% Avsnitt 6.9, ur lectures/L06/appendix/b_exercises.md.
+
+\section{Övningar}
+\label{c6:sec:exercises}
+
+\begin{aside}
+\textbf{Så kontrollerar du ditt arbete.} Varje övning nedan som ber dig skriva en VHDL-modul har en
+självkontrollerande testbänk under \file{lectures/L06/exercises/}. Skriv din modul i dess katalog
+\file{exercises/<module>/}, med det entitetsnamn och den \textbf{portordning} övningen anger, och
+kör den sedan med GHDL \textemdash{} se \secref{c2:sec:testbenches} för de tre kommandona.
+\end{aside}
+
+% ------------------------------------------------------------------------------------------
+\exerciseset{Räknare}
+
+\exercise{Bredd och överslagspunkt}{Resonemang}
+\label{c6:ex:width}
+En signal deklareras som:
+
+\begin{vhdlcode}
+signal counter: natural range 0 to 1023;
+\end{vhdlcode}
+
+\xpart{a} Hur många bitar bred blir det register som det här syntetiseras till?
+
+\xpart{b} Vilket är det största värde \code{counter} kan hålla innan den slår över tillbaka till
+\code{0} vid nästa ökning?
+
+\xpart{c} Skriv om deklarationen för en räknare som i stället behöver räkna från \code{0} upp till
+\code{63}.
+
+Följ räknarmönstret i \secref{c6:sec:counter}.
+
+\exercise{Spåra ett överslag för hand}{Resonemang}
+\label{c6:ex:trace}
+Spåra en räknare av typen \code{natural range 0 to 3} för hand (ingen VHDL behövs). Anta att
+räknaren startar på \code{2}, att den ökas en gång per klockflank under fem flanker i följd, och
+att det inte finns någon reset däremellan.
+
+Notera, klockflank för klockflank: värdet som hålls före flanken, och värdet som fångas på flanken.
+Förklara varför räknaren återgår till \code{0} utan någon uttrycklig ”om räkningen når sitt
+maxvärde, nollställ den”-logik.
+
+\note[Observera]Det här är det \emph{syntetiserade} beteendet, det som spelar roll för hårdvara.
+\Secref{c6:sec:counter} flaggar för det simuleringsförbehåll som hör till: GHDL
+intervallkontrollerar en signal av typen \code{natural range 0 to 3}, så en simulering av den här
+räknaren avbryter vid överslaget i stället för att rulla över. Spåra den på papper som hårdvara,
+och grip efter en \code{unsigned} i full bredd om du någonsin behöver en räknare som slår över också
+i simulering.
+
+\exercise{Räknaren för hand, och biten som tar slut}{Krets}
+\label{c6:ex:counterhand}
+Bygg 4-bitarsräknaren från \secref{c6:sec:counter} för hand i CircuitVerse, och använd den för att
+se spillet i stället för att ta det på förtroende.
+
+\xpart{a} Bygg den: ett 4-bitars register (fyra D-vippor som delar en klocka), en adderare med
+registrets utgångar på den ena ingången och en konstant \code{1} på den andra, adderarens summa
+kopplad tillbaka till registrets \code{D}-ingångar, och fyra utgångselement eller lysdioder, en per
+bit.
+
+\xpart{b} Kör den med en klockperiod på \code{1000 ms} och notera vad du ser:
+\begin{itemize}
+  \item Skriv ner sekvensen av räkningar över sexton klockflanker i följd, med start från
+    \code{0000}.
+  \item Håll ögonen på \code{carry_out} på den översta adderaren medan räkningen rullar från
+    \code{1111} till \code{0000}: under hur många av de sexton flankerna är den hög, och vad är
+    kopplat till den?
+  \item Förklara, med en mening, vart den femte biten tar vägen, och varför registret lagrar
+    \code{0000} snarare än \code{10000}.
+\end{itemize}
+
+\xpart{c} Resonera nu om det du \emph{inte} byggde: peka på den del av din ritning som avgör att
+räknaren ska återgå till \code{0000}. Det finns ingen. Säg vad som gör jobbet i stället. Vad skulle
+du behöva lägga till för att få den att räkna \code{0} till \code{9} och sedan slå över?
+(Övning~\ref{c6:ex:counter} ber dig skriva precis det i VHDL, så spara ditt svar.)
+
+\xpart{d} Ändra bredden till tre bitar genom att ta bort den översta vippan och smalna av
+adderaren. Förutsäg den nya överslagspunkten innan du kör den, bekräfta den, och formulera regeln
+som kopplar en räknares bredd till det värde den slår över vid.
+
+\textbf{Spara den här kretsen.} \Chapref{c7:ch} bygger sin timer genom att lägga till två saker till
+den, en jämförare och en nollställning, och att utgå från en räknare du redan har sett fungera är
+hela poängen med övningen där.
+
+\exercise{\code{counter}: en räknare med godtycklig radix}{VHDL}
+\label{c6:ex:counter}
+Skriv en entitet med namnet \code{counter} som räknar från \code{0} upp till ett steg under sin
+radix, och sedan slår över tillbaka till \code{0}. Med standardvärdet på radix är det en
+decimalräknare, \code{0} till \code{9}.
+
+Entiteten har en generic:
+
+\begin{booktable}{@{}p{4.4em}p{9.8em}p{4em}L@{}}
+  \thead{Generic} & \thead{Typ} & \thead{Förval} & \thead{Betydelse} \\
+  \midrule
+  \code{RADIX} & \code{natural range 1 to 2**16} & \code{10} & Hur många värden räknaren går igenom
+    innan den upprepar sig. Den räknar \code{0} till \code{RADIX-1} inklusive, så \code{RADIX} är
+    cykelns längd, inte den största räkningen. \\
+\end{booktable}
+
+och de här portarna:
+
+\begin{booktable}{@{}p{5.6em}p{3.4em}p{10em}L@{}}
+  \thead{Port} & \thead{Riktn.} & \thead{Typ} & \thead{Betydelse} \\
+  \midrule
+  \code{clock} & in & \code{std_logic} & Systemklocka. \\
+  \code{reset_s2_n} & in & \code{std_logic} & Aktiv låg, \textbf{redan synkroniserad}: den kommer
+    från din \code{reset_sync}, aldrig rakt från en pinne. Asynkron, så den nollställer utan att
+    någon klockflank är inblandad. \\
+  \code{count} & out & \code{natural range 0 to RADIX-1} & Den löpande räkningen. \code{0} är ett
+    värde den antar, så intervallet börjar där: reset driver den till \code{0}, och den återvänder
+    dit vid varje överslag. \\
+  \code{tick} & out & \code{std_logic} & En puls på en cykel vid den flank där \code{count} slår
+    över från \code{RADIX-1} tillbaka till \code{0}. \\
+\end{booktable}
+
+Implementera den med en enda synkron process:
+\begin{itemize}
+  \item Ta med \code{clock} och \code{reset_s2_n} i känslighetslistan.
+  \item Vid reset, sätt \code{count} till \code{0} och \code{tick} till \code{'0'}.
+  \item Vid varje stigande klockflank: driv \code{tick} låg som utgångsläge; när \code{count} har
+    nått \code{RADIX-1}, slå över \code{count} till \code{0} och pulsa \code{tick} hög; öka annars
+    \code{count}.
+\end{itemize}
+
+Skriv jämförelsen mot \code{RADIX-1}, aldrig mot \code{9}. Genericen är hela skillnaden mellan en
+modul och en modul du kan använda två gånger: \code{RADIX} är fastlagd innan syntesen körs, så
+jämföraren den bygger blir inte större än en hårdkodad, och räknarens register dimensioneras efter
+den radix du ber om. Det är samma argument som \secref{c4:sec:generics} för fram för
+\code{button_sync}:s \code{COUNT}, och skälet till att \chapref{c7:ch}:s \code{timer} tar sitt
+målvärde som en generic snarare än som en konstant.
+
+Till skillnad från det gratis överslaget hos en räknare av typen \code{natural range 0 to 15}
+behöver en räknare med godtycklig radix en uttrycklig jämförelse, eftersom \code{RADIX-1} i allmänhet
+inte är en tvåpotensgräns. Lägg märke till vad som händer när den är det: med \code{RADIX = 16}
+skrivs jämförelsen fortfarande ut, men hårdvaran under behöver den inte längre.
+
+\note[Tips]Processen behöver läsa den löpande räkningen (för att jämföra den och för att öka den),
+så håll räkningen i en intern \code{signal count_s: natural range 0 to RADIX-1;}, kör logiken på
+\code{count_s}, och driv utgången med \code{count <= count_s;} utanför processen, precis som
+\file{d_flip_flop.vhd} använder \code{q_s} i \chapref{c3:ch}. Det är inget stilval: varje
+\code{ghdl}-kommando i den här boken skickar \code{--std=93}, och under VHDL-93 kompilerar det inte
+alls att läsa en \code{out}-port. Senare standarder mjukar upp det, vilket är varför du kan ha sett
+det göras på annat håll.
+
+Följ räknarmönstret i \secref{c6:sec:counter}, och den driv-låg-och-pulsa-sedan-form som
+\code{data_ready} har i \secref{c6:sec:rx8}.
+
+\modulefig[0.68]{lectures/L06/appendix/images/counter.png}
+
+\begin{selfcheck}
+\textbf{Självkontroll.} Döp din entitet till \code{counter}, med genericen \code{RADIX}
+(\code{natural range 1 to 2**16}, standardvärde \code{10}), ingångarna \code{clock},
+\code{reset_s2_n} och utgångarna \code{count} (\code{natural range 0 to RADIX-1}) och \code{tick}
+(\code{std_logic}), deklarerade i den ordningen; dess testbänk finns i \file{exercises/counter/}.
+Den elaborerar \textbf{två} instanser, en med \code{RADIX = 10} och en med \code{RADIX = 4}, och kör
+vardera genom två fulla cykler, och kontrollerar att \code{tick} är en puls på en cykel snarare än
+en nivå och att den aldrig utlöser halvvägs igenom. En arkitektur som tyst hårdkodar \code{10}
+klarar den första instansen och fallerar på den andra, vilket är poängen med att kontrollera två.
+\end{selfcheck}
+
+% ------------------------------------------------------------------------------------------
+\exerciseset{Skiftregister}
+
+\exercise{Fyra bitar in i ett SIPO-register}{Resonemang}
+\label{c6:ex:sipotrace}
+Ett 8-bitars SIPO-skiftregister startar på \code{00000000} och använder idiomet från
+\secref{c6:sec:sipo}:
+
+\begin{vhdlcode}
+shift_reg <= shift_reg(6 downto 0) & serial_in;
+\end{vhdlcode}
+
+Det tar emot den seriella bitströmmen \code{1, 0, 1, 1} (en bit per klockflank, i den ordningen)
+över fyra stigande klockflanker i följd.
+
+\xpart{a} Skriv ut hela det 8-bitars innehållet i \code{shift_reg} efter var och en av de fyra
+klockflankerna.
+
+\xpart{b} Efter de fyra flankerna: vilka fyra bitar i \code{shift_reg} håller de mottagna data, och
+i vilken ordning ligger de, i förhållande till den ordning bitarna anlände i?
+
+\exercise{Fyra bitar ut ur ett PISO-register}{Resonemang}
+\label{c6:ex:pisotrace}
+Ett 4-bitars PISO-register, som följer idiomet från \secref{c6:sec:piso}, är parallellt laddat med
+\code{parallel_in = "1010"} (\code{load = '1'} under en klockflank), sedan skiftat med
+\code{shift = '1'} under de följande fyra klockflankerna, med \code{serial_in} hållen på \code{'0'}
+hela tiden.
+
+Kom ihåg hållet från \secref{c6:sec:shift}: bitarna flyttar mot MSB, \code{serial_out} är bit 3
+(värdet som är på väg att lämna), och \code{serial_in} kommer in vid bit 0.
+
+\xpart{a} Skriv ut registrets innehåll och \code{serial_out} vid varje steg, en rad per klockflank:
+raden för laddningsflanken, före all skiftning, och sedan en rad för var och en av de fyra
+skiftflankerna.
+
+\xpart{b} I vilken ordning dyker de fyra laddade bitarna upp på \code{serial_out}, i förhållande
+till sina positioner i \code{parallel_in}?
+
+\xpart{c} Vad är registrets slutliga innehåll efter alla fyra skiftningarna, och varför?
+
+\note[Tips]Du behöver ingen riktig hårdvara för att kontrollera Övning~\ref{c6:ex:sipotrace} och
+\ref{c6:ex:pisotrace} för hand. Gå igenom dem precis som du skulle spåra en sanningstabell: en
+klockflank, en rad, i taget.
+
+\exercise{\code{sipo8} och \code{piso8}}{VHDL}
+\label{c6:ex:shiftregs}
+Implementera kapitlets två användbara skiftregisterutföranden i VHDL.
+
+\xpart{a}\parttitle{\code{sipo8}.} Skriv en entitet med namnet \code{sipo8}, ett register med serie
+in och parallell ut.
+
+\begin{booktable}{@{}p{6.6em}p{3.4em}p{11em}L@{}}
+  \thead{Port} & \thead{Riktn.} & \thead{Typ} & \thead{Betydelse} \\
+  \midrule
+  \code{clock} & in & \code{std_logic} & Systemklocka. \\
+  \code{reset_s2_n} & in & \code{std_logic} & Aktiv låg, \textbf{redan synkroniserad}. Asynkron.
+    Nollställer hela registret, så \code{parallel_out} läser \code{"00000000"} medan den hålls
+    låg. \\
+  \code{serial_in} & in & \code{std_logic} & Den inkommande biten. \\
+  \code{parallel_out} & out & \code{std_logic_vector(7 downto 0)} & Registrets innehåll. \\
+\end{booktable}
+
+Följ SIPO-idiomet från \secref{c6:sec:sipo}.
+
+\modulefig[0.68]{lectures/L06/appendix/images/sipo8.png}
+
+\xpart{b}\parttitle{\code{piso8}.} Skriv en entitet med namnet \code{piso8}, ett register med
+parallell in och serie ut.
+
+\begin{booktable}{@{}p{6.6em}p{3.4em}p{11em}L@{}}
+  \thead{Port} & \thead{Riktn.} & \thead{Typ} & \thead{Betydelse} \\
+  \midrule
+  \code{clock} & in & \code{std_logic} & Systemklocka. \\
+  \code{reset_s2_n} & in & \code{std_logic} & Aktiv låg, \textbf{redan synkroniserad}. Asynkron.
+    Nollställer hela registret, så \code{serial_out} läser \code{'0'} medan den hålls låg. \\
+  \code{load} & in & \code{std_logic} & Fånga \code{parallel_in} vid nästa stigande flank. \\
+  \code{shift} & in & \code{std_logic} & Skifta en position vid nästa stigande flank. \\
+  \code{serial_in} & in & \code{std_logic} & Biten som matas in vid bit 0 vid en skiftning. \\
+  \code{parallel_in} & in & \code{std_logic_vector(7 downto 0)} & Värdet som fångas vid en
+    laddning. \\
+  \code{serial_out} & out & \code{std_logic} & Registrets översta bit. \\
+\end{booktable}
+
+Följ PISO-idiomet från \secref{c6:sec:piso}: vid en laddningsflank (\code{load = '1'}), fånga
+\code{parallel_in}; vid en skiftflank (\code{shift = '1'}), flytta varje bit en position mot MSB
+och mata in \code{serial_in} vid bit 0; driv \code{serial_out} från bit 7, så att en laddad byte
+lämnar med den mest signifikanta biten först; och låt \code{load} ha företräde framför \code{shift}
+när båda är höga.
+
+\modulefig[0.68]{lectures/L06/appendix/images/piso8.png}
+
+\xpart{c} Namnge, för vart och ett av de fyra skiftregisterutförandena (SISO, SIPO, PISO, PIPO), en
+uppgift som det är det naturliga valet för. Följ sammanfattningstabellen i \secref{c6:sec:shift}.
+
+Härled varje idiom på nytt ur kapitlet snarare än att kopiera \code{serial_rx8}:s skiftrad.
+
+\begin{selfcheck}
+\textbf{Självkontroll.} \code{sipo8}: portarna \code{clock}, \code{reset_s2_n}, \code{serial_in}
+(in) och \code{parallel_out} (\code{std_logic_vector(7 downto 0)}, out), deklarerade i den
+ordningen; testbänk i \file{exercises/sipo8/}. \code{piso8}: portarna \code{clock},
+\code{reset_s2_n}, \code{load}, \code{shift}, \code{serial_in}, \code{parallel_in}
+(\code{std_logic_vector(7 downto 0)}) och \code{serial_out} (out), deklarerade i den ordningen;
+testbänk i \file{exercises/piso8/}.
+
+\textbf{Spara \code{piso8}.} \Chapref{c8:ch}:s capstone med sändaren instansierar den inte, men den
+är värd att läsa om där för idiomets skull, eftersom den maskinen skiftar ut byten inline.
+\end{selfcheck}
+
+% ------------------------------------------------------------------------------------------
+\exerciseset{Att läsa seriemottagaren}
+
+Till det genomarbetade exemplet hör en referenstestbänk. Kör den från exemplets egen katalog innan
+du börjar:
+
+\begin{shell}
+cd lectures/L06/serial_rx8
+ghdl -a --std=93 serial_rx8.vhd serial_rx8_tb.vhd
+ghdl -e --std=93 serial_rx8_tb
+ghdl -r --std=93 serial_rx8_tb --assert-level=error --stop-time=10ms
+\end{shell}
+
+\exercise{Mottagarens beteende, och tre riktiga buggar}{Simulering}
+\label{c6:ex:rx8}
+Redogör för mottagarens beteende, med hänvisning till \secref{c6:sec:rx8}.
+
+\xpart{a} Bitströmmen \code{1, 0, 1, 1, 0, 0, 1, 0} anländer, en bit per aktiverad klockflank. Vad
+ligger på \code{data_out} under den cykel där \code{data_ready} pulsar? Vilken anländande bit hamnar
+i \code{data_out(7)}, och vilken i \code{data_out(0)}?
+
+\xpart{b} \code{shift_enable} går låg under tre klockcykler efter den fjärde biten, och sedan hög
+igen under de återstående fyra. Producerar mottagaren fortfarande samma byte? Förklara vad
+biträknaren gör under uppehållet. Vad skulle i stället gå fel om \code{shift_enable} grindade bara
+skiftregistret och inte räknaren?
+
+\xpart{c} Gör var och en av följande ändringar i din egen kopia av \file{serial_rx8.vhd}, en i
+taget, och \textbf{förutsäg} vad referenstestbänken kommer att rapportera innan du kör den. Kör den
+sedan och redogör för resultatet:
+\begin{itemize}
+  \item Ändra skiftraden till det spegelvända hållet,
+    \code{shift_reg <= serial_in & shift_reg(7 downto 1);}.
+  \item Ta bort det villkorslösa \code{data_ready <= '0';} högst upp i den klockade grenen.
+  \item Ändra biträknarens jämförelse från \code{7} till \code{6}.
+\end{itemize}
+
+Var och en av dem är en verklig bugg som någon har skickat ut skarpt. Säg för var och en vilken av
+testbänkens kontroller som fångar den, och hur felet hade sett ut på en verklig seriell länk om
+ingenting hade fångat det.

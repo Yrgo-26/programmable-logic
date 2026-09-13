@@ -1,0 +1,32 @@
+% Chapter 3, typeset from lectures/L03: Appendix A becomes sections 3.1-3.9, and Appendix B the
+% exercises.
+
+\chapter{Sequential networks}
+\label{c3:ch}
+
+{\large\itshape Storing state: the D latch, the D flip-flop, registers and clocking.\par}
+
+\begin{chapterbox}{In this chapter}
+\begin{itemize}
+  \item Why combinational logic alone cannot remember anything, and what ``state'' means in a
+    circuit.
+  \item The D latch and the D flip-flop, and why synchronous designs are built from the flip-flop.
+  \item Clocking: period, frequency, and rising versus falling edge.
+  \item The synchronous process template in VHDL, and when a signal assignment actually takes
+    effect.
+  \item Edge detection: turning a level into a pulse one clock cycle long.
+  \item \code{led_toggle}: a button press that toggles an LED and keeps it that way.
+\end{itemize}
+\end{chapterbox}
+
+Two predictions are worth making before the respective simulation is run, and they are the whole
+reason the chapter builds the latch before it builds the flip-flop:
+\begin{itemize}
+  \item for the latch, what \code{Q} does when \code{enable} goes low while \code{D} is still
+    changing.
+  \item for the flip-flop, what \code{Q} does when \code{D} changes \emph{between} two clock edges.
+\end{itemize}
+
+\input{chapters/03/flipflops}
+\input{chapters/03/summary}
+\input{chapters/03/exercises}

@@ -1,0 +1,438 @@
+% Avsnitt 2.1-2.6, ur lectures/L02/appendix/a_larger_networks.md (A.1-A.6).
+
+\section{Karnaughdiagram: från sanningstabell till minimerat grindnät}
+\label{c2:sec:kmap}
+
+Att läsa av en summa-av-produkter-ekvation direkt ur en sanningstabell, så som
+\secref{c1:sec:boolean} gjorde, fungerar alltid men ger sällan det minsta nätet: varje
+\code{1}-rad blir en egen AND-term, även när flera rader delar de flesta av sina ingångar och
+skulle kunna slås ihop.
+
+Ett \textbf{Karnaughdiagram} (K-diagram) gör de gemensamma mönstren synliga för hand, för
+funktioner av 2 till 4 variabler, utan någon formell manipulation av boolesk algebra. Ett
+genomarbetat exempel följer; mer övning finns i \secref{c2:sec:exercises}, och klassisk
+minimeringsteori (don't-cares, Quine\--McCluskey) ligger utanför bokens ram.
+
+Idén är att lägga ut sanningstabellen som ett rutnät i stället för som en lista, och ordna
+rubrikerna så att varje ruta skiljer sig från var och en av sina grannar i sidled och i höjdled i
+exakt ett ingångsvärde, även runt kanterna vänster/höger och upp/ner. Den ordningen är
+\textbf{Graykod}: för två bitar \code{00, 01, 11, 10}, där bara en bit ändras i varje steg,
+inklusive från den sista posten tillbaka till den första.
+
+Sedan:
+\begin{enumerate}
+  \item Skriv en \code{1} i varje ruta där utgången är \code{1}, och lämna resten tomma.
+  \item Rita rektangulära grupper runt \code{1}:orna:
+  \begin{itemize}
+    \item Varje grupp måste vara en rektangel vars bredd och höjd var för sig är en tvåpotens
+      (1, 2 eller 4), så att också dess storlek är en tvåpotens.
+    \begin{itemize}
+      \item en grupp om 4 är alltså antingen en 1x4-linje eller ett 2x2-block, och båda är
+        tillåtna.
+      \item rutor som bara möts i ett hörn är ingen rektangel, så de kan inte grupperas.
+    \end{itemize}
+    \item Grupper får överlappa, och får gå runt en kant av rutnätet.
+  \end{itemize}
+  \item Gör varje grupp så stor som möjligt, och täck varje \code{1} minst en gång. En grupp om 1
+    behåller alla sina ingångar i termen, en grupp om 2 stryker en, en grupp om 4 stryker två, och
+    så vidare.
+  \begin{itemize}
+    \item Använd sedan så få grupper som räcker: stryk varje grupp vars rutor allihop redan täcks
+      av en annan. Ingenting ovan förbjuder en överflödig grupp, och en överflödig grupp är en
+      överflödig AND-term i svaret, korrekt men inte minimal.
+  \end{itemize}
+  \item Behåll för varje grupp bara den eller de ingångar som har samma värde i varje ruta i
+    gruppen, stryk resten, och skriv det som en AND-term:
+  \begin{itemize}
+    \item skriv en behållen ingång direkt om det konstanta värdet är \code{1}, och primmad om det
+      är \code{0}.
+    \item en grupp som bara täcker rutor där $B = 0$ bidrar alltså med termen $B'$.
+  \end{itemize}
+  \item $X$ är alla gruppernas termer OR:ade med varandra.
+\end{enumerate}
+
+\subsection*{Genomarbetat exempel}
+Tre ingångar \code{A}, \code{B}, \code{C}, en utgång \code{X}:
+
+\begin{narrowtable}{cccc}
+  \thead{A} & \thead{B} & \thead{C} & \thead{X} \\
+  \midrule
+  0 & 0 & 0 & 0 \\
+  0 & 0 & 1 & 1 \\
+  0 & 1 & 0 & 0 \\
+  0 & 1 & 1 & 1 \\
+  1 & 0 & 0 & 0 \\
+  1 & 0 & 1 & 1 \\
+  1 & 1 & 0 & 1 \\
+  1 & 1 & 1 & 1 \\
+\end{narrowtable}
+
+Lägg ut den med \code{AB} i Graykod nedåt i raderna och \code{C} i sidled i kolumnerna, och fyll i
+en \code{1} överallt där $X = 1$:
+
+\lecfig[0.42]{lectures/L02/appendix/images/karnaugh_filled.png}{Karnaughdiagram för \code{X},
+ifyllt från sanningstabellen.}{c2:fig:kmap1}
+
+Hela $C = 1$-kolumnen är fyra \code{1}:or, en grupp om 4. Varje ruta delar $C = 1$ och inget annat
+är konstant ($A$ och $B$ varierar båda), så den reduceras till envariabeltermen $C$:
+
+\lecfig[0.42]{lectures/L02/appendix/images/karnaugh_group_c.png}{Samma diagram med den fyra rutor
+stora $C = 1$-gruppen markerad.}{c2:fig:kmap2}
+
+En \code{1} är fortfarande inte täckt, på raden $AB = 11$. Gruppera den med sin granne till höger,
+som $C$-gruppen redan täcker. Båda rutorna i paret delar $A = 1$ och $B = 1$, och $C$ varierar, så
+det reduceras till $AB$:
+
+\lecfig[0.42]{lectures/L02/appendix/images/karnaugh_groups.png}{Samma diagram med den två rutor
+stora $AB = 11$-gruppen tillagd.}{c2:fig:kmap3}
+
+Varje \code{1} är nu täckt; rutan $AB = 11$, $C = 1$ ligger i båda grupperna, och överlapp är i
+sin ordning. Summeringen ger:
+
+\[ X = AB + C \]
+
+Att läsa sanningstabellen direkt, på \chapref{c1:ch}:s vis, hade gett fem AND-termer, en per
+\code{1}-rad. K-diagrammet hittade en likvärdig ekvation med två termer, vilket är hela värdet av
+att göra det här för hand.
+
+\subsection*{Att realisera nätet}
+$X = AB + C$ är två grindar: en \code{AND} som beräknar $AB$ och matar en \code{OR} vars andra
+ingång är $C$.
+
+\lecfig[0.55]{lectures/L02/appendix/images/net.png}{Grindnät för det minimerade uttrycket.}
+{c2:fig:net}
+
+Du bygger det här nätet för hand i CircuitVerse under passet, precis som du byggde
+\code{or_gate}s nät i \chapref{c1:ch}, och översätter det till VHDL i \secref{c2:sec:tovhdl}.
+
+% ------------------------------------------------------------------------------------------
+\section{Att översätta Karnaughdiagrammets nät till VHDL}
+\label{c2:sec:tovhdl}
+
+$X = AB + C$ översätts rakt av till VHDL. Tre ingångar, en utgång:
+
+\begin{vhdlcode}
+library ieee;
+use ieee.std_logic_1164.all;
+
+entity gate_network is
+    port(a, b, c: in std_logic;
+         x      : out std_logic);
+end entity;
+\end{vhdlcode}
+
+Arkitekturen använder en intern signal \code{ab} för att hålla \code{AND}-grindens utgång, och
+speglar tvågrindsnätet ett till ett:
+
+\begin{vhdlcode}
+architecture behaviour of gate_network is
+signal ab: std_logic;
+begin
+    -- AND gate: AB.
+    ab <= a and b;
+
+    -- OR gate: AB + C.
+    x <= ab or c;
+end architecture;
+\end{vhdlcode}
+
+Utan mellansignalen slås det ihop till \code{x <= (a and b) or c;}. Båda är lika giltiga och
+syntetiseras till samma hårdvara; använd den som är mest läsbar för nätet du har framför dig.
+
+Den byggbara versionen använder den hopslagna formen, eftersom det vid två grindar inte finns
+något att vinna på att namnge mellansignalen:
+
+\vhdlfile{lectures/L02/gate_network/gate_network.vhd}
+
+Öppna den vid sidan av versionen ovan och övertyga dig om att de beskriver samma krets; det är
+påståendet det här avsnittet gör, och det kostar inget att kontrollera.
+
+För att köra den på hårdvara, tilldela portarna till strömbrytare och en lysdiod med DE0-CV:s pin
+planner (bilaga~\ref{app:quartus}). Ingenting här beror på specifika pinnummer.
+
+% ------------------------------------------------------------------------------------------
+\section{\code{std_logic_vector}: mer än en ledning}
+\label{c2:sec:vectors}
+
+Allt hittills har varit \code{std_logic}, en ledning som bär en bit. Att bunta ihop flera ledningar
+under ett namn är vad \code{std_logic_vector} är till för.
+
+\begin{vhdlcode}
+signal count: std_logic_vector(3 downto 0);
+\end{vhdlcode}
+
+Det deklarerar fyra ledningar: \code{count(3)} ner till \code{count(0)}. Intervallet är
+\code{3 downto 0} snarare än \code{0 to 3} så att biten längst till vänster är den mest
+signifikanta, så som du skulle skriva talet på papper. Boken använder \code{downto} överallt, och
+det gör nästan all VHDL du kommer att möta.
+
+En vektor är en porttyp som vilken annan som helst:
+
+\begin{vhdlcode}
+entity display is
+    port(number: in  std_logic_vector(3 downto 0);
+         hex   : out std_logic_vector(6 downto 0));
+end entity;
+\end{vhdlcode}
+
+\subsection*{Värden}
+En enskild bit tar enkla citattecken, en vektor dubbla:
+
+\begin{vhdlcode}
+x     <= '1';                -- std_logic: one bit
+count <= "1010";             -- std_logic_vector(3 downto 0): four bits
+count <= (others => '0');    -- every bit '0', whatever the width
+\end{vhdlcode}
+
+Den sista är ett \emph{aggregat}: \code{(others => '0')} betyder ”alla återstående bitar är
+\code{'0'}”, och eftersom ingen namngavs individuellt är det allihop. Det fortsätter fungera när
+bredden ändras, och det dyker upp genom hela resten av boken.
+
+\subsection*{Indexering och slicing}
+En bit ur en vektor är en \code{std_logic}; en sammanhängande följd är en \emph{slice}, som själv
+är en vektor:
+
+\begin{vhdlcode}
+carry     <= count(3);
+high_half <= input(7 downto 4);
+\end{vhdlcode}
+
+Slicing är hur en bred port matar flera smalare, vilket är vad \secref{c2:sec:submodules}:s
+tvåsiffriga display gör med sina åtta strömbrytaringångar.
+
+En detalj är inte vad en mjukvaruutvecklare väntar sig. \code{input(7 downto 4)} har
+indexintervallet \code{7 downto 4}, inte \code{3 downto 0}. Kopplad till en port deklarerad
+\code{std_logic_vector(3 downto 0)} matchas de två \textbf{positionellt, från vänster till höger},
+inte efter indexnummer: \code{input(7)} driver bit 3, \code{input(6)} driver bit 2, och så vidare.
+Längderna måste stämma överens. Numreringen behöver inte det.
+
+\subsection*{En vektor är ett knippe bitar, inte ett tal}
+\code{count <= "1010"} gör inte \code{count} lika med tio. \code{std_logic_vector} säger ingenting
+om vad bitarna \emph{betyder}, så den erbjuder bara de operationer som är meningsfulla för ett
+knippe ledningar: de logiska operatorerna tillämpade bit för bit (\code{a and b}, \code{not a},
+\code{a xor b}), jämförelse (\code{count = "1010"}) och konkatenering (\code{"10" & "11"} är
+\code{"1011"}).
+
+Aritmetik står inte på den listan. \code{count + 1} går inte att kompilera, eftersom ingenting har
+sagt om de fyra ledningarna är ett teckenlöst tal, ett tecknat, eller fyra orelaterade signaler.
+
+Boken går inte runt det med en numerisk vektortyp. Allt som räknas är ett vanligt heltal med ett
+intervall:
+
+\begin{vhdlcode}
+signal count: natural range 0 to 9;
+\end{vhdlcode}
+
+som du kan addera till och jämföra direkt, och som syntesen gör om till exakt de vippor
+intervallet behöver. Vektorer förblir vad de är: knippen av ledningar, för saker som verkligen är
+knippen av ledningar, som åtta strömbrytare eller sju displaysegment.
+
+De två världarna möts bara vid en gräns, och konverteringarna dyker upp där de behövs:
+
+\begin{vhdlcode}
+count_v <= std_logic_vector(to_unsigned(count, 4));   -- integer to vector
+count   <= to_integer(unsigned(count_v));             -- vector to integer
+\end{vhdlcode}
+
+Båda kommer från \code{ieee.numeric_std}, vilket är varför vissa filer lägger till en tredje
+\code{use}-sats.
+
+% ------------------------------------------------------------------------------------------
+\section{Multiplexrar}
+\label{c2:sec:mux}
+
+En \textbf{multiplexer} (”mux”) kopplar exakt en av flera dataingångar till en enda utgång, vald
+av en separat uppsättning \textbf{väljaringångar}. En \code{N}-till-1-mux har \code{N}
+dataingångar och $\lceil \log_2 N \rceil$ väljarbitar.
+
+Det enklaste fallet, en 2-till-1-mux med ingångarna \code{A}, \code{B}, väljaren \code{S} och
+utgången \code{X}:
+
+\begin{narrowtable}{cc}
+  \thead{S} & \thead{X} \\
+  \midrule
+  0 & B \\
+  1 & A \\
+\end{narrowtable}
+
+Som boolesk ekvation, $X = S'B + SA$: för varje kombination av ingångar är exakt en AND-term
+aktiv, och den termens dataingång släpps igenom.
+
+Större muxar är samma mönster med fler väljarbitar. En 8-till-1-mux med dataingångarna
+\code{A}--\code{H} och väljaren \code{S[2:0]}:
+
+\begin{narrowtable}{rc}
+  \thead{S[2:0]} & \thead{X} \\
+  \midrule
+  000 & A \\
+  001 & B \\
+  010 & C \\
+  011 & D \\
+  100 & E \\
+  101 & F \\
+  110 & G \\
+  111 & H \\
+\end{narrowtable}
+
+Läst som en summa av produkter med en term per rad bidrar raden \code{000} med $A\,S_2'S_1'S_0'$
+och resten följer samma form, där var och en grindar sin dataingång med den väljarkombination som
+väljer den:
+
+\[ X = A\,S_2'S_1'S_0' + B\,S_2'S_1'S_0 + \dots + H\,S_2S_1S_0 \]
+
+Värt att skriva ut en gång för hand, inte värt att memorera. Mönstret är poängen, och det är
+detsamma i vilken storlek som helst.
+
+Som grindar: en \code{AND} med fyra ingångar per dataingång (databiten plus alla tre
+väljarbitarna), med väljarbitarna inverterade efter behov, och alla åtta \code{AND}-utgångar
+summerade av ett träd av \code{OR}-grindar.
+
+\lecfig[0.72]{lectures/L02/appendix/images/mux_8to1.png}{8-till-1-multiplexer som åtta AND-grindar
+som matar ett OR-träd.}{c2:fig:mux8}
+
+Det här är en verklig byggsten. ATmega328P (chippet på en Arduino Uno och Nano) använder en
+internt så att dess analogkapabla pinnar, plus en intern bandgapsreferens och en temperatursensor,
+kan dela på en enda analog-till-digital-omvandlare, vald av de fyra \code{MUX}-bitarna i dess
+\code{ADMUX}-register.
+
+% ------------------------------------------------------------------------------------------
+\section{Multiplexrar i VHDL: \code{process} och \code{case}}
+\label{c2:sec:process}
+
+Varje sats hittills har varit \textbf{konkurrent}: en stående beskrivning av en ledning, alla
+aktiva samtidigt. En multiplexer är den första kretsen som är otymplig att skriva så, och den
+behöver två nya konstruktioner:
+\begin{itemize}
+  \item en \textbf{\code{process}}, ett block vars innehåll körs sekventiellt, uppifrån och ned,
+    som vanlig kod. Den körs om varje gång någon signal i dess \textbf{känslighetslista} ändras,
+    och ur arkitekturens synvinkel är den fortfarande bara ännu en konkurrent sats. Varje process
+    i boken har den här formen; \chapref{c3:ch} återanvänder den för klockad logik, med klockan i
+    känslighetslistan i stället för de ingångar som avkodas.
+  \item en \textbf{\code{case}-sats}, VHDL:s \code{switch}. Precis som \code{if} och \code{for} är
+    den en \emph{sekventiell} sats, tillåten bara inuti en process, och varje värde väljaren kan
+    anta måste täckas, vilket \code{when others} garanterar.
+\end{itemize}
+
+”Välj en av flera ingångar utifrån en väljare” \emph{är} en \code{case}-sats, nästan ord för ord.
+2-till-1-muxen från \secref{c2:sec:mux}:
+
+\begin{vhdlcode}
+MUX_PROCESS: process(a, b, sel) is
+begin
+    case (sel) is
+        when '0'    => x <= b;
+        when '1'    => x <= a;
+        when others => x <= '0';
+    end case;
+end process;
+\end{vhdlcode}
+
+Två saker att notera:
+\begin{itemize}
+  \item Enbitsvärden tar enkla citattecken, \code{'0'}/\code{'1'}, till skillnad från de dubbla
+    citattecken som används för vektorer som \code{"000"}.
+  \item \code{when others} är obligatoriskt snarare än defensivt. VHDL kräver att ett \code{case}
+    täcker varje värde av väljarens typ, och \code{std_logic} har nio (\secref{c1:sec:vhdl}), så
+    \code{'0'} och \code{'1'} ensamma gör aldrig ett \code{case} uttömmande. Det är en språkregel,
+    inte ett påstående om ledningen: ett syntetiserat nät bär en \code{0} eller en \code{1} och
+    inget annat, och de andra sju värdena är simulatorns, där en signal som ligger kvar på
+    \code{'U'} eller \code{'X'} är en bugg snarare än en nivå.
+\end{itemize}
+
+\subsection*{Genomarbetat exempel: 8-till-1-muxen}
+Samma form med en trebitars väljare och åtta grenar, en per rad i \secref{c2:sec:mux}:s
+sanningstabell. Dataingångarna \code{A}--\code{H} blir vektorn \code{inputs(7 downto 0)}, med
+\code{A} som \code{inputs(7)} ner till \code{H} som \code{inputs(0)}, så väljaren \code{"000"}
+kopplar fram \code{inputs(7)} och \code{"111"} kopplar fram \code{inputs(0)}.
+
+\vhdlfile{lectures/L02/mux_8to1/mux_8to1.vhd}
+
+Jämför den med \secref{c2:sec:mux}:s ekvation med åtta termer för samma krets. Ekvationen
+beskriver grindarna; \code{case}-satsen beskriver \emph{avsikten} och låter syntesverktyget ta
+fram grindarna. Båda är korrekta och båda syntetiseras till samma hårdvara. Det glappet, mellan
+att beskriva struktur och att beskriva beteende, är det mesta av vad ett hårdvarubeskrivande språk
+ger dig.
+
+% ------------------------------------------------------------------------------------------
+\section{Att bygga en design av submoduler}
+\label{c2:sec:submodules}
+
+Allt hittills har varit en entitet med en arkitektur. Det slutar räcka i samma stund en design
+behöver samma block två gånger.
+
+DE0-CV har sex 7-segmentsdisplayer, och du vill driva två av dem, var och en visande en
+hexadecimal siffra. Logiken som gör ett fyrabitars tal till sju segmentsignaler är densamma för
+båda. Du skulle kunna skriva den två gånger inuti en arkitektur och ingenting skulle hindra dig,
+men den andra kopian är en belastning: varje rättning måste göras i båda, och den dag de glider
+isär är den dag du förlorar en kväll på att lista ut vilken av dem som är fel.
+
+Skriv blocket en gång, som en egen entitet, och \emph{instansiera} det två gånger.
+
+\subsection*{Submodulen}
+En vanlig modul. Ingenting hos den säger ”jag är en submodul”:
+
+\begin{vhdlcode}
+entity display is
+    port(number: in  std_logic_vector(3 downto 0);
+         hex   : out std_logic_vector(6 downto 0));
+end entity;
+\end{vhdlcode}
+
+Om den slutar som en hel design eller som en del av en större avgörs av den som instansierar den,
+inte av modulen.
+
+\subsection*{Att instansiera den}
+Med \code{entity work.<name>}, inuti en annan arkitektur:
+
+\begin{vhdlcode}
+entity hex_display is
+    port(input     : in  std_logic_vector(7 downto 0);
+         hex1, hex0: out std_logic_vector(6 downto 0));
+end entity;
+
+architecture structure of hex_display is
+begin
+    display1: entity work.display
+        port map(input(7 downto 4), hex1);
+
+    display0: entity work.display
+        port map(input(3 downto 0), hex0);
+end architecture;
+\end{vhdlcode}
+
+\begin{itemize}
+  \item \code{display1} och \code{display0} är \textbf{instansetiketter}, som namnger de två
+    kopiorna. De måste vara unika inom arkitekturen, och de är inte modulens namn: båda
+    instanserna är \code{display}.
+  \item \code{entity work.display} väljer modulen. \code{work} är det bibliotek dina analyserade
+    filer hamnar i som förval, i både GHDL och Quartus.
+  \item \code{port map(...)} kopplar instansens portar till signaler i den omslutande
+    arkitekturen, \textbf{i den ordning entiteten deklarerar dem}. \code{display} deklarerar
+    \code{number} och sedan \code{hex}, så det första objektet driver \code{number} och det andra
+    drivs av \code{hex}.
+  \item \code{input(7 downto 4)} är en \textbf{slice}, som instansen ser som en
+    \code{std_logic_vector(3 downto 0)}.
+\end{itemize}
+
+Lägg märke till vad \code{hex_display}s arkitektur \emph{inte} innehåller: någon logik alls. Den
+är ledningsdragning och inget annat. Varje grind i den färdiga designen kommer från de två
+\code{display}-instanserna.
+
+\subsection*{Positionell och namngiven associering}
+\code{port map} ovan är \textbf{positionell} och matchar portar efter ordning. VHDL tillåter också
+\textbf{namngiven} associering, som du kommer att möta i andras kod:
+
+\begin{vhdlcode}
+display1: entity work.display
+    port map(number => input(7 downto 4), hex => hex1);
+\end{vhdlcode}
+
+De två är likvärdiga. Boken använder positionell överallt, vilket betyder att ordningen på en
+entitets portdeklarationer är något du måste få rätt. Det är ingen formalitet: det är precis vad
+de utdelade testbänkarna förlitar sig på, vilket är varför varje övnings självkontrollsruta
+stavar ut sina portar \emph{i ordning}.
+
+\subsection*{Vad det här kostar i hårdvara}
+Inget överraskande. Att instansiera en modul två gånger lägger två kopior av dess grindar på
+FPGA:n, precis som att skriva logiken två gånger skulle göra. Besparingen ligger i källkoden, inte
+i kislet: en beskrivning, ett ställe att rätta på, och en design du kan läsa.

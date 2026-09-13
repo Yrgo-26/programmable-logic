@@ -1,0 +1,81 @@
+% Avsnitt 16.9, ur lectures/L16/appendix/b_exercises.md.
+
+\section{Övningar}
+\label{c16:sec:exercises}
+
+\begin{aside}
+Du bygger sändningsvägen, och \code{can_controller_tb} driver två noder genom ett komplett utbyte, så
+den kan inte passera förrän \chapref{c17:ch} lägger till mottagningshalvan. \code{make build-project}
+vet det och rapporterar den som \emph{överhoppad} i stället för att köra den och misslyckas:
+
+\begin{console}
+==> can_controller_tb (skipped: can_controller.vhd has no receive path yet; ...)
+\end{console}
+
+Så bygget förblir grönt det här kapitlet, och de här övningarna resonerar sig igenom sändningsvägen
+och analyserar den i GHDL i stället. Testbänken blir domen om ett kapitel.
+\end{aside}
+
+\exercise{Följ en kort ram för hand}{Resonemang}
+\label{c16:ex:shortframe}
+Skriv, utifrån ramformatet i \secref{c10:sec:frameformat} och det här kapitlets fälttabell, ut hela
+följden av tillstånd som \code{can_controller} passerar (i TX-rollen) för att sända en ram med ID
+\code{0x001}, DLC \code{0} (inget datafält), från \code{STATE_IDLE} tillbaka till \code{STATE_IDLE}.
+Notera för varje tillstånd ungefär hur många bitperioder det upptar.
+
+\exercise{Varför tillståndet \code{STATE_LOAD_*} finns}{Resonemang}
+\label{c16:ex:loadstate}
+\xpart{a} Förklara med egna ord vad som skulle gå fel om ett stoppat fält sekvenserades med ett enda
+tillstånd som gav \code{tx_shift_reg}:s \code{load} \emph{och} väntade på \code{done}, i stället för
+ett separat \code{STATE_LOAD_*} på en cykel följt av skifttillståndet.
+
+\xpart{b} Peka ut den specifika tajmingregeln från \chapref{c14:ch} (att \code{tx_shift_reg}:s
+\code{load} presenterar direkt, och dess \code{done} som kommer ett skift extra) som gör uppdelningen
+i två tillstånd nödvändig.
+
+\exercise{Vad som når \code{crc15}, och vad som inte gör det}{Resonemang}
+\label{c16:ex:crcfeed}
+\xpart{a} Sortera för en sänd ram de här kategorierna av bitar i ”matas in i \code{crc15}” och
+”utesluts”: SOF-biten, riktiga bitar ur ID, kontrollfält och data, instoppade stoppbitar, CRC-fältets
+egna bitar, och den ostoppade svansen (CRC-avgränsare, ACK-plats, ACK-avgränsare, EOF). Säg för varje
+utesluten kategori vad som utesluter den: antingen en term i
+\code{crc_enable <= txsr_bit_valid and not txsr_stuff and role;}, eller det faktum att fältet aldrig
+passerar genom \code{tx_shift_reg} över huvud taget.
+
+\xpart{b} En av de kategorierna kan överraska dig: CRC-fältets egna bitar går tillbaka in i motorn.
+Säg, med \chapref{c13:ch}:s egenskap att generering och kontroll är samma operation, vilket värde
+registret håller efter att den sista CRC-biten matats in, och namnge den kontroll i \chapref{c17:ch}
+som beror på precis det värdet. Förklara sedan varför sändningsvägen, tagen för sig, inte beror på
+det: vad garanterar \code{STATE_START}:s \code{clear} redan om den andra ram en nod sänder?
+
+\xpart{c} Anta att du i stället hade grindat bort \code{crc_enable} under \code{STATE_CRC_HI} och
+\code{STATE_CRC_LO}. Skulle den första ram en nod sänder bära en korrekt CRC? Skulle den andra? Var
+noga: att \code{crc15} nollställs är en del av svaret. Säg sedan om någon simulering i den här boken
+skulle fånga ändringen, och vad det säger dig om var det återmatade CRC-fältet faktiskt gör nytta.
+
+\exercise{Hur lång är en ram, exakt?}{Resonemang}
+\label{c16:ex:framelen}
+Att svara på det kräver att hela fälttabellen och stoppbitsregeln hålls i huvudet samtidigt, vilket är
+själva poängen. Ta ramen \code{can_controller} sänder för ID \code{0x123}, DLC \code{3}, databytesen
+\code{FF 00 00}.
+
+\xpart{a} Skriv ut det stoppade området bit för bit, SOF till och med datafältets slut, med det här
+kapitlets fälttabell. (Det ska bli 43 bitar: $1 + 11 + 1 + 2 + 4 + 24$.) Identifieraren är
+\code{0x123}; kom ihåg att RTR, IDE och r0 alla är \code{0} och att DLC är \code{0011}.
+
+\xpart{b} CRC-15 över de 43 bitarna är \code{0x0FEE}, alltså \code{000111111101110} (du kan bekräfta
+det mot din \code{crc15} från \chapref{c13:ch} om du vill). Lägg till den, vilket ger hela det
+stoppade området på 58 bitar, SOF till och med CRC.
+
+\xpart{c} Tillämpa stoppbitsregeln över alla 58 bitarna och räkna de instoppade stoppbitarna. Håll
+koll på gränsen mellan datafältets avslutande nollor och CRC:ns inledande nollor: följdräknaren
+nollställs inte vid fältgränser.
+
+\xpart{d} Lägg till den ostoppade svansen (CRC-avgränsare, ACK-plats, ACK-avgränsare, EOF) och ange
+det totala antalet bitar som faktiskt drivs ut på ledningen. Hur många mikrosekunder är det vid
+1~Mbit/s?
+
+\xpart{e} Samma ram med datan \code{11 22 33} behöver bara en stoppbit i stället för antalet du fick
+i \textbf{c)}. Förklara med en mening varför en rams varaktighet på en CAN-buss beror på
+\emph{nyttolastens värde} och inte bara på dess längd, och vad det innebär för den som försöker räkna
+ut värsta fallets bustajming.

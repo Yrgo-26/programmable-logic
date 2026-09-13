@@ -1,0 +1,57 @@
+% Section 19.9, from lectures/L19/README.md.
+
+\section{Summary}
+\label{c19:sec:review}
+
+\needspace{6\baselineskip}
+\subsection*{What you should be able to do now}
+\begin{itemize}
+  \item Implement the transaction FSM per the protocol specification, including the abort rule.
+  \item Explain why a read latches the register value once, and what goes wrong without that rule.
+  \item Compose the whole node into a top level and verify it in simulation.
+  \item Wire two DE0-CVs together onto a shared bus, and a microcontroller as master over its MVIO
+    domain, and debug the chain systematically from the bottom up.
+  \item Say what requirements the SPI connection puts on the hat's design, and why they cannot be
+    fixed after the fact.
+  \item Say what simulation has proved and what only hardware can prove.
+\end{itemize}
+
+\needspace{6\baselineskip}
+\subsection*{Questions to test yourself with}
+\begin{enumerate}
+  \item Why is the register value latched once at the end of the command byte instead of being read
+    while the data bytes are shifted out? Which register suffers most from that rule being broken?
+  \item SS goes high after three bytes. What has happened to the transaction, and what has changed in
+    the node?
+  \item A write to a reserved index. What does the bridge do, and why does it consume all five bytes
+    anyway?
+  \item Why is there no error channel in the transaction layer?
+  \item Which bring-up step would reveal a swapped MISO and MOSI, and which would reveal a
+    \code{VDDIO2} that was never connected?
+  \item The hat puts an LED on \code{PC2}. Which step fails first, and why is that a fault you cannot
+    program your way out of?
+  \item What did steps 1 to 3 prove that steps 4 to 8 did not have to prove again?
+  \item What has the simulation proved about the design, and what has it been unable to prove?
+\end{enumerate}
+
+\needspace{6\baselineskip}
+\subsection*{Final presentation}
+Every group shows, in about fifteen minutes: a run of \code{make build-project} with every testbench
+green; a short walkthrough of \code{can_spi_node}, what every block does and where the boundaries
+run; the bring-up, as far as you got, on real hardware; and \file{CONTRIBUTORS.md} plus a quick tour
+of the repository's history, branches, PRs and reviews.
+
+The final presentation is the project's second and last fixed checkpoint. The project is handed in
+the same day; see the checklist in appendix~\ref{app:project}.
+
+The bring-up is not graded. Getting to step 3 of eight is a good result; what is graded is the
+simulation behind it.
+
+\needspace{6\baselineskip}
+\subsection*{Looking ahead}
+\Chapref{c20:ch} is the book's second practical exam, with tasks on the project's modules. After it
+the course is over.
+
+The controller you have built is handed over to the parallel class, which writes the C++ driver
+against the same registers over the same SPI transport. The shared contract is
+appendix~\ref{app:protocol}, and nothing else.

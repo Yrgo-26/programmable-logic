@@ -1,0 +1,120 @@
+% Avsnitt 19.1, ur lectures/L19/appendix/a_system_verification.md.
+
+\section{Att verifiera hela systemet}
+\label{c19:sec:verify}
+
+Innan någon del av transporten går att lita på måste kontrollern visas fungera som ett \emph{system}.
+Det betyder inte en modul mot en attrapp, utan två oberoende noder på en ledning som bråkar om den så
+som riktiga noder gör.
+
+\subsection*{Att modellera bussen}
+Ingenting i konstruktionen modellerar den delade bussen, och det är medvetet. \code{can_controller}
+driver ett par \code{(tx_bus, bus_en)} och läser \code{rx_bus}, vilket är precis vad en riktig
+CAN-transceiver presenterar på sin digitala sida (\chapref{c10:ch}). Wired-AND:et bor i testbänken,
+och på hårdvara bor det i transceivern.
+
+\file{can_controller_tb.vhd} instansierar två noder på en ledning och kombinerar dem direkt. Varje
+nods effektiva utgång är dess drivna värde när \code{bus_en = '1'}, annars släppt (\code{'1'}), och
+bussen är deras AND, så den läser dominant i samma ögonblick som \emph{någon} av noderna drar låg:
+
+\begin{vhdlcode}
+bus_line <= (a_tx_bus or not a_bus_en) and (b_tx_bus or not b_bus_en);
+\end{vhdlcode}
+
+Den enda raden är hela \secref{c10:sec:can}:s ”vilken dominant som helst slår alla recessiva”, och
+det är den som gör arbitreringen testbar i simulering.
+
+Värd att räkna igenom snarare än att läsa. Varje nod bidrar med \code{tx_bus or not bus_en}, som är
+\code{1} så fort den släppt bussen, och ledningen är de två bidragen AND:ade:
+
+\begin{narrowtable}{llccccl}
+  \thead{Nod A} & \thead{Nod B} & \thead{\code{a_tx_bus}} & \thead{\code{a_bus_en}} &
+    \thead{\code{b_tx_bus}} & \thead{\code{b_bus_en}} & \thead{\code{bus_line}} \\
+  \midrule
+  släppt & släppt & \code{-} & \code{0} & \code{-} & \code{0} & \code{1} recessiv \\
+  driver dominant & släppt & \code{0} & \code{1} & \code{-} & \code{0} & \code{0} dominant \\
+  släppt & driver dominant & \code{-} & \code{0} & \code{0} & \code{1} & \code{0} dominant \\
+  driver dominant & driver dominant & \code{0} & \code{1} & \code{0} & \code{1} & \code{0}
+    dominant \\
+\end{narrowtable}
+
+En släppt nods \code{tx_bus} är \code{-} därför att den faktiskt inte spelar någon roll:
+\code{not bus_en} ensamt gör dess bidrag till \code{1}, så en nod som släppt taget kan inte påverka
+ledningen oavsett vad dess utgång råkar ligga på. Över alla sexton ingångskombinationer läser
+ledningen dominant exakt när minst en nod har \code{bus_en = '1'} med \code{tx_bus = '0'}, vilket är
+regeln uttryckt som hårdvara.
+
+Två rader bär arbitreringsargumentet. \textbf{Rad två är själva tvekampen:} A driver dominant, B
+sänder recessivt och har därför släppt, och ledningen läser dominant. B, som övervakar medan den
+sänder, ser att den sänt recessivt och att bussen läser dominant, och det är precis det förlustvillkor
+\chapref{c17:ch} kontrollerar. Samtidigt läser A tillbaka exakt den bit den sände och märker
+ingenting.
+
+\textbf{Rad ett är varför förloraren kan gå.} När B slutat driva bidrar den med \code{1} för alltid,
+så ledningen är A:s ensam. Förlorarens reträtt är osynlig för vinnaren, och det är det som gör en
+kollision till en icke-händelse i stället för något båda noderna måste återhämta sig från.
+
+Rad fyra är värd en blick också: när båda noderna driver dominant är ledningen dominant och var och
+en läser tillbaka det den sände, så ingen av dem kan märka att den andra finns. Det är det normala
+tillståndet för varje dominant bit i identifieraren innan de två ID:na skiljer sig åt.
+
+\subsection*{De två scenarierna}
+\begin{enumerate}
+  \item \textbf{Mottagning.} Nod A sänder en ram på 5 bytes (ID \code{0x123}, data
+    \code{11 22 F8 44 55}) medan nod B tar emot den. \code{0xF8} framtvingar en stoppbit inne i
+    datafältet, så båda sidors CRC-motorer måste hoppa över den. Testbänken kontrollerar A:s
+    \code{tx_done} och B:s \code{rx_valid}, att B rekonstruerade ID:t, DLC:n och \textbf{varje}
+    databyte på sin fasta position, och att ingen av noderna höjde \code{error}.
+  \item \textbf{Arbitrering.} Noderna A (ID \code{0x000}) och B (ID \code{0x001}) begär båda under
+    samma cykel, och skiljer sig bara i identifierarens sista bit. A måste vinna och fullborda
+    normalt, ovetande om att någon tvekamp ägt rum; B måste upptäcka förlusten vid den biten, höja
+    \code{error} och sluta driva. Kontrollen körs efter att A:s ram är klar, så den bekräftar också
+    att B:s \code{error} fortfarande går att läsa då, i stället för att ha suddats av ett återinträde
+    i \code{STATE_START}.
+\end{enumerate}
+
+En sändande nod tar aldrig emot sin egen ram (\code{rx_shift_reg} går bara medan \code{role = '0'}),
+så båda scenarierna behöver verkligen två noder; inget av dem skulle gå att testa med en ensam nod.
+
+De två encykelspulser det första scenariot väntar på, A:s \code{tx_done} och B:s \code{rx_valid},
+\textbf{låses} i testbänken, eftersom två oberoende tillståndsmaskiner inte behöver pulsa på samma
+flank, och ett rakt \code{wait until (a = '1' or b = '1')} skulle återuppta på den första och missa
+den andra.
+
+\subsection*{Vad testbänken inte täcker}
+\label{c19:sub:gaps-tb}
+
+Två godkända scenarier är inte samma sak som en bevisad konstruktion, och att veta var en testbänk
+slutar hör till att läsa den. Fem luckor är värda att namnge, eftersom var och en är ett ställe där
+den här konstruktionen antingen är förenklad med flit eller helt enkelt otestad:
+\begin{itemize}
+  \item \textbf{Båda noderna delar en \code{clock} och en \code{reset_n}.} Riktiga noder går på
+    oberoende oscillatorer och driver isär. Var precis med vad det lämnar otestat, för det är inte
+    \code{resync} självt: båda noderna pulsar \code{resync} vid varje rams början (\chapref{c16:ch}),
+    och den pulsen är det som fasriktar B:s sampelpunkter mot det godtyckliga ögonblick då A började
+    sända, så fall 1 misslyckas utan den. Vad en delad klocka aldrig kan pröva är \textbf{drift}, två
+    timrar som startar i fas och vandrar isär mitt i ramen, fallet som Övning~\ref{c12:ex:drift}
+    kvantifierar och skälet till att riktig CAN synkroniserar om vid varje flank från recessiv till
+    dominant i stället för en gång per ram. Det här är den största luckan, och att sluta den i
+    simulering kräver en andra klockgenerator med en avsiktlig frekvensavvikelse.
+    \Secref{c19:sec:bringup} får en ram tvärs över \textbf{två kort} med två separata kristaller,
+    äntligen genuint oberoende klockor, med ett ärligt förbehåll noterat där.
+  \item \textbf{Ingen ram förvanskas någonsin.} Ingenting matar in ett stoppfel, vänder en bit på
+    ledningen eller skadar en CRC, så mottagarsidans \code{error}-vägar prövas bara på modulnivå av
+    \code{rx_shift_reg_tb} och \code{crc15_tb}, aldrig hela vägen igenom.
+  \item \textbf{ACK-luckan drivs men läses aldrig tillbaka.} En mottagare med giltig CRC drar den
+    dominant (\chapref{c17:ch}), men sändaren kontrollerar den aldrig, så en ram som ingen kvitterat
+    fullbordas precis som en som blev kvitterad. Det är en medveten förenkling
+    (\secref{c19:sec:gaps}), och testbänken ärver den i stället för att fånga den.
+  \item \textbf{Arbitreringen är alltid tvåvägs, och förloras alltid vid samma bit.} \code{0x000} mot
+    \code{0x001} skiljer sig i identifierarens sista bit, så förlusten upptäcks i samma tillstånd
+    varje körning. Övning~\ref{c19:ex:thirdnode} lägger till en tredje nod och flyttar den förlorande
+    biten tidigare.
+  \item \textbf{Ingen nod sänder någonsin igen efter ett avbrott.} Nod B förlorar arbitreringen i
+    fall 2 och blir aldrig ombedd att skicka en ram till, så ingenting här kontrollerar att en nod
+    över huvud taget återhämtar sig från ett avbrott. Det spelar större roll än det låter:
+    \code{can_controller} nollställer \code{crc15} i \code{STATE_START} (\chapref{c16:ch}) just för
+    att en övergiven ram inte ska kunna lämna sina rester efter sig, och den här testbänken skulle
+    passera precis lika glatt med den nollställningen borttagen. Övning~\ref{c19:ex:afterabort} är
+    där du får reda på vad den gjorde.
+\end{itemize}

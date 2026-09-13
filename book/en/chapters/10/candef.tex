@@ -1,0 +1,98 @@
+% Section 10.7, from lectures/L10/appendix/b_can_def_package.md.
+
+\section{The \code{can_def} package}
+\label{c10:sec:candef}
+
+\subsection*{Why use a VHDL package?}
+\begin{itemize}
+  \item Part~\ref{part:vhdl} never needed one: every example there was self-contained, and where an
+    exercise reused a module you had already written \textemdash{} \code{reset_sync},
+    \code{button_sync}, \code{timer} \textemdash{} you copied the file into the directory that
+    needed it.
+  \item This project is different. \code{TICKS_PER_BIT}, \code{SAMPLE_TICK}, \code{ID_WIDTH},
+    \code{CRC_WIDTH} and more are each needed by \emph{several} of the blocks built from
+    \chapref{c12:ch} onwards, and they have to agree exactly, everywhere, or the design breaks
+    silently. That much shared information is worth defining once.
+  \item Every constant in it comes from something this chapter has just taught: the field widths are
+    the ones you lay out by hand in the exercises, and \code{SAMPLE_TICK} is the 70~\% point
+    \secref{c10:sec:bittiming} reasoned about. This package is where those numbers stop being prose
+    and become the single source of the definitions every module uses.
+  \item It also changes the layout of the \emph{files}. Every module here is part of \textbf{one}
+    design, so all of them live in \file{controller/} and read the single \file{can_def.vhd} beside
+    them. Nothing is duplicated, and there is exactly one file to change when a constant changes.
+\end{itemize}
+
+\subsection*{Reading \code{can_def.vhd}}
+Live-coded together during the session, and written \textbf{once}, to \file{controller/can_def.vhd}.
+This is the first VHDL the book writes. Every module you write from \chapref{c11:ch} onwards lands in
+the same directory, and all of them except \code{meta_prev} read this one file.
+
+\textbf{The bit timing constants}, derived rather than hand-picked, so that they stay consistent with
+each other:
+
+\begin{vhdlcode}
+constant CLOCK_FREQ_HZ: natural := 50_000_000;                  -- System clock frequency: 50 MHz.
+constant BIT_RATE_HZ  : natural := 1_000_000;                   -- CAN bit rate: 1 Mbit/s.
+constant TICKS_PER_BIT: natural := CLOCK_FREQ_HZ / BIT_RATE_HZ; -- Clock ticks per CAN bit: 50.
+constant SAMPLE_TICK  : natural := (TICKS_PER_BIT * 7) / 10;    -- Sample point: 35 (70%).
+\end{vhdlcode}
+
+\code{TICKS_PER_BIT} has to divide evenly for this simple design to hit an exact bit rate:
+$50\,000\,000 / 1\,000\,000$ is exactly 50. \code{SAMPLE_TICK} is deliberately computed as a
+\emph{percentage} of \code{TICKS_PER_BIT}, not as a hardcoded tick number, so that a later change of
+bit rate does not silently leave the sample point wrong. This is
+\secref{c10:sec:bittiming}'s 70~\% sample point, turned into a number \code{bit_timer} can count to
+in \chapref{c12:ch}.
+
+\textbf{The frame field widths}, straight from the frame diagram in \secref{c10:sec:frameformat}:
+
+\begin{vhdlcode}
+constant ID_WIDTH  : natural := 11;          -- Standard CAN identifier width in bits.
+constant DLC_WIDTH : natural := 4;           -- Data Length Code field width in bits.
+constant CRC_WIDTH : natural := 15;          -- CAN CRC-15 sequence width in bits.
+constant DLC_MAX   : natural := 8;           -- Maximum payload length in bytes.
+constant DATA_WIDTH: natural := DLC_MAX * 8; -- Maximum data-field width in bits.
+\end{vhdlcode}
+
+\textbf{The bit stuffing rule's run length}, from \secref{c10:sec:stuffing}'s rule about five
+identical bits:
+
+\begin{vhdlcode}
+constant MAX_RUN: natural := 5; -- Maximum run of identical bits before a stuff bit is inserted.
+\end{vhdlcode}
+
+Both shift registers count runs against this single number (\chapref{c14:ch}, \ref{c15:ch}): the
+transmitter to decide when a stuff bit must be \emph{inserted}, the receiver to predict where one
+must \emph{appear}. That both ends of the link agree on it exactly is this whole package's argument
+in miniature \textemdash{} one definition, several modules, no way to drift apart.
+
+\textbf{Common subtypes}, so that every module names identically shaped signals the same way:
+
+\begin{vhdlcode}
+subtype byte_t is std_logic_vector(7 downto 0);            -- 8-bit byte.
+subtype id_t   is std_logic_vector(ID_WIDTH-1 downto 0);   -- Standard CAN identifier.
+subtype dlc_t  is std_logic_vector(DLC_WIDTH-1 downto 0);  -- Data Length Code field.
+subtype crc_t  is std_logic_vector(CRC_WIDTH-1 downto 0);  -- CAN CRC-15 sequence.
+subtype data_t is std_logic_vector(DATA_WIDTH-1 downto 0); -- CAN data field.
+\end{vhdlcode}
+
+Every module except \code{meta_prev} starts with \code{use work.can_def.all;} and uses these names
+directly: \code{bit_timer}'s counter range, \code{crc15}'s register width, and
+\code{tx_shift_reg}/\code{rx_shift_reg}'s byte ports. All of it goes back to this one file.
+
+\textbf{The CRC-15 polynomial}, as a 15-bit-wide constant. \Chapref{c13:ch}'s \code{crc15} uses it
+directly; the mathematics is covered there, not here. For now treat it as a fixed standard constant
+that every CAN controller uses:
+
+\begin{vhdlcode}
+constant CRC_POLY: crc_t := "100010110011001";
+\end{vhdlcode}
+
+It corresponds to $x^{15} + x^{14} + x^{10} + x^{8} + x^{7} + x^{4} + x^{3} + 1$.
+
+\subsection*{What comes next}
+\Chapref{c11:ch} maps this chapter's protocol onto a block architecture and writes the controller's
+top level, \file{can_controller.vhd}, whose ports are typed from this package (\code{id_t},
+\code{dlc_t}, \code{data_t}). It also introduces the simulation flow and leaves that top level's
+architecture empty. \Chapref{c12:ch} builds the first two blocks to go into it,
+\file{meta_prev.vhd} and \file{bit_timer.vhd}.

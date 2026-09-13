@@ -1,0 +1,43 @@
+% Section 17.7, from lectures/L17/README.md.
+
+\section{Summary}
+\label{c17:sec:review}
+
+\needspace{6\baselineskip}
+\subsection*{What you should be able to do now}
+\begin{itemize}
+  \item Implement the receive path in the same state machine that transmits.
+  \item Explain how a node decides that it has lost arbitration, and what it does then.
+  \item Reassemble \code{rx_id}, \code{rx_dlc} and \code{rx_data} from the received bit stream and
+    raise \code{rx_valid} at the right moment.
+  \item Run the system testbench with two nodes on a bus and read what it reports.
+  \item Say what \code{error} means, which four causes set it, and when it is cleared.
+\end{itemize}
+
+\needspace{6\baselineskip}
+\subsection*{Questions to test yourself with}
+\begin{enumerate}
+  \item How does a node detect that it has lost arbitration, and exactly which bits does it compare?
+  \item What does a node that has lost arbitration do, and why is that not ``try again
+    immediately''?
+  \item Why must \code{rx_shift_reg}'s enable be pre-empted by one cycle?
+  \item A node cannot transmit and receive at the same time. Where in the state machine is that
+    visible?
+  \item What sets \code{error}, and what clears it?
+  \item What does \code{can_controller_tb} prove that the four module testbenches together do not?
+\end{enumerate}
+
+\needspace{6\baselineskip}
+\subsection*{Target}
+This is where the project moves from CAN to SPI. A group that has not got \code{can_controller_tb}
+passing should prioritise that over the register bank: the SPI half can be built and tested against a
+controller that does not work yet, but the bring-up in \chapref{c19:ch} cannot.
+
+The system testbench is skipped by the build until the controller has a receive path. If you still
+see ``skipped'' when you think it should run, run with \code{CI_BUILD_ALL=1};
+appendix~\ref{app:sim} explains why that check works the way it does.
+
+\needspace{6\baselineskip}
+\subsection*{Looking ahead}
+\Chapref{c18:ch} takes the register bank, and SPI from the waveform upwards. This is where the half
+begins that makes the controller reachable from a microcontroller.

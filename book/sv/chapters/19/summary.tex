@@ -1,0 +1,56 @@
+% Avsnitt 19.9, ur lectures/L19/README.md.
+
+\section{Sammanfattning}
+\label{c19:sec:review}
+
+\needspace{6\baselineskip}
+\subsection*{Det här ska du kunna nu}
+\begin{itemize}
+  \item Implementera transaktions-FSM:en enligt protokollspecifikationen, inklusive avbrottsregeln.
+  \item Förklara varför en läsning låser registervärdet en gång, och vad som går fel utan den regeln.
+  \item Komponera hela noden till en toppnivå och verifiera den i simulering.
+  \item Koppla ihop två DE0-CV till en delad buss, och en mikrokontroller som master över dess
+    MVIO-domän, och felsöka kedjan systematiskt nerifrån och upp.
+  \item Säga vilka krav SPI-kopplingen ställer på hattens konstruktion, och varför de inte går att
+    rätta i efterhand.
+  \item Säga vad simulering har bevisat och vad bara hårdvara kan bevisa.
+\end{itemize}
+
+\needspace{6\baselineskip}
+\subsection*{Frågor att testa dig själv med}
+\begin{enumerate}
+  \item Varför låses registervärdet en gång vid slutet av kommandobyten i stället för att läsas medan
+    databytesen skiftas ut? Vilket register lider mest av att den regeln bryts?
+  \item SS går hög efter tre bytes. Vad har hänt med transaktionen, och vad har ändrats i noden?
+  \item En skrivning till ett reserverat index. Vad gör bryggan, och varför konsumerar den ändå alla
+    fem bytesen?
+  \item Varför finns ingen felkanal i transaktionslagret?
+  \item Vilket bring-up-steg skulle avslöja en förväxlad MISO och MOSI, och vilket skulle avslöja ett
+    \code{VDDIO2} som aldrig kopplades in?
+  \item Hatten lägger en lysdiod på \code{PC2}. Vilket steg fallerar först, och varför är det ett fel
+    som inte går att programmera sig ur?
+  \item Vad bevisade stegen 1 till 3 som stegen 4 till 8 inte behövde bevisa om igen?
+  \item Vad har simuleringen bevisat om designen, och vad har den inte kunnat bevisa?
+\end{enumerate}
+
+\needspace{6\baselineskip}
+\subsection*{Slutredovisning}
+Varje grupp visar, på ungefär femton minuter: en körning av \code{make build-project} med alla
+testbänkar gröna; en kort genomgång av \code{can_spi_node}, vad varje block gör och var gränserna
+går; bring-upen, så långt ni kommit, på riktig hårdvara; och \file{CONTRIBUTORS.md} plus en snabb
+genomgång av repots historik, branchar, PR:er och granskningar.
+
+Slutredovisningen är projektets andra och sista fasta hållpunkt. Projektet lämnas in samma dag; se
+checklistan i bilaga~\ref{app:project}.
+
+Bring-upen bedöms inte. Kommer du till steg 3 av åtta är det ett bra resultat; det som bedöms är
+simuleringen bakom den.
+
+\needspace{6\baselineskip}
+\subsection*{Blicken framåt}
+\Chapref{c20:ch} är bokens andra praktiska tentamen, med uppgifter på projektets moduler. Efter den är
+kursen slut.
+
+Kontrollern du byggt lämnas över till parallellklassen, som skriver C++-drivrutinen mot samma
+register över samma SPI-transport. Det gemensamma kontraktet är bilaga~\ref{app:protocol}, och
+ingenting annat.

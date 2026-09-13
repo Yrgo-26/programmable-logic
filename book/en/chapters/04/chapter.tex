@@ -1,0 +1,30 @@
+% Chapter 4, typeset from lectures/L04: Appendix A becomes sections 4.1-4.9, and Appendix B the
+% exercises.
+
+\chapter{Metastability and synchronisation}
+\label{c4:ch}
+
+{\large\itshape Making an asynchronous input safe to use in a synchronous system.\par}
+
+\begin{chapterbox}{In this chapter}
+\begin{itemize}
+  \item Why an asynchronous input can wreck the clean edge detectors and registers built in
+    \chapref{c3:ch}.
+  \item Metastability: what it is, and why it cannot simply be designed away.
+  \item The two-flip-flop synchroniser, and the ``assert asynchronously, release synchronously''
+    pattern for reset.
+  \item Reusing the same chain for edge detection, and what it does and does not do about bounce.
+  \item Generics: one module serving several sizes.
+  \item \code{led_toggle_sync}, driven by a real, bouncing push button.
+\end{itemize}
+\end{chapterbox}
+
+Before the synchroniser goes in: predict what a real, asynchronous button does to \chapref{c3:ch}'s
+edge detector. That prediction is the reason for the whole chapter.
+
+The argument worth holding on to is why two flip-flops make the failure \emph{unlikely} rather than
+impossible. That is the part that does not survive being remembered as a rule of thumb.
+
+\input{chapters/04/metastability}
+\input{chapters/04/summary}
+\input{chapters/04/exercises}

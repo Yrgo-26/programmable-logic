@@ -1,0 +1,35 @@
+% Kapitel 2, satt ur lectures/L02: Appendix A blir avsnitt 2.1-2.6, Appendix C blir avsnitt 2.7,
+% och Appendix B blir övningarna.
+
+\chapter{Större nät, multiplexrar och submoduler}
+\label{c2:ch}
+
+{\large\itshape Att minimera ett nät, de första konstruktionerna som kräver en process, och den
+första designen som består av mer än en entitet.\par}
+
+\begin{chapterbox}{I det här kapitlet}
+\begin{itemize}
+  \item Karnaughdiagram: varför en summa-av-produkter läst direkt ur sanningstabellen sällan ger
+    det minsta nätet.
+  \item \code{std_logic_vector}: att bunta ihop flera ledningar under ett namn, indexering och
+    slicing.
+  \item Multiplexrar, från 2-till-1 till 8-till-1.
+  \item \code{process} och \code{case}: sekventiella satser inuti i övrigt parallell hårdvara.
+  \item Submoduler: att skriva ett block en gång och instansiera det mer än en gång.
+  \item Självkontrollerande testbänkar, och de tre GHDL-kommandon som kör en.
+\end{itemize}
+\end{chapterbox}
+
+\Chapref{c1:ch} tog en krets hela vägen från ett krav till en fil. Det här kapitlet gör tre saker
+med den vägen: det stramar åt \emph{härledningen} med Karnaughdiagram, det ger dig de
+VHDL-konstruktioner ett större nät behöver, och det gör verifieringen till något du kör i stället
+för något du gör med ögat.
+
+Läs \secref{c2:sec:kmap} till \ref{c2:sec:submodules} i ordning; de bygger på varandra.
+\Secref{c2:sec:testbenches} är bokens guide till att köra testbänkar, och varje senare kapitels
+övningar hänvisar tillbaka hit.
+
+\input{chapters/02/larger_networks}
+\input{chapters/02/testbenches}
+\input{chapters/02/summary}
+\input{chapters/02/exercises}

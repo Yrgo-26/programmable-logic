@@ -1,0 +1,104 @@
+% Chapter 9, typeset from lectures/L09/README.md.
+
+\chapter{Practical exam 1: sequential networks}
+\label{c9:ch}
+
+{\large\itshape Three hours, individual, at the computer. Covers the whole of part~\ref{part:vhdl},
+with the emphasis on sequential networks.\par}
+
+\begin{chapterbox}{In this chapter}
+\begin{itemize}
+  \item The exam's format: independent tasks, each with a self-checking testbench handed out.
+  \item What you are allowed to use, and what you are not.
+  \item How to prepare, and what the best preparation there is.
+  \item What the exam actually measures.
+\end{itemize}
+\end{chapterbox}
+
+This is the course's first examination. It contains no new theory; the chapter says what the exam
+measures, what shape the tasks take and how to prepare, and it is worth reading in advance rather
+than the day before. Marks and grade boundaries are in appendix~\ref{app:project}.
+
+The exam covers \chapref{c1:ch} to \ref{c8:ch} in full, with the emphasis on sequential networks:
+registers, counters, shift registers, timers, synchronisers and simple Moore machines.
+
+% ------------------------------------------------------------------------------------------
+\section{Format}
+\label{c9:sec:format}
+
+The exam consists of a number of independent tasks. Every task gives you a \textbf{self-checking
+testbench, handed out}, and a description of the module it drives: port order, types and behaviour.
+Your job is to write the module so that the testbench passes.
+
+\begin{itemize}
+  \item The tasks are independent of each other. A module you cannot get working stops no other.
+  \item The tasks are ordered roughly by increasing difficulty, but read all of them before you
+    start.
+  \item A module that is not entirely finished is marked on what is there. Partially correct logic
+    earns partial marks, so never hand in an empty file because it did not get finished.
+  \item The testbench is the answer key during the exam, not after it. \code{all checks passed!}
+    means that task is done; the marking reads the code as well.
+\end{itemize}
+
+A practice paper with tasks of the same kind and the same scope is handed out in advance.
+
+% ------------------------------------------------------------------------------------------
+\section{Permitted aids}
+\label{c9:sec:aids}
+
+\textbf{Allowed:}
+\begin{itemize}
+  \item All the course material: this book, the lectures' READMEs, every appendix, and all the VHDL
+    you wrote yourself during part~\ref{part:vhdl}, including your solutions to the exercises.
+  \item Your own computer, with GHDL. See \secref{c2:sec:testbenches} if you need reminding how a
+    testbench is run.
+  \item CircuitVerse, if you want to draw a circuit before you write it. That is often faster, not
+    slower.
+\end{itemize}
+
+\textbf{Not allowed:} communication with others in any form; language models and other tools that
+generate or explain VHDL for you; and searching the internet for ready-made solutions. The line is
+not drawn at who presses the keys but at whose understanding is being tested. Looking up GHDL's or
+VHDL's documentation is allowed; searching for a finished module is not.
+
+The full and authoritative list of permitted aids is in appendix~\ref{app:project}; if anything here
+says otherwise, that one applies.
+
+% ------------------------------------------------------------------------------------------
+\section{Before the exam}
+\label{c9:sec:prep}
+
+\begin{itemize}
+  \item Work through the practice paper, under time pressure and without looking at the solutions
+    first.
+  \item Exercise~\ref{c8:ex:rx} and \ref{c8:ex:tx}, the book's two capstones, are the best
+    preparation there is: they force you to design a state diagram yourself and compose earlier
+    modules around it, which is exactly what the exam measures.
+  \item Make sure GHDL works on your machine \emph{before} you arrive. A broken toolchain is no
+    reason for extra time.
+\end{itemize}
+
+% ------------------------------------------------------------------------------------------
+\section{What the exam measures}
+\label{c9:sec:measures}
+
+\begin{itemize}
+  \item That you can write the synchronous process template correctly, without looking it up.
+  \item That you can build a counter, a timer and a shift register and know what separates them.
+  \item That you synchronise every asynchronous input, without being reminded.
+  \item That you can design a small Moore machine from a specification in words, and write it as an
+    enumerated type and a \code{case}.
+  \item That you can read a testbench's error output and find your way back to the line that caused
+    it.
+\end{itemize}
+
+% ------------------------------------------------------------------------------------------
+\section{After the exam}
+\label{c9:sec:after}
+
+The next chapter starts the \textbf{group project}, which runs from \chapref{c10:ch} to
+\ref{c19:ch} and accounts for half the course's marks. Read the project specification in
+appendix~\ref{app:project} before \chapref{c10:ch}; the groups are put together there.
+
+\Chapref{c10:ch} takes up the project start: the CAN bus, the frame and arbitration, and the
+project's first VHDL, the shared package \code{can_def}.

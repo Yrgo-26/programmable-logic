@@ -1,0 +1,421 @@
+% Sections 3.1-3.9, from lectures/L03/appendix/a_flip_flops_and_registers.md (A.1-A.9).
+
+\section{From combinational to sequential networks}
+\label{c3:sec:seq}
+
+Every circuit in \chapref{c1:ch} and \ref{c2:ch} was \textbf{combinational}: its output is a pure
+function of its current inputs, so the same inputs always give the same output, and there is no
+notion of ``before'' or ``after'' inside the circuit.
+
+Most useful systems need more. A counter has to remember its count. A register has to hold a value
+after the signal that produced it has changed. An LED toggled by a button has to remember whether
+it is lit, since that is not encoded in the button's momentary position at all.
+
+All of these need \textbf{memory}: an output that depends on the circuit's own \emph{previous}
+output. A sequential network is combinational logic with part of the output fed back to the input,
+and that \textbf{feedback loop} is what turns a stateless gate network into a circuit with state.
+This chapter builds the primitive that makes controlled feedback practical, the D flip-flop, and
+then the two things you build directly from it: registers and edge detectors.
+
+% ------------------------------------------------------------------------------------------
+\section{The D latch}
+\label{c3:sec:latch}
+
+The simplest storage element is the \textbf{D latch}: two cross-coupled gates, gated by an
+\code{enable} input, storing a single bit.
+
+\begin{textdrawing}
+        ┌────────────┐
+   D ──►│            │──► Q
+        │  D LATCH   │
+enable─►│            │──► Qn
+        └────────────┘
+\end{textdrawing}
+
+\code{D} is the value to store, \code{enable} controls whether the latch is \emph{open}
+(transparent) or \emph{closed} (holding), \code{Q} is the stored value and \code{Qn} is always its
+inverse.
+
+Each output feeds back into the other's equation, which is exactly \secref{c3:sec:seq}'s feedback
+loop:
+
+\[ Q = (D' \cdot \mathit{enable} + Q_n)' \]
+\[ Q_n = (D \cdot \mathit{enable} + Q)' \]
+
+\begin{booktable}{@{}p{4em}p{12em}L@{}}
+  \thead{\code{enable}} & \thead{Behaviour} & \thead{Result} \\
+  \midrule
+  \code{1} & the latch is \textbf{open} (transparent) & $Q = D$, $Q_n = D'$; the output follows the
+    input immediately \\
+  \code{0} & the latch is \textbf{closed} (latched) & \code{Q} and \code{Qn} hold whatever they
+    last had \\
+\end{booktable}
+
+\textbf{Build it in CircuitVerse} from a NOT gate, two AND gates and two NOR gates (a NOR is an OR
+followed by a NOT). Cross-couple the feedback so that the NOR producing \code{Q} feeds the NOR on
+the \code{Qn} side and the other way round. Drive \code{D} and \code{enable} from input switches
+and watch \code{Q} and \code{Qn} on LEDs.
+
+Then test it:
+\begin{itemize}
+  \item With \code{enable = 1}, change \code{D} and confirm that \code{Q} follows immediately. The
+    latch is \textbf{transparent}.
+  \item With \code{enable = 0}, confirm that \code{Q} is unchanged whatever \code{D} does. The
+    latch is \textbf{latched}.
+  \item Toggle \code{D} a few times while switching \code{enable}, and confirm that the latch
+    always freezes whatever \code{Q} held at the moment \code{enable} went low. That is what
+    \textbf{level-sensitive} means: transparent for the whole time \code{enable} is high, not just
+    at a single instant.
+\end{itemize}
+
+That last point is also the latch's fundamental weakness. Because it is transparent for the whole
+time \code{enable = 1}, every glitch on \code{D} during that window passes straight through to
+\code{Q}. In a large synchronous system, guaranteeing stable data for a whole clock phase is far
+harder than guaranteeing it around a single instant. That is the problem the D flip-flop solves.
+
+% ------------------------------------------------------------------------------------------
+\section{The D flip-flop}
+\label{c3:sec:dff}
+
+A \textbf{D flip-flop} stores one bit the way a latch does, but is \textbf{edge-triggered} rather
+than level-sensitive: it samples \code{D} only at the \emph{instant} the clock changes, not for the
+whole time the clock is high or low.
+
+Feed both the same \code{D} and the same clock, and the difference shows immediately:
+
+\lecfig[0.78]{lectures/L03/appendix/images/latch_vs_flipflop.png}{A latch follows \code{D} during
+every window where the clock is high, while a flip-flop changes only at the rising
+edges.}{c3:fig:latchvsff}
+
+The latch changes three times: twice because \code{D} moved while the clock was high, and once
+because the clock went high against a \code{D} that had already changed. The flip-flop changes
+once, because only one of the four rising edges found \code{D} different from the value \code{Q}
+already held. Both behave correctly; they answer different questions.
+
+\begin{textdrawing}
+        ┌──────────────────┐
+   D ──►│                  │──► Q
+clock ─►│   D FLIP-FLOP    │
+enable─►│  (rising edge)   │──► Qn
+reset_n►│                  │
+        └──────────────────┘
+\end{textdrawing}
+
+\code{clock} is the time reference (\secref{c3:sec:clock}). \code{enable} gates whether the
+flip-flop takes a new value \emph{at the triggering edge}. \code{reset_n} is an asynchronous,
+active-low reset: whenever it is \code{0}, \code{Q} is forced to \code{0} immediately, regardless
+of the clock.
+
+\begin{booktable}{@{}p{15em}L@{}}
+  \thead{Condition} & \thead{Result} \\
+  \midrule
+  \code{reset_n = 0} & $Q = 0$, $Q_n = 1$, immediately (asynchronous, ignoring the clock
+    entirely) \\
+  \code{reset_n = 1}, rising edge on \code{clock}, \code{enable = 1} & $Q = D$, $Q_n = D'$, sampled
+    at that instant \\
+  \code{reset_n = 1}, rising edge on \code{clock}, \code{enable = 0} & \code{Q} holds its previous
+    value \\
+  \code{reset_n = 1}, no rising edge on \code{clock} & \code{Q} holds its previous value, whatever
+    \code{D} does \\
+\end{booktable}
+
+That last row is worth seeing rather than reading:
+
+\lecfig[0.72]{lectures/L03/appendix/images/dff_timing.png}{\code{D} goes high mid-cycle and is
+caught at the next rising edge, then dips and recovers entirely between two edges without \code{Q}
+ever moving.}{c3:fig:dfftiming}
+
+\code{D} dips low and comes back within a single clock period, and \code{Q} never moves, because no
+edge occurred while it was low. A latch in the same position would have followed it down and up
+again.
+
+Internally, an edge-triggered flip-flop is two D latches in series, a \textbf{master-slave} pair.
+One is transparent while the clock is low and captures \code{D}; the other is transparent while the
+clock is high and passes the captured value on to \code{Q}. The net effect is that \code{Q} changes
+only at the moment the clock goes from low to high, never while it sits at either level. The
+external behaviour is what VHDL's \code{rising_edge()} models (\secref{c3:sec:template}).
+
+\textbf{Build it in CircuitVerse} by building on your latch from \secref{c3:sec:latch}:
+\begin{itemize}
+  \item Duplicate the latch so that two sit in series: the \emph{master} feeds the \emph{slave},
+    whose \code{Q} is the flip-flop's output.
+  \item Add \code{clock}, \code{reset_n}, \code{D} and \code{enable} as inputs.
+  \item Drive the two latches' transparency from the clock and its inverse. To keep the two
+    meanings apart, call the internal per-latch control signal \code{gate}: the master's
+    \code{gate} is \code{clock'} and the slave's is \code{clock}. The flip-flop's external
+    \code{enable} is a different signal and is connected separately, below.
+  \item Connect the external \code{enable} as a 2-to-1 mux (\secref{c2:sec:mux}) on the master's
+    data input: when \code{enable = 1} the mux passes \code{D} through, and when \code{enable = 0}
+    it passes the flip-flop's own \code{Q} back in, so that the edge recaptures the value already
+    stored. Gate the \emph{data}, never the clock.
+  \item Add the reset to \textbf{both} latches. Forcing \code{Q} low takes two changes in each
+    latch, not one:
+  \begin{itemize}
+    \item feed an active-high \code{reset} (\code{reset_n} through a NOT) into the NOR producing
+      \code{Q}, which forces \code{Q} to \code{0}.
+    \item AND \code{reset_n} into the term \code{D AND gate} in the same latch, which frees
+      \code{Qn} to go high.
+  \end{itemize}
+  \item Set the clock period to something slow enough to watch, e.g. \code{1000 ms}.
+\end{itemize}
+
+With the reset wired in, the equations for each latch become:
+
+\[ Q = (D' \cdot \mathit{gate} + Q_n + \mathit{reset})' \]
+\[ Q_n = (D \cdot \mathit{gate} \cdot \mathit{reset\_n} + Q)' \]
+
+A tempting shortcut is to leave the \code{Qn} equation alone and break the loop instead, by ANDing
+\code{reset_n} into the \code{Qn} wire that feeds \code{Q}'s NOR. That is not enough. With
+\code{gate = 1} and \code{D = 1} it leaves \code{Qn} at \code{0}, which is what holds \code{Q} at
+\code{1}, so the reset silently does nothing in exactly the case you are most likely to test it in.
+Both changes, in both latches, or neither.
+
+Confirm that \code{Q} updates only at the moment the clock goes high, and sits still between edges
+even if \code{D} changes, and that a low \code{reset_n} forces \code{Q} to \code{0} immediately,
+while releasing it changes nothing until the next rising edge.
+
+% ------------------------------------------------------------------------------------------
+\section{Clocking}
+\label{c3:sec:clock}
+
+The \textbf{clock} is a periodic square wave, which every flip-flop in a synchronous circuit reads
+from the same source. Two numbers describe it: the \textbf{period} $T$, the time for one whole
+cycle, and the \textbf{frequency} $f = 1/T$ in Hz.
+
+Every period has exactly two \textbf{edges}: a \textbf{rising edge} from \code{0} to \code{1}, and
+a \textbf{falling edge} from \code{1} to \code{0}. A synchronous design picks one of them, nearly
+always the rising edge, and updates every flip-flop at that edge and only that one. Using a single
+edge everywhere is what makes the timing of a large circuit analysable: every flip-flop changes at
+the same well-defined instant, so you can reason one clock cycle at a time instead of tracking every
+signal continuously.
+
+Simulated and real clocks run on wildly different time scales, and the logic is identical in both
+cases:
+\begin{itemize}
+  \item In CircuitVerse, set a period you can follow, e.g. \code{1000 ms}.
+  \item On the DE0-CV the system clock is a fixed \code{50 MHz}, a period of \code{20 ns}. Nobody
+    perceives individual edges at that rate, so you reason in terms of ``at the next rising edge'',
+    never in real time.
+\end{itemize}
+
+% ------------------------------------------------------------------------------------------
+\section{Registers: flip-flops in parallel}
+\label{c3:sec:register}
+
+A \textbf{register} stores more than one bit: N D flip-flops side by side, one per bit, all sharing
+the same \code{clock}, \code{reset_n} and \code{enable}.
+
+\begin{textdrawing}
+D(0) ──►[D-FF]──► Q(0)
+D(1) ──►[D-FF]──► Q(1)
+D(2) ──►[D-FF]──► Q(2)
+   ⋮        ⋮
+D(N-1)──►[D-FF]──► Q(N-1)
+
+  (clock, reset_n, enable are shared by every flip-flop above)
+\end{textdrawing}
+
+That is the whole idea: an 8-bit register is eight D flip-flops updating at the same clock edge.
+
+In VHDL you rarely instantiate N flip-flops explicitly. Declare a \code{std_logic_vector} and
+assign the whole of it inside a single synchronous process (\secref{c3:sec:template}): every bit
+synthesises to a flip-flop of its own, and all of them share the process's clock and reset.
+
+\begin{vhdlcode}
+signal q: std_logic_vector(3 downto 0);
+...
+process (clock, reset_n) is
+begin
+    if (reset_n = '0') then
+        q <= "0000";
+    elsif (rising_edge(clock)) then
+        if (enable = '1') then
+            q <= d; -- d is a std_logic_vector(3 downto 0) input
+        end if;
+    end if;
+end process;
+\end{vhdlcode}
+
+Four bits, one process, four flip-flops in hardware: in principle no different from four
+\code{d_flip_flop} instances wired in parallel.
+
+% ------------------------------------------------------------------------------------------
+\section{The synchronous process template in VHDL}
+\label{c3:sec:template}
+
+Every synchronous element in this chapter, the flip-flop, the register and the edge detector, uses
+the same shape. Without a reset, a single D flip-flop is:
+
+\begin{vhdlcode}
+process (clock) is
+begin
+    if (rising_edge(clock)) then
+        q <= d;
+    end if;
+end process;
+\end{vhdlcode}
+
+\code{q} takes \code{d}'s value at every rising edge and holds it the rest of the time. That single
+line inside the \code{if} statement is enough for synthesis to infer a real D flip-flop.
+
+\subsection*{Rules}
+\begin{itemize}
+  \item \textbf{\code{clock} is the only signal in the sensitivity list}, unless there is an
+    asynchronous reset. The process should run only when the clock changes; it has no reason to
+    react to anything else.
+  \item A process reacts to \emph{every} change of a signal in the sensitivity list, not just
+    rising ones, so \code{rising_edge()} specifically filters out the rising edge. All the logic
+    that updates synchronously sits inside that \code{if}.
+  \item Every signal assigned inside such a process synthesises to a flip-flop, one per bit.
+\end{itemize}
+
+\subsection*{With an asynchronous reset}
+An asynchronous reset must be in the sensitivity list too, since it can activate independently of
+the clock, and it takes precedence when it is active.
+
+\begin{vhdlcode}
+process (clock, reset_n) is
+begin
+    if (reset_n = '0') then
+        q <= '0';
+    elsif (rising_edge(clock)) then
+        q <= d;
+    end if;
+end process;
+\end{vhdlcode}
+
+Read it in priority order: check the reset first, and look for a rising edge only if it is
+inactive. If neither holds (a falling edge, or \code{reset_n} going from \code{0} back to \code{1},
+which also reruns the process) nothing is assigned and \code{q} keeps its previous value.
+
+\subsection*{When the assignment actually takes effect}
+One rule underlies all of the above, and it is the one place where \code{<=} behaves unlike
+assignment in every language you have written software in.
+
+A signal assignment does not take effect when its line runs. It \textbf{schedules} a value, which
+is applied only once the process has finished this round and suspends. Until then, every read of
+that signal gives the value it held \emph{before the round began}, however many assignments have
+already run.
+
+That sounds like a technicality. It is the reason the template above is a flip-flop and not a wire:
+
+\begin{vhdlcode}
+process (clock) is
+begin
+    if (rising_edge(clock)) then
+        b <= a;
+        c <= b;
+    end if;
+end process;
+\end{vhdlcode}
+
+Read as software, both \code{b} and \code{c} end up holding \code{a}. In hardware they do not. At
+each edge \code{b} is scheduled to take \code{a}'s value, and \code{c} is scheduled to take the
+value \code{b} held \emph{going into that edge}, not the one just scheduled onto it. The result is
+two flip-flops in a chain: \code{a} reaches \code{b} after one edge and \code{c} after two. Swap
+the lines and nothing changes, because neither assignment can observe the other's result.
+
+Two consequences worth taking away:
+\begin{itemize}
+  \item \textbf{Order does not matter} between assignments to \emph{different} signals in the same
+    clocked process. All of them read the old values and all of them take effect at once. That is
+    the opposite of the sequential reading the word ``process'' invites, and it is why a chain of
+    flip-flops can be written in any order.
+  \item \textbf{Assign the same signal twice in one round and only the last assignment survives.}
+    The earlier ones are discarded without ever reaching the signal.
+\end{itemize}
+
+\Secref{c3:sec:edge}'s edge detector is exactly the two-element chain above, and it works for
+exactly this reason. \Chapref{c5:ch} returns to the rule from the other side, with a
+\code{variable}, which updates immediately and therefore behaves the way the software reading
+expects.
+
+% ------------------------------------------------------------------------------------------
+\section{Edge detection}
+\label{c3:sec:edge}
+
+The flip-flop's other everyday job is detecting the \emph{moment} a signal changes, rather than
+reading its level: store the signal's previous value in a flip-flop and then compare it with the
+current value using a gate.
+
+\begin{itemize}
+  \item \textbf{Rising edge detection} (\code{0} to \code{1}):
+    $\mathit{edge} = \mathit{current} \cdot \mathit{previous}'$
+  \item \textbf{Falling edge detection} (\code{1} to \code{0}):
+    $\mathit{edge} = \mathit{current}' \cdot \mathit{previous}$
+\end{itemize}
+
+\begin{textdrawing}
+signal ──┬───────────────────────────► AND ──► edge
+         │                              ▲
+         └──►[D-FF]── previous ──(NOT)──┘
+                ▲
+           clock, reset_n
+\end{textdrawing}
+
+\code{edge} is high for exactly one clock cycle, the one immediately after the transition, because
+\code{previous} only catches up at the \emph{next} edge. That is the mechanism behind ``do
+something once per button press'' instead of ``do something every clock cycle the button is held
+down'', which is exactly what \secref{c3:sec:ledtoggle} solves.
+
+% ------------------------------------------------------------------------------------------
+\section{Worked example: a D flip-flop in VHDL}
+\label{c3:sec:dffvhdl}
+
+\file{d_flip_flop.vhd} implements \secref{c3:sec:dff} and \ref{c3:sec:template} together: an enable
+gating whether a rising edge captures \code{d}, and an asynchronous active-low reset.
+
+\vhdlfile{lectures/L03/d_flip_flop/d_flip_flop.vhd}
+
+Its single process is the reset-plus-enable variant of \secref{c3:sec:template}'s template: the
+reset takes precedence, then a rising edge captures \code{d} into an internal signal \code{q_s} if
+\code{enable = '1'}. \code{q_s} exists because an \emph{output port} cannot be read back inside the
+same architecture; \code{q} and \code{q_n} are both driven combinationally from it, outside the
+process.
+
+To try it on hardware, assign \code{clock} to the \code{50 MHz} system clock, \code{reset_n} to a
+push button, \code{d} and \code{enable} to two slide switches, and \code{q}/\code{q_n} to two LEDs.
+Then turn \code{enable} on and change \code{d}, and the LED follows; turn \code{enable} off and
+change \code{d}, and it does not.
+
+There is no clock edge you can perceive at \code{50 MHz}, so what you are really confirming is that
+the logic still holds when you can no longer see the individual edges. The flip-flop appears to
+respond to your switch; in fact it responded to one of fifty million clock edges that second, and
+the switch only decided which value that edge captured.
+
+% ------------------------------------------------------------------------------------------
+\section{Worked example: edge-detected LED toggle}
+\label{c3:sec:ledtoggle}
+
+\file{led_toggle.vhd} combines \secref{c3:sec:register}, \ref{c3:sec:template} and
+\ref{c3:sec:edge} into a small system: two independent push buttons, each toggling its own LED
+exactly once per press.
+
+\vhdlfile{lectures/L03/led_toggle/led_toggle.vhd}
+
+Three 2-bit signals, two held in clocked processes and one computed between them:
+\begin{itemize}
+  \item \code{button_prev_n} is a 2-bit register (\secref{c3:sec:register}) holding last cycle's
+    \code{button_n}, reset to \code{"11"} because the buttons are active low.
+  \item \code{button_edge <= (not button_n) and button_prev_n} is \secref{c3:sec:edge}'s
+    falling-edge detector applied to both bits at once, high for one cycle exactly when a button
+    goes from released to pressed.
+  \item \code{led_s} is a second 2-bit register which, instead of capturing a new value every
+    cycle, \textbf{toggles} bit \code{i} only when \code{button_edge(i) = '1'}. Without that
+    gating it would toggle every clock cycle instead of once per press, which is the whole point of
+    computing \code{button_edge}.
+\end{itemize}
+
+\paragraph{On the board}
+Create the Quartus Prime Lite project against the DE0-CV's \code{5CEBA4F23C7N} exactly as in
+\chapref{c1:ch}, then assign \code{clock} to the \code{50 MHz} oscillator, \code{reset_n} and
+\code{button_n(1 downto 0)} to three push buttons, and \code{led(1 downto 0)} to two LEDs. Every
+press should toggle exactly one LED, once, however long you hold it down.
+
+\begin{warning}
+\textbf{One caveat, deliberately left open.} \code{button_n} is a raw signal straight from a
+physical push-button pin. In simulation it is a clean, instantaneous transition; on real hardware it
+is neither instantaneous (contacts bounce) nor synchronised to \code{clock}. This edge detector is
+logically correct but \emph{unsafe} to wire directly to a real button on an FPGA without more work
+first, and that work is exactly what \chapref{c4:ch} takes up.
+\end{warning}

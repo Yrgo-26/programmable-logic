@@ -1,0 +1,423 @@
+% Section 10.9, from lectures/L10/appendix/intro_framing_exercises.md and
+% lectures/L10/appendix/c_exercises.md.
+
+\section{Exercises}
+\label{c10:sec:exercises}
+
+\begin{aside}
+The exercises are laid out like this. Exercise~\ref{c10:ex:byhand} and \ref{c10:ex:cpp} belong to
+\secref{c10:sec:framing}: the first builds frames by hand, on paper, and the second turns the same
+frame into a working C++ implementation. Exercise~\ref{c10:ex:ascan} bridges that frame format and
+CAN. Exercise~\ref{c10:ex:stuffing} to \ref{c10:ex:frame} consolidate \secref{c10:sec:can} to
+\ref{c10:sec:bittiming}; they are done on paper and build up to assembling a whole frame by hand.
+Exercise~\ref{c10:ex:package} writes the \code{can_def} package and then works against it at the
+keyboard.
+\end{aside}
+
+% ------------------------------------------------------------------------------------------
+\exerciseset{Frames by hand and in C++}
+
+\exercise{Constructing two frames by hand}{Reasoning}
+\label{c10:ex:byhand}
+Start from the frame structure from \secref{c10:sec:framing}:
+
+\begin{textdrawing}
+Field  Size      Description
+------ --------- -------------------------------------------
+SOF    2 bytes   0xA5F7
+LEN    1 byte    Payload length
+TYPE   1 byte    Message type
+DST    1 byte    Destination address
+SRC    1 byte    Source address
+SEQ    2 bytes   Sequence number
+DATA   N bytes   Payload
+CHK    2 bytes   Checksum (sum of the preceding bytes)
+\end{textdrawing}
+
+The checksum is the sum of every byte from SOF through the last payload byte, as a
+\code{std::uint16_t} (so it wraps on overflow). Fields wider than one byte (SOF, SEQ, CHK) are
+big-endian. The frame types are \code{Ping = 0x00}, \code{Pong = 0x01}, \code{StatusReq = 0x02} and
+\code{StatusResp = 0x03}.
+
+A device at address \code{0x17} sends a status request to a sensor at address \code{0x25}, with
+sequence number \code{0x7F05}. That gives \code{TYPE = 0x02}, \code{DST = 0x25}, \code{SRC = 0x17},
+\code{SEQ = 0x7F05}, and an empty \code{DATA}.
+
+\xpart{a} Draw the corresponding \code{StatusReq} frame on paper, and fill in every field: SOF, LEN,
+TYPE, DST, SRC, SEQ and CHK. Compute the checksum by hand.
+
+\xpart{b} The sensor replies with a 16-bit sensor value, \code{0x3201}, carried in the payload. Draw
+the corresponding \code{StatusResp} frame on paper. The rules: TYPE changes to \code{StatusResp}, DST
+and SRC swap places, SEQ is unchanged, and DATA is \code{0x3201} (2 bytes). Compute this frame's
+checksum by hand as well.
+
+\exercise{The frame in C++}{C++}
+\label{c10:ex:cpp}
+Implement the frame in C++ as a struct \code{comm::Frame}. Your implementation is validated by an
+existing set of unit tests under \file{lectures/L10/appendix/code/}.
+
+\task{1. Examine the file structure}
+\begin{itemize}
+  \item \file{test/frame_test.cpp} contains the unit tests validating your frame implementation. You
+    do not write them; you make them pass.
+  \item \file{include/comm/def.hpp} contains the frame fields' offsets (index positions), the field
+    sizes and more. The enumeration class \code{comm::FrameType} is to be implemented here.
+  \item \file{include/comm/frame.hpp} contains the declaration of the struct \code{comm::Frame}.
+  \item \file{source/comm/frame.cpp} is to contain the implementation details of the struct
+    \code{comm::Frame}, that is, its method definitions.
+\end{itemize}
+
+\task{2. Create the frame types}
+Implement the enumeration class \code{comm::FrameType} in \file{comm/def.hpp}, giving each of the
+four types the id listed in Exercise~\ref{c10:ex:byhand}. Add a final enumerator \code{Unknown}, one
+step beyond the last real type, so that an out-of-range type can be rejected during deserialisation
+with a single comparison.
+
+\task{3. Create the frame struct}
+Add the member variables of the struct \code{comm::Frame} in \file{comm/frame.hpp}, where
+\code{@todo} marks the place: \code{std::uint8_t data[MaxDataLen]}, \code{std::uint16_t seq},
+\code{std::uint8_t dst}, \code{std::uint8_t src}, \code{std::uint8_t len} and \code{FrameType type}.
+
+Value-initialise each of them with braces: the numeric members with \code{\{\}}, and \code{type} with
+\code{\{FrameType::Unknown\}}, so that a default-constructed frame never holds a type that happens to
+be valid.
+
+The widths are not a matter of taste. The unit tests compare a member against a literal of the
+field's own width through a template deriving \textbf{one} type from both arguments, so a \code{len}
+declared as \code{std::size_t} or a \code{seq} declared as \code{std::uint32_t} does not merely waste
+space; the tests stop compiling.
+
+\code{serialize()} and \code{deserialize()} are \textbf{already declared} in that file, documented
+and correctly qualified (\code{const noexcept} and \code{noexcept} respectively). Leave those
+declarations alone; you write their definitions in steps 4 and 5.
+
+\task{4. Implement the serialisation method}
+\Secref{c10:sec:framing}'s \code{checksum16()}, \code{writeToBuf()} and \code{readFromBuf()} are
+\textbf{not} part of the code handed out, and both methods below need all three. Copy them into
+\file{comm/frame.cpp}, in an anonymous namespace above the method definitions, so that they stay
+private to that file:
+
+\begin{cppcode}
+namespace
+{
+// checksum16(), writeToBuf() and readFromBuf() from the framing introduction go here.
+} // namespace
+\end{cppcode}
+
+Two things about that copying, both of which the compiler only tells you about after the fact:
+\begin{itemize}
+  \item \code{writeToBuf()} and \code{readFromBuf()} are constrained with \code{std::is_unsigned},
+    and nothing in \file{frame.cpp}'s include chain pulls in \code{<type_traits>}. Add that include
+    at the top of the file.
+  \item Keep \secref{c10:sec:framing}'s warning in mind when you call them: \code{writeToBuf()}
+    writes \code{sizeof(T)} bytes derived from the \emph{argument}, not from the field, so cast to
+    the field's own width at every call site.
+\end{itemize}
+
+Then implement the method \code{comm::Frame::serialize()} so that it writes the following into the
+given buffer: \code{SOF = 0xA5F7} (big-endian), LEN, TYPE, DST, SRC, SEQ (big-endian), DATA in the
+same order as it sits in the frame's payload buffer, and CHK, computed over all the preceding fields,
+byte by byte.
+
+Return the frame's total length if serialisation succeeded, and \code{0U} on failure, which means a
+\code{buf} that is null or a \code{bufLen} smaller than the frame to be written. Both have a test of
+their own; neither is optional.
+
+\task{5. Implement the deserialisation method}
+In the same file, implement the method \code{comm::Frame::deserialize()} so that it validates the
+given data, \textbf{in this order}, since every check makes the next one safe to perform:
+\begin{itemize}
+  \item \code{buf} is not null, and \code{bufLen} is at least \code{MinFrameLen}. Nothing has been
+    read yet at this point, so this is what makes reading the header permissible at all. Skip it and
+    the reads of SOF and LEN below run off the end of a too-short buffer before any other check gets
+    a chance.
+  \item SOF is correct.
+  \item LEN is within bounds, that is, at most \code{MaxDataLen}.
+  \item The given buffer holds the \textbf{whole} frame the header claims. This is a second, stricter
+    length check, and the first does not replace it: a buffer truncated after the payload still
+    leaves \emph{something} where CHK should be, and reading that as the checksum makes a truncated
+    frame look complete.
+  \item The frame type is valid, that is, the received byte is below \code{Unknown}.
+  \item The checksum matches.
+\end{itemize}
+
+Store the given data in the frame, but only once all of it is valid.
+
+Two of those points are checks the tests punish hardest. A missing null check does not make a test
+fail, it \textbf{crashes the whole run}, so you see a segfault and no test name. A buffer length
+check that stops at the header fails \code{DeserializeRejectsShortBuffer} and
+\code{DeserializeRejectsTruncatedPayload} and nothing else, which is a considerably friendlier way of
+being told.
+
+\task{6. Validate your implementation}
+The unit tests are behind a macro, so nothing runs until you turn it on. Add \code{-DL01} to
+\code{CXX_FLAGS} in the makefile, where a \code{Todo} comment marks the place:
+
+\begin{makecode}
+CXX_FLAGS := -Wall -Werror -std=c++17 -Iinclude -DL01
+\end{makecode}
+
+Then build and run them from a Linux terminal:
+
+\begin{shell}
+cd lectures/L10/appendix/code
+make
+\end{shell}
+
+Until you do, the program reports that the tests are disabled and exits successfully, whether or not
+your implementation works.
+
+\begin{aside}
+\textbf{If the build stops immediately with this, it is not your code:}
+
+\begin{console}
+make[1]: *** No rule to make target 'lib'.  Stop.
+make: *** [Makefile:26: ../../../../libs/test/libqacademy_test.a] Error 2
+\end{console}
+
+The test framework is a submodule in \file{libs/test}, and a clone without
+\code{--recurse-submodules} leaves the directory empty. That it nonetheless \emph{exists} is why the
+error is about a missing make target and not about a missing directory: it is the framework's
+makefile that has not been fetched yet. Fetch it once, from the repository root, with
+\code{git submodule update --init}. The exercise also needs a C++ compiler.
+\end{aside}
+
+The tests check both methods against the frames you built by hand in Exercise~\ref{c10:ex:byhand}:
+the PING bytes from \secref{c10:sec:framing} and both frames from that exercise, byte by byte; a
+round trip through serialisation and deserialisation that has to preserve every field; and the
+rejection cases (wrong SOF, wrong checksum, invalid type, truncated buffer, null pointer).
+
+Every passing test is printed in green; a failing one is printed in red and names the expression,
+both values and the line, so that you can compare directly against your own paper calculation. Expect
+to see all of them fail at first, and go green a group at a time as you work through steps 2--5.
+
+Two things worth knowing in advance:
+\begin{itemize}
+  \item The tests read \code{frame.type}, \code{frame.dst}, \code{frame.src}, \code{frame.seq},
+    \code{frame.len} and \code{frame.data} directly, so those member names have to match. If you have
+    named yours something else you are free to change the tests to match.
+  \item \code{DeserializeLeavesFrameUntouchedOnFailure} gives \code{deserialize()} a corrupt buffer
+    and then checks that the frame's fields are \emph{unchanged}. A \code{deserialize()} copying
+    fields into the frame as it parses them passes every other test and fails this one.
+\end{itemize}
+
+% ------------------------------------------------------------------------------------------
+\exerciseset{From the frame format to CAN}
+
+\exercise{The same frame, as CAN}{Reasoning}
+\label{c10:ex:ascan}
+Take the \code{StatusResp} frame you built by hand in Exercise~\ref{c10:ex:byhand}\,b), and send it
+as a CAN frame instead. Its fields, as a reminder: \code{TYPE = StatusResp}, \code{DST = 0x17},
+\code{SRC = 0x25}, \code{SEQ = 0x7F05}, payload 2 bytes with the value \code{0x3201}.
+
+Start from the convention in \secref{c10:sec:broadcast}: the identifier combines a per-type base with
+the id of the sensor node the message concerns, that is, the node being asked in a request and the
+node replying in a response (node 3 is asked on \code{0x303} and replies on \code{0x403}):
+
+\[ \mathit{ID} = \mathit{TYPE\_BASE} + \mathit{nodeId} \]
+
+The type bases are \code{StatusReq = 0x300}, \code{StatusResp = 0x400}, \code{Ping = 0x500} and
+\code{Pong = 0x600}.
+
+\xpart{a} Write out the corresponding CAN frame in the form \code{ID | DLC | DATA}.
+
+\xpart{b} State which fields of \secref{c10:sec:framing}'s frame have no counterpart in the CAN
+frame. For every missing field, say what CAN does instead, or explain why CAN needs no equivalent
+field.
+
+\xpart{c} Suppose two nodes start transmitting on the CAN bus at exactly the same moment. Explain
+briefly how the bus decides which node carries on transmitting, and how the losing node detects that
+it has lost. This is the arbitration mechanism from \secref{c10:sec:arbitration}; restate it in your
+own words.
+
+\xpart{d} Explain why there is no separate checksum field to fill in when constructing a CAN frame,
+unlike \secref{c10:sec:framing}'s frame format.
+
+% ------------------------------------------------------------------------------------------
+\exerciseset{Bit stuffing, arbitration and timing}
+
+\exercise{Bit stuffing by hand}{Reasoning}
+\label{c10:ex:stuffing}
+\xpart{a} Apply the bit stuffing rule to the following 10-bit sequence:
+
+\begin{textdrawing}
+0011111111
+\end{textdrawing}
+
+Write the complete transmitted bit stream, with all the original bits and every inserted stuff bit
+clearly marked.
+
+\xpart{b} A receiver observes the following 9-bit transmitted stream:
+
+\begin{textdrawing}
+101111101
+\end{textdrawing}
+
+The receiver knows that bit stuffing is in use. Destuff the stream: identify any stuff bits, remove
+them, and recover the original sequence of real data bits.
+
+\xpart{c} A receiver observes six dominant (\code{0}) bits in a row at a place where a stuff bit
+should have broken a run of five. Explain what the receiver concludes, and what it should do next.
+
+\xpart{d} \Secref{c10:sec:stuffing} points out that the run counter is not cleared at field
+boundaries. Suppose a field ends with three identical bits and the next begins with two more of the
+same value. Apply the rule and say where the stuff bit lands, counted from the field boundary, and
+explain why neither field on its own would have caused it.
+
+\exercise{Decoding a real bit stream}{Reasoning}
+\label{c10:ex:decode}
+A receiver observes the following 21-bit stream:
+
+\begin{textdrawing}
+0 00000010101 0 00 0010 11
+\end{textdrawing}
+
+The stream is already destuffed, so that this exercise keeps the focus on the fields' division rather
+than on the stuffing. The gaps are only there for readability; the real CAN bus has no gaps between
+the fields.
+
+\xpart{a} Split the stream into its named fields, with the widths from \secref{c10:sec:frameformat}:
+SOF, ID, RTR, IDE, r0, DLC. Then determine the identifier in hexadecimal, the DLC value, and which
+field has begun in the two bits left over once all the named fields are accounted for.
+
+\xpart{b} From the DLC in \textbf{a)}, determine how many data bits the receiver expects in total,
+and how many further data bits remain before the CRC field begins.
+
+\xpart{c} Suppose the DLC had instead been \code{0000}. Which field would then follow immediately
+after the control field?
+
+\exercise{Arbitration between three nodes}{Reasoning}
+\label{c10:ex:arb3}
+Three nodes try to transmit at the same SOF: node R with ID \code{0x155}, node S with ID
+\code{0x154}, and node T with ID \code{0x1D5}.
+
+\xpart{a} Work through the arbitration bit by bit, in the same style as
+\secref{c10:sec:arbitration}'s worked example. Determine which node wins, and at which identifier bit
+each losing node drops out.
+
+\xpart{b} The two losing nodes drop out at different bit positions. Explain why by stating where each
+losing node's identifier first differs from the winner's identifier, and why that first differing bit
+in particular decides when the node loses arbitration.
+
+\xpart{c} A losing node has to stop driving the bus, and the interesting question is \emph{when}.
+(\Chapref{c11:ch} introduces the port pair \code{tx_bus}/\code{bus_en} that the book's controller
+stops driving with, and \chapref{c16:ch}--\ref{c17:ch} build the logic; here you reason at the
+protocol level.) Explain, in one or two sentences, what each losing node's \code{can_controller} has
+to do on the very first clock cycle after it detects the discrepancy, and why that timing matters.
+
+\note[Clue]Think through what ``the moment'' means in \secref{c10:sec:arbitration}'s worked
+arbitration example.
+
+\exercise{Reasoning about the sample point}{Reasoning}
+\label{c10:ex:sample}
+This book samples every bit 70~\% into the bit period, not at 0~\% (the very start of the period) or
+100~\% (the very end).
+
+\xpart{a} Explain what could go wrong if a receiver sampled at 0~\%. Start from signal propagation,
+why a bit period needs a minimum duration, and whether the transmitted value has had time to settle.
+
+\xpart{b} Explain what could go wrong if a receiver sampled at 100~\%, on the last possible clock
+pulse. Make the explanation specific to the fact that in the book's design every node has its own
+local bit timer, that the timer is resynchronised only at SOF, and that it is never resynchronised
+mid-frame (real CAN resynchronises on edges mid-frame as well; the book's controller does not).
+
+\xpart{c} Arbitration requires every competing node to read the bus during the \emph{same} bit period
+as it drives it. Explain why a sample point too near the start of the period is risky, why a sample
+point too near the end of the period is risky, and why the danger grows the further into the frame
+you get.
+
+\exercise{Constructing a CAN frame by hand}{Reasoning}
+\label{c10:ex:frame}
+Exercise~\ref{c10:ex:stuffing} to \ref{c10:ex:sample} worked with individual rules. This one
+assembles a complete frame from the frame diagram in \secref{c10:sec:frameformat}.
+
+\begin{aside}
+\textbf{A remark about the CRC.} You are given the CRC-15 value for every frame below. Computing a
+15-bit CRC over some 30-odd bits by hand is mechanical rather than instructive; in \chapref{c13:ch}
+you work through the recursion properly, over a 4-bit sequence, when the engine itself is the
+subject.
+\end{aside}
+
+\xpart{a} Take the CAN frame you produced in Exercise~\ref{c10:ex:ascan}: \code{ID = 0x425},
+\code{DLC = 2}, data \code{32 01}. Write out every field as bits, in transmission order, with the
+widths from \secref{c10:sec:frameformat}: SOF; ID (11 bits, MSB first); RTR; IDE and r0; DLC; data
+(MSB first, byte 0 first); CRC (given: \code{010101100100011}); CRC delimiter, ACK slot, ACK delimiter
+and EOF.
+
+\xpart{b} How many bits is that in total, before any stuffing?
+
+\xpart{c} Now apply the bit stuffing rule from Exercise~\ref{c10:ex:stuffing} over SOF through the
+CRC field, remembering that the run counter is not cleared at field boundaries. How many stuff bits
+are inserted, and how many bits does the frame occupy on the wire?
+
+\xpart{d} At the book's bit rate of 1~Mbit/s, how long does it take to send that frame?
+
+\xpart{e} Repeat \textbf{a)} to \textbf{d)} for a frame \textbf{with no payload}: \code{ID = 0x100},
+\code{DLC = 0}, CRC \code{011100000001010}. Note which parts of the frame are structurally unchanged
+despite the missing data field, and where the CRC field now begins.
+
+\xpart{f} Compare your two answers to \textbf{c)}. The second frame carries no data at all, and yet
+its stuffed region needs \emph{more} stuff bits than the first. Explain why, in terms of what the bit
+stuffing rule actually reacts to.
+
+% ------------------------------------------------------------------------------------------
+\exerciseset{Working with the package}
+
+\exercise{\code{can_def} and its derivations}{VHDL}
+\label{c10:ex:package}
+Every constant in \code{can_def} can be traced back to something this chapter defined. These
+questions write the package, check that the derivations hold when the inputs change, and extend it
+with values \secref{c10:sec:frameformat} named but the package does not yet hold.
+
+\xpart{a} Write \file{controller/can_def.vhd}, with the constants and subtypes
+\secref{c10:sec:candef} sets out. If you were at the session you already have it; if you were not,
+this is where it comes from, and every chapter from \chapref{c11:ch} onwards assumes it exists.
+
+This is the only module in the book handed out in full rather than as a specification, and for a
+reason worth mentioning: a package contains no behaviour to design, so there is nothing between the
+values and the code for you to work out. What is new here is the VHDL itself, since a package
+declaration is a construct the book has not used before. Write it out by hand rather than pasting it
+in. The names are the next eight chapters' vocabulary, and writing them once is cheaper than looking
+them up eight times.
+
+\xpart{b} Suppose the DE0-CV's clock were 40~MHz instead of 50~MHz, with the bit rate still
+1~Mbit/s. Recompute \code{TICKS_PER_BIT} and \code{SAMPLE_TICK} (still 70~\%).
+
+\xpart{c} Suppose instead that the clock stays at 50~MHz but the bus runs at 125~kbit/s, a real CAN
+``low speed'' rate. Recompute both constants.
+
+\xpart{d} \code{TICKS_PER_BIT} is \code{CLOCK_FREQ_HZ / BIT_RATE_HZ}, with VHDL's integer division
+for \code{natural}, which truncates. Give a pair of clock and bit rate where the division does
+\emph{not} come out even, and explain in one sentence why that would be a problem for this design,
+even though the VHDL would still compile and elaborate without complaint.
+
+\xpart{e} Add a constant \code{BIT_PERIOD_NS}, the length of a CAN bit period in nanoseconds, derived
+from \code{BIT_RATE_HZ} rather than hardcoded. Then state the relationship between it,
+\code{TICKS_PER_BIT} and the 50 MHz system clock's period of 20~ns, and confirm that the three agree.
+
+\xpart{f} \Secref{c10:sec:frameformat} states the CRC delimiter, the ACK field and EOF as 1, 2 and 7
+bits respectively, but the package holds none of them: \code{can_controller} will use those numbers
+as bare literals. Add \code{CRC_DELIM_BITS}, \code{ACK_BITS} and \code{EOF_BITS}, and say which of the
+two forms a later reader is better served by.
+
+\xpart{g} Check that the package actually compiles. Install GHDL if you have not already
+(appendix~\ref{app:sim}), and then run \code{make build-project} from the root of the group's
+repository. You should see:
+
+\begin{console}
+--> controller/can_def.vhd analyzes cleanly
+\end{console}
+
+followed by the two \file{bridge/} files handed out, and after that every testbench reported as
+skipped, since the modules they check do not exist yet:
+
+\begin{console}
+0 testbench(es) run, 8 skipped.
+\end{console}
+
+Now break something deliberately, a missing semicolon or a misspelled type, rerun, and read what GHDL
+says about it. Put it back.
+
+That is the whole verification story for a package: a package has no behaviour to simulate, so ``it
+analyses'' is all there is to check. \Chapref{c11:ch} introduces the tool properly, and from there
+every module gets a testbench too.

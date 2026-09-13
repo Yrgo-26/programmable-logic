@@ -1,0 +1,43 @@
+% Section 11.7, from lectures/L11/README.md.
+
+\section{Summary}
+\label{c11:sec:review}
+
+\needspace{6\baselineskip}
+\subsection*{What you should be able to do now}
+\begin{itemize}
+  \item Draw the controller's block diagram and say what every block is responsible for, and just as
+    importantly, what it is not responsible for.
+  \item Write the top level's entity with the right port order and the right types.
+  \item Explain why the architecture is empty now and which chapter fills which part of it.
+  \item Run GHDL's first two steps on the empty top level, read what each reports, and say what the
+    third step requires that does not exist yet.
+  \item Say what positional port binding buys and what it gives up.
+\end{itemize}
+
+\needspace{6\baselineskip}
+\subsection*{Questions to test yourself with}
+\begin{enumerate}
+  \item Why does \code{bit_timer} own only \emph{when}, and not \emph{what}?
+  \item Which block knows the CAN frame's format, and why only one?
+  \item Why does \code{can_controller} synchronise its own asynchronous inputs instead of requiring
+    whoever instantiates it to do so?
+  \item What breaks if you swap two ports of the same type, and when would you notice?
+  \item What do \code{ghdl -a}, \code{ghdl -e} and \code{ghdl -r} each do?
+  \item Which register-mapped operation corresponds to \code{tx_req}, and which to \code{tx_done}?
+\end{enumerate}
+
+\needspace{6\baselineskip}
+\subsection*{Target}
+The top level's entity should exist and analyse cleanly. After that it is up to the group: someone
+may well start on \code{bit_timer} or \code{crc15} straight away. The four leaf modules,
+\code{bit_timer}, \code{crc15}, \code{tx_shift_reg} and \code{rx_shift_reg}, do not depend on each
+other and each has a testbench of its own, so a group of 4--5 can build them in parallel. It is the
+one point in the project where the order genuinely matters to how fast you make progress; see
+appendix~\ref{app:project}.
+
+\needspace{6\baselineskip}
+\subsection*{Looking ahead}
+\Chapref{c12:ch} builds the first two building blocks going into the empty architecture, both small:
+the synchroniser \code{meta_prev}, which knows nothing at all, and \code{bit_timer}, the first block
+that knows something about CAN.

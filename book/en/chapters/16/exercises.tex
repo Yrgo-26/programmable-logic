@@ -1,0 +1,82 @@
+% Section 16.9, from lectures/L16/appendix/b_exercises.md.
+
+\section{Exercises}
+\label{c16:sec:exercises}
+
+\begin{aside}
+You are building the transmit path, and \code{can_controller_tb} drives two nodes through a complete
+exchange, so it cannot pass until \chapref{c17:ch} adds the receive half. \code{make build-project}
+knows that and reports it as \emph{skipped} instead of running it and failing:
+
+\begin{console}
+==> can_controller_tb (skipped: can_controller.vhd has no receive path yet; ...)
+\end{console}
+
+So the build stays green this chapter, and these exercises reason their way through the transmit path
+and analyse it in GHDL instead. The testbench becomes the verdict one chapter from now.
+\end{aside}
+
+\exercise{Trace a short frame by hand}{Reasoning}
+\label{c16:ex:shortframe}
+From the frame format in \secref{c10:sec:frameformat} and this chapter's field table, write out the
+whole sequence of states \code{can_controller} passes through (in the TX role) to send a frame with ID
+\code{0x001}, DLC \code{0} (no data field), from \code{STATE_IDLE} back to \code{STATE_IDLE}. Note for
+every state roughly how many bit periods it occupies.
+
+\exercise{Why the \code{STATE_LOAD_*} state exists}{Reasoning}
+\label{c16:ex:loadstate}
+\xpart{a} Explain in your own words what would go wrong if a stuffed field were sequenced with a
+single state that asserted \code{tx_shift_reg}'s \code{load} \emph{and} waited for \code{done},
+instead of a separate one-cycle \code{STATE_LOAD_*} followed by the shift state.
+
+\xpart{b} Point out the specific timing rule from \chapref{c14:ch} (that \code{tx_shift_reg}'s
+\code{load} presents immediately, and its \code{done} comes one extra shift later) that makes the
+split into two states necessary.
+
+\exercise{What reaches \code{crc15}, and what does not}{Reasoning}
+\label{c16:ex:crcfeed}
+\xpart{a} For a transmitted frame, sort these categories of bits into ``fed into \code{crc15}'' and
+``excluded'': the SOF bit, real bits from the ID, control field and data, inserted stuff bits, the CRC
+field's own bits, and the unstuffed tail (CRC delimiter, ACK slot, ACK delimiter, EOF). For every
+excluded category, say what excludes it: either a term in
+\code{crc_enable <= txsr_bit_valid and not txsr_stuff and role;}, or the fact that the field never
+passes through \code{tx_shift_reg} at all.
+
+\xpart{b} One of those categories may surprise you: the CRC field's own bits go back into the engine.
+Using \chapref{c13:ch}'s property that generating and checking are the same operation, say what value
+the register holds after the last CRC bit has been fed in, and name the check in \chapref{c17:ch} that
+depends on precisely that value. Then explain why the transmit path, taken on its own, does not depend
+on it: what does \code{STATE_START}'s \code{clear} already guarantee about the second frame a node
+sends?
+
+\xpart{c} Suppose you had instead gated \code{crc_enable} off during \code{STATE_CRC_HI} and
+\code{STATE_CRC_LO}. Would the first frame a node sends carry a correct CRC? Would the second? Be
+precise: that \code{crc15} is cleared is part of the answer. Then say whether any simulation in this
+book would catch the change, and what that tells you about where the fed-back CRC field actually
+earns its keep.
+
+\exercise{How long is a frame, exactly?}{Reasoning}
+\label{c16:ex:framelen}
+Answering that requires holding the whole field table and the bit stuffing rule in your head at once,
+which is the point. Take the frame \code{can_controller} sends for ID \code{0x123}, DLC \code{3}, data
+bytes \code{FF 00 00}.
+
+\xpart{a} Write out the stuffed region bit by bit, SOF through the end of the data field, using this
+chapter's field table. (It should come to 43 bits: $1 + 11 + 1 + 2 + 4 + 24$.) The identifier is
+\code{0x123}; remember that RTR, IDE and r0 are all \code{0} and that DLC is \code{0011}.
+
+\xpart{b} The CRC-15 over those 43 bits is \code{0x0FEE}, that is, \code{000111111101110} (you can
+confirm that against your \code{crc15} from \chapref{c13:ch} if you like). Add it, which gives the
+whole stuffed region of 58 bits, SOF through CRC.
+
+\xpart{c} Apply the bit stuffing rule over all 58 bits and count the inserted stuff bits. Watch the
+boundary between the data field's closing zeros and the CRC's leading zeros: the run counter is not
+cleared at field boundaries.
+
+\xpart{d} Add the unstuffed tail (CRC delimiter, ACK slot, ACK delimiter, EOF) and state the total
+number of bits actually driven out on the wire. How many microseconds is that at 1~Mbit/s?
+
+\xpart{e} The same frame with the data \code{11 22 33} needs only one stuff bit instead of the number
+you got in \textbf{c)}. Explain in one sentence why a frame's duration on a CAN bus depends on the
+\emph{payload's value} and not only on its length, and what that means for anyone trying to work out
+worst-case bus timing.

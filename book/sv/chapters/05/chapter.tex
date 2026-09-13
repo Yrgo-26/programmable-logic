@@ -1,0 +1,26 @@
+% Kapitel 5, satt ur lectures/L05: Appendix A blir avsnitt 5.1-5.5, och Appendix B övningarna.
+
+\chapter{Variabler och hårdvaran under}
+\label{c5:ch}
+
+{\large\itshape Den sista konstruktionen som återstår, och vad verktygskedjan gör av alltihop.\par}
+
+\begin{chapterbox}{I det här kapitlet}
+\begin{itemize}
+  \item \code{variable}: processlokal lagring, som uppdateras direkt där en \code{signal}
+    schemalägger.
+  \item Varför samma ackumulering ger två olika svar beroende på vilken du griper efter.
+  \item Vad en FPGA fysiskt består av: uppslagstabeller och vippor, och ingenting som är en grind.
+  \item Kritiska vägen och Fmax, och vad som sätter en hastighetsgräns på en klocka.
+  \item Låset du råkar beskriva av misstag, och varför det bara är en varning.
+\end{itemize}
+\end{chapterbox}
+
+Det här kapitlets poäng ligger i dess första genomarbetade exempel: kod som ser korrekt ut,
+simulerar utan invändningar, och är fel. Enda sättet att se varför är att \emph{spåra} den snarare
+än att läsa den, en loopiteration i taget, fram till fel svar. Gör det på papper innan du läser
+rättelsen.
+
+\input{chapters/05/variables}
+\input{chapters/05/summary}
+\input{chapters/05/exercises}

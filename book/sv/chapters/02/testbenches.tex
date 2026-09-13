@@ -1,0 +1,204 @@
+% Avsnitt 2.7, ur lectures/L02/appendix/a_larger_networks.md (A.7) och
+% lectures/L02/appendix/c_testbenches.md (C.1-C.6).
+
+\section{Att verifiera din VHDL med en testbänk}
+\label{c2:sec:testbenches}
+
+Varje VHDL-modul du skriver till en övning kommer med en \textbf{självkontrollerande testbänk}: en
+liten VHDL-fil som driver dina ingångar, kontrollerar dina utgångar och talar om vilket fall som
+misslyckades. \Chapref{c1:ch}:s övningar delade redan ut sådana, och \secref{c1:sec:module} gav dig
+de tre kommandon som kör en.
+
+Du ombeds inte skriva den testbänk som verifierar en modul du bygger; varenda en av dem delas ut.
+Att köra dem räcker för att verifiera varje övning på din egen laptop, utan FPGA-kort. (Ett par
+projektövningar från \chapref{c13:ch} och framåt bjuder in till en kort egen testrigg, men
+ingenting du bedöms på vilar på en testbänk du skrivit själv.)
+
+Det här avsnittet är bokens introduktion, och varje senare kapitels övningar hänvisar tillbaka
+hit. Bilaga~\ref{app:sim} är den fylligare versionen, skriven för grupprojektet; kom tillbaka hit
+för introduktionen och gå dit för detaljerna.
+
+\subsection{Det här behöver du}
+\label{c2:sub:need}
+\textbf{GHDL}, den öppna VHDL-analysatorn och -simulatorn. Kontrollera med \code{ghdl --version};
+installera på WSL eller Ubuntu med \code{sudo apt -y install ghdl}.
+
+Varje kommando nedan använder \code{--std=93}, den VHDL-standard boken riktar in sig på.
+
+\subsection{Vad en testbänk är}
+\label{c2:sub:what}
+En testbänk är själv en VHDL-modul, men en speciell sådan:
+\begin{itemize}
+  \item Dess entitet har \textbf{inga portar}: ingenting kopplas till omvärlden, eftersom den är
+    simuleringens topp.
+  \item Dess arkitektur \textbf{instansierar din konstruktion}, ”device under test”, märkt
+    \code{dut}, och driver dess ingångar.
+  \item Den \textbf{kontrollerar} varje utgång med ett \code{assert}. Om en utgång är fel utlöses
+    assertionen med ett meddelande och simuleringen stannar.
+\end{itemize}
+
+Så i stället för att du läser av ett vågformsdiagram för att avgöra om utgången är rätt, avgör
+testbänken det, och säger bara ifrån när något är fel.
+
+\subsection{Att köra en testbänk: analysera, elaborera, köra}
+\label{c2:sub:run}
+Tre steg. Skicka med \code{--std=93} till alla tre, och ge \textbf{testbänkens entitetsnamn}, inte
+ett filnamn, till de två sista:
+
+\begin{shell}
+ghdl -a --std=93 <module>.vhd <module>_tb.vhd        # analyze both files (module first)
+ghdl -e --std=93 <module>_tb                         # elaborate the testbench
+ghdl -r --std=93 <module>_tb --assert-level=error --stop-time=10ms   # run it
+\end{shell}
+
+\begin{itemize}
+  \item \code{--assert-level=error} gör att en misslyckad kontroll stoppar körningen och returnerar
+    en \textbf{slutkod skild från noll}, ett riktigt godkänt/underkänt som du kan kontrollera med
+    \code{echo $?}. Testbänkarna i den här bokens första del reser fel med \code{severity failure},
+    vilket stoppar körningen av sig självt, så du får ett riktigt godkänt/underkänt även utan
+    flaggan. Ha den på ändå: det är vanan som också fungerar med testbänkar som rapporterar på en
+    lägre severity-nivå, och grupprojektets testbänkar är precis sådana (bilaga~\ref{app:sim}).
+  \item \code{--stop-time=10ms} sätter ett tak för hur länge simuleringen får köra. En testbänk
+    väntar ofta på att din modul ska göra något, med en rad som \code{wait until tx = '0';}. Om din
+    modul aldrig gör det blir den väntan aldrig färdig, och utan en stopptid hänger simuleringen:
+    ingen utskrift, inget fel, bara en terminal som står och väntar. 10\,ms \emph{simulerad} tid
+    är långt mer än någon testbänk här behöver, och tar en bra bit under en sekund i verklig tid.
+  \item En godkänd körning skriver ut sin ”all checks passed”-notering och avslutar med 0. Varje
+    testbänk i den här boken slutar med den noteringen, så om du inte ser den blev körningen inte
+    färdig: den antingen underkände en kontroll eller slog i stopptiden.
+\end{itemize}
+
+\subsection{Att kontrollera en övning}
+\label{c2:sub:exercise}
+Varje VHDL-övning har sin testbänk i sin egen katalog. Det här kapitlets Övning~\ref{c2:ex:xyz}
+har till exempel \file{lectures/L02/exercises/xyz_logic/xyz_logic_tb.vhd}. Skriv din modul i
+\textbf{samma katalog}, med exakt det namn övningen ber om, och kör sedan de tre kommandona
+därifrån:
+
+\begin{shell}
+cd lectures/L02/exercises/xyz_logic
+ghdl -a --std=93 xyz_logic.vhd xyz_logic_tb.vhd
+ghdl -e --std=93 xyz_logic_tb
+ghdl -r --std=93 xyz_logic_tb --assert-level=error --stop-time=10ms
+\end{shell}
+
+Varje testbänks filhuvud listar precis de här kommandona.
+
+Testbänken kopplar till din modul \textbf{positionellt}, inte via namn, så din entitet måste
+deklarera sina portar i \textbf{samma ordning} som övningen listar dem. Namnen är dina att välja,
+men använd de angivna ändå, så att din modul och testbänkens felmeddelanden talar om samma
+signaler.
+
+En port som deklarerats i fel ordning misslyckas på ett av två sätt, varav inget säger ”fel
+ordning”:
+\begin{itemize}
+  \item om de felplacerade portarna har \textbf{olika} typ eller bredd stannar analysen med
+    \code{can't associate "sel" with port "sel"}, med en pekare på testbänkens
+    \code{port map}-rad.
+  \item om de har \textbf{samma} typ, säg flera \code{std_logic}-portar, analyseras och elaboreras
+    den alldeles utmärkt, och faller sedan vid körning som ett vanligt assertion-fel, vilket läser
+    sig precis som en logikbugg i din konstruktion.
+\end{itemize}
+
+Så när en testbänk faller på allra första fallet den kontrollerar: läs om din portordning innan du
+letar igenom din arkitektur. Detsamma gäller \textbf{generics}: en modul som bär på sådana måste
+deklarera exakt de som övningen anger, i ordning.
+
+\subsection{När konstruktionen behöver mer än en fil}
+\label{c2:sub:multifile}
+Vissa övningar bygger en modul av en annan, så \code{ghdl -a}-raden namnger flera filer i stället
+för två. Elaborerings- och körstegen är oförändrade: de tar fortfarande bara testbänkens
+\textbf{entitetsnamn}.
+
+\begin{shell}
+ghdl -a --std=93 <subcomponent>.vhd <module>.vhd <module>_tb.vhd
+ghdl -e --std=93 <module>_tb
+ghdl -r --std=93 <module>_tb --assert-level=error --stop-time=10ms
+\end{shell}
+
+\begin{itemize}
+  \item \textbf{Ordningen spelar roll på analysraden}: namnge en modul före allt som instansierar
+    den, så att GHDL redan har sett entiteten när det når det \code{entity work.<name>} som
+    hänvisar till den. Subkomponenter först, din toppnivå därefter, testbänken sist.
+  \item Ingen övningskatalog har någon utdelad subkomponent. Varje modul en konstruktion
+    instansierar är en du skrev i en tidigare övning och kopierar in själv; övningen säger vilken,
+    och varifrån.
+  \item Övningarna som behöver det här är det här kapitlets \code{hex_display} (som instansierar
+    din \code{display}), \chapref{c4:ch}:s \code{led_toggle_sync2}, \chapref{c7:ch}:s
+    \code{blinker} och \code{walking_led}, samt alla \chapref{c8:ch}:s, där mottagaren namnger fem
+    filer och sändaren fyra.
+  \item Varje testbänks filhuvud listar det exakta kommandot för sin egen övning.
+\end{itemize}
+
+\subsection{Att läsa resultatet}
+\label{c2:sub:result}
+En misslyckad kontroll ser ut så här:
+
+\begin{console}
+xyz_logic_tb.vhd:38:13:@10ns:(assertion failure): xyz_logic: wrong X with a='0' b='0' c='0' d='0', expected '0' but got '1'!
+ghdl:error: assertion failed
+\end{console}
+
+Läs den i ordning: \code{file:line} är var assertionen står, \code{@time} är när den utlöstes, och
+därefter kommer meddelandet. Det är samma form som ett kompileringsfel från GHDL, så det avbildas
+på sådant du redan kan. Inget fel betyder att varje fall stämde.
+
+\subsection{Ett komplett exempel}
+\label{c2:sub:example}
+En kombinatorisk testbänk i den form varje testbänk i den här boken använder, här för
+\chapref{c1:ch}:s \code{or_gate}:
+
+\begin{vhdlcode}
+library ieee;
+use ieee.std_logic_1164.all;
+use ieee.numeric_std.all;
+
+entity or_gate_tb is
+end entity;
+
+architecture behaviour of or_gate_tb is
+signal a, b, x: std_logic;
+begin
+    dut: entity work.or_gate
+        port map(a, b, x);   -- positional: same order as or_gate's port clause.
+
+    SIM_PROCESS: process is
+    begin
+        for i in 0 to 3 loop
+            (a, b) <= std_logic_vector(to_unsigned(i, 2));   -- apply inputs
+            wait for 10 ns;                                  -- let them settle
+            assert x = (a or b)                              -- check AFTER the wait
+                report "or_gate: wrong output with a=" & std_logic'image(a)
+                     & " b=" & std_logic'image(b)
+                     & ", expected " & std_logic'image(a or b)
+                     & " but got " & std_logic'image(x) & "!"
+                severity failure;
+        end loop;
+        report "or_gate: all checks passed!" severity note;
+        wait;                                                -- end the simulation
+    end process;
+end architecture;
+\end{vhdlcode}
+
+Två regler håller en kombinatorisk testbänk korrekt:
+\begin{itemize}
+  \item \textbf{Lägg på, vänta, kontrollera, i den ordningen.} En signaltilldelning
+    \emph{schemalägger} bara ett värde, så ingångarna och utgången uppdateras inte förrän vid
+    \code{wait}. Att kontrollera före den testar föregående varvs värden.
+  \item \textbf{Avsluta med \code{wait;}} så att stimulusprocessen suspenderas och simuleringen
+    stannar av sig själv.
+\end{itemize}
+
+Klockade konstruktioner behöver lite mer, en klockgenererande process och ett sätt att stoppa den,
+vilket är precis det maskineri de utdelade testbänkarna redan innehåller. Till övningarna skriver
+du bara modulen.
+
+\paragraph{Kör en nu}
+Mot det här kapitlets första genomarbetade exempel:
+
+\begin{shell}
+cd lectures/L02/gate_network
+ghdl -a --std=93 gate_network.vhd gate_network_tb.vhd
+ghdl -e --std=93 gate_network_tb
+ghdl -r --std=93 gate_network_tb --assert-level=error --stop-time=10ms
+\end{shell}

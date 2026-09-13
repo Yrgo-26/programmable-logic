@@ -1,0 +1,419 @@
+% Sections 6.1-6.7, from lectures/L06/appendix/a_counters_and_shift_registers.md (A.1-A.7).
+
+\section{From register to counter}
+\label{c6:sec:counter}
+
+A register (\chapref{c3:ch}) is a bank of D flip-flops storing whatever value is fed in at the next
+rising edge. A \textbf{counter} is the same idea with a twist: instead of a new value from outside,
+you feed the register its \emph{own current value plus one}. At every edge it captures
+\code{current_value + 1}, so the stored number increases once per clock cycle with no further
+input.
+
+\subsection*{Build it by hand first}
+As with every circuit in this book: build it before you write it. A 4-bit counter is three
+elements, and watching it run is the whole point:
+\begin{itemize}
+  \item A \textbf{4-bit register}: four D flip-flops sharing a clock, exactly the register from
+    \secref{c3:sec:register}.
+  \item An \textbf{adder} and a \textbf{constant \code{1}}: the register's four outputs to one of
+    the adder's inputs, the constant to the other.
+  \item The adder's sum wired back to the register's four \code{D} inputs. That feedback is the
+    whole circuit: the register holds a number, the adder computes that number plus one, the next
+    edge stores it. It is \secref{c3:sec:seq}'s feedback loop again, with an adder in the way
+    instead of a plain wire.
+\end{itemize}
+
+\lecfig[0.7]{lectures/L06/appendix/images/counter_circuit.png}{A 4-bit counter: a register whose own
+output, plus one, is wired back to its input.}{c6:fig:countercircuit}
+
+Then confirm, one clock edge at a time, with a period of \code{1000 ms}:
+\begin{itemize}
+  \item Watch the outputs step \code{0000, 0001, 0010, 0011, ...}, one count per rising edge.
+  \item \textbf{Let it run past \code{1111}.} It returns to \code{0000} by itself, and nothing in
+    your circuit tells it to: there is no comparison, no clearing logic, no ``if the count is at the
+    maximum'' anywhere. The adder produced \code{10000}, the fifth bit had nowhere to go, and the
+    four bits that survived are \code{0000}. That is \textbf{overflow}, and in a counter it is not a
+    bug to work around but the property the rest of this chapter and the whole of \chapref{c7:ch}
+    rest on.
+  \item \textbf{Keep an eye on \code{carry_out} on the adder while it happens.} That is the fifth
+    bit, and the drawing shows exactly where it goes: high during the single edge where the count
+    wraps, connected to nothing, out of the adder and no further. A wider counter would feed it into
+    a fifth stage; here it is thrown away, and throwing it away \emph{is} the wraparound. So ``the
+    count wraps because the bits ran out'' is not a figure of speech. You can point at the bit that
+    ran out.
+\end{itemize}
+
+Keep the project. \Chapref{c7:ch} starts from exactly this circuit and adds two things to it, and
+reopening it beats redrawing it.
+
+\subsection*{The same counter in VHDL}
+One signal and one process, exactly like \chapref{c3:ch}'s register, except that the right-hand side
+refers to the signal itself:
+
+\begin{vhdlcode}
+signal counter: natural range 0 to 15;
+...
+process(clock, reset_s2_n) is
+begin
+    if (reset_s2_n = '0') then
+        counter <= 0;
+    elsif (rising_edge(clock)) then
+        counter <= counter + 1;
+    end if;
+end process;
+\end{vhdlcode}
+
+\code{natural} is a predefined integer subtype in VHDL: a non-negative integer, unlike the
+\code{std_logic} types which model bits directly. VHDL's arithmetic operators work on it the way
+ordinary integer maths does, which is why \code{counter + 1} needs no extra machinery. Synthesis
+turns it into a register of flip-flops all the same, exactly as a \code{std_logic_vector} would
+become; the difference is purely in how you write and reason about the value.
+
+The range constraint \code{0 to 15} is not just documentation. It tells the synthesis tool that this
+counter needs four bits, so counting past \code{15} falls back to \code{0} for free, purely as a
+consequence of the bits running out, with no explicit ``if counter = 15'' logic in either the
+drawing or the VHDL.
+
+The free wraparound has one condition worth saying out loud: it happens only when the upper bound is
+$2^N - 1$. \code{0 to 15} wraps for free; \code{0 to 9} does not, since \code{10} is not a
+power-of-two boundary, and a modulo-10 counter needs an explicit comparison. That is exactly what
+Exercise~\ref{c6:ex:counter} asks you to write.
+
+\begin{warning}
+\textbf{One place where the simulator disagrees with the hardware.} The free wraparound is a
+property of the \emph{synthesised} circuit, and the drawing shows that it is real. A VHDL
+\emph{simulator} is stricter than a wire:
+\begin{itemize}
+  \item \code{natural range 0 to 15} is range-checked, so GHDL treats $15 + 1 = 16$ as an error and
+    aborts instead of wrapping.
+  \item The synthesised hardware has no such notion. There is no sixteenth value for the bits to
+    take, so they land on \code{0000}, exactly as your four LEDs did.
+\end{itemize}
+The gate network and the chip both wrap; only the simulator objects, since a range-constrained
+integer is a promise you made and \code{16} breaks it. The rule that follows is not ``trust the
+hardware'': it is that anything you intend to verify should say what it means. Write the comparison
+out, as \code{timer} and \code{serial_rx8} do, and the drawing, the simulator and the chip all
+agree.
+\end{warning}
+
+This wraparound that follows from the bit width is the counter's single most important property, and
+it is what \chapref{c7:ch} builds a timer out of: a counter watching for a particular count value and
+raising a flag when it arrives.
+
+% ------------------------------------------------------------------------------------------
+\section{Shift registers}
+\label{c6:sec:shift}
+
+A \textbf{shift register} is, again, N D flip-flops, wired so that each flip-flop's output feeds the
+\emph{next} flip-flop's input instead of its own. At every clock edge every bit moves one position
+down the chain, simultaneously:
+
+\begin{textdrawing}
+serial_in -> [D Q]-->[D Q]-->[D Q]-->[D Q] -> serial_out
+              FF0     FF1     FF2     FF3
+             bit 0   bit 1   bit 2   bit 3
+              ^clock  ^clock  ^clock  ^clock   (all share the same clock)
+\end{textdrawing}
+
+After one edge \code{FF0}'s contents are in \code{FF1}, \code{FF1}'s in \code{FF2}, and so on; a new
+bit comes into \code{FF0} from \code{serial_in}, and what was in the last flip-flop falls off the end
+as \code{serial_out}. Run it for N edges and N serial bits have travelled all the way through.
+
+\textbf{One direction, used throughout this book.} A shift register can move bits either way, and
+both are equally valid; it is mixing them within one design that creates confusion. So every shift
+register here follows the diagram above:
+\begin{itemize}
+  \item the chain maps onto a \code{std_logic_vector} with \code{FF0} as \textbf{bit 0} and
+    \code{FF(N-1)} as bit \code{N-1}.
+  \item serial data \textbf{enters at bit 0} and \textbf{leaves from bit \code{N-1}}.
+  \item every bit moves one position towards the \textbf{most significant} bit per edge.
+\end{itemize}
+
+In VHDL that direction is a single expression, identical in every example below:
+
+\begin{vhdlcode}
+shift_reg <= shift_reg(N-2 downto 0) & serial_in;
+\end{vhdlcode}
+
+\code{shift_reg(N-2 downto 0)} is everything but the top bit, moved up one position; the top bit has
+nowhere to go and falls off as \code{serial_out}; \code{serial_in} fills the vacated bit 0.
+
+When you meet a shift register outside this book: check its direction before you assume anything.
+The mirror image, \code{serial_in & shift_reg(N-1 downto 1)}, is exactly as common and at a glance
+looks almost the same.
+
+Shift registers are named after how data comes in and leaves:
+
+\begin{booktable}{@{}p{7.6em}p{6.6em}p{6.6em}L@{}}
+  \thead{Form} & \thead{Data in} & \thead{Data out} & \thead{Typical use} \\
+  \midrule
+  SISO & one bit per clock & one bit per clock & a plain delay line \\
+  \textbf{SIPO} & one bit per clock & all N bits at once & receiving a stream of serial bits, e.g.
+    an incoming byte on a single wire \\
+  \textbf{PISO} & all N bits at once (loaded) & one bit per clock & sending N bits out over a single
+    wire \\
+  PIPO & all N bits at once & all N bits at once & in practice an ordinary register
+    (\secref{c3:sec:register}) \\
+\end{booktable}
+
+This chapter covers the two practically useful ones, SIPO and PISO.
+
+% ------------------------------------------------------------------------------------------
+\section{Serial in, parallel out (SIPO)}
+\label{c6:sec:sipo}
+
+A SIPO register is what you reach for when bits arrive one at a time on a single wire and you need
+the accumulated value all at once. The classic is deserialising an incoming byte, which is
+fundamentally what the receive path of any serial protocol does.
+
+Which end of the byte arrives first is each protocol's own decision. SPI and CAN send the most
+significant bit first by default, which is what \secref{c6:sec:shift}'s direction assumes: the first
+bit to arrive ends up in the MSB once all N have been shifted in. (Bit order in SPI is
+configurable on most controllers, so check the device.) A protocol sending the least significant bit
+first, like UART, shifts the mirrored way, and its idiom is the mirror image too.
+
+The idiom is one line inside a clocked process, \secref{c6:sec:shift}'s shift expression verbatim:
+
+\begin{vhdlcode}
+signal shift_reg: std_logic_vector(7 downto 0);
+...
+process(clock, reset_s2_n) is
+begin
+    if (reset_s2_n = '0') then
+        shift_reg <= (others => '0');
+    elsif (rising_edge(clock)) then
+        shift_reg <= shift_reg(6 downto 0) & serial_in;
+    end if;
+end process;
+parallel_out <= shift_reg;
+\end{vhdlcode}
+
+After 8 edges the received bits have entirely replaced the register's original contents, and
+\code{parallel_out} exposes all 8 at once.
+
+% ------------------------------------------------------------------------------------------
+\section{Parallel in, serial out (PISO)}
+\label{c6:sec:piso}
+
+A PISO register reverses SIPO's job: load N bits at once, then send them out one at a time. It is
+what you reach for when a fixed pattern has to go out over a single wire, for example to a chain of
+LEDs or a display driven by an external shift register chip.
+
+It needs one control signal more than SIPO: something separating \emph{loading} a new parallel value
+from \emph{shifting} the existing one out.
+
+\begin{vhdlcode}
+process(clock, reset_s2_n) is
+begin
+    if (reset_s2_n = '0') then
+        shift_reg <= (others => '0');
+    elsif (rising_edge(clock)) then
+        if (load = '1') then
+            shift_reg <= parallel_in;                          -- Parallel load.
+        elsif (shift = '1') then
+            shift_reg <= shift_reg(N-2 downto 0) & serial_in;  -- Shift toward the MSB.
+        end if;
+    end if;
+end process;
+serial_out <= shift_reg(N-1);
+\end{vhdlcode}
+
+Bit \code{N-1} is always the next bit to leave, so a loaded value goes out most significant bit
+first: load \code{"1010"} into a 4-bit register and \code{serial_out} presents \code{1}, \code{0},
+\code{1}, \code{0} over the following cycles.
+
+Note how little separates this from \secref{c6:sec:sipo}'s SIPO. \textbf{The shift expression is
+identical}, same direction, same line of VHDL. Only two things differ: PISO adds a \code{load}
+branch, and it taps \code{shift_reg(N-1)} as a serial output where SIPO exposes the whole vector.
+``SIPO'' and ``PISO'' name how you \emph{wire} a shift register, not two kinds of hardware, which is
+why \secref{c6:sec:shift} could describe the shifting once before either name came up.
+
+Whether a design needs a genuinely new \code{serial_in} at every shift, or is content to recirculate
+what falls off the end, is decided by how it is wired. That recirculation is exactly the trick the
+walking LED example in \chapref{c7:ch} uses, once it has a timer clocking the shifting.
+
+% ------------------------------------------------------------------------------------------
+\section{Worked example: an 8-bit serial receiver}
+\label{c6:sec:rx8}
+
+The chapter's two halves meet in one module. A shift register can receive serial bits forever but
+cannot say \emph{when} a complete byte has arrived, since it has no notion of ``how many bits so
+far''. That is a counting problem, and \secref{c6:sec:counter} already solved it.
+\code{serial_rx8} combines the two, plus a one-cycle \code{data_ready} pulse when the eighth bit
+lands.
+
+This is no toy: it is the front half of every serial receiver there is. The receive paths of SPI,
+CAN and UART all start with a shift register and a bit counter, and differ only in what decides when
+a bit is valid.
+
+\begin{booktable}{@{}p{6.6em}p{3.4em}p{9em}L@{}}
+  \thead{Port} & \thead{Dir.} & \thead{Type} & \thead{Meaning} \\
+  \midrule
+  \code{clock} & in & \code{std_logic} & System clock. \\
+  \code{reset_s2_n} & in & \code{std_logic} & Active-low, \textbf{already synchronised} reset;
+    clears the register and the bit count. Asynchronous, so it clears them with no clock edge
+    involved. \\
+  \code{shift_enable} & in & \code{std_logic} & High for exactly one clock cycle per incoming
+    bit. \\
+  \code{serial_in} & in & \code{std_logic} & The incoming bit, sampled at every enabled rising
+    edge. \\
+  \code{data_out} & out & \code{std_logic_vector(7 downto 0)} & The byte received so far, most
+    significant bit first. \\
+  \code{data_ready} & out & \code{std_logic} & One-cycle pulse when the eighth bit lands. \\
+\end{booktable}
+
+\begin{aside}
+\textbf{The reset port is the synchronised one, and \code{_s2} says so.} It is called
+\code{reset_s2_n} rather than \code{reset_n} because what belongs on it is the output of a
+\code{reset_sync} (\secref{c4:sec:resetsync}), the module you wrote in
+Exercise~\ref{c4:ex:resetsync}: assert asynchronously, release synchronously. \textbf{Instantiate
+one in the design wrapping this receiver and connect its \code{reset_s2_n} here}, which is exactly
+what \secref{c6:sec:shiftdemo}'s board wrapper does. Wire a push button straight into this port
+instead and you get the race \chapref{c4:ch} exists to prevent: the shift register and the bit
+counter are a dozen flip-flops, and an asynchronously \emph{released} reset lets them leave reset at
+different edges, so the receiver can start counting a byte one cycle before it starts shifting one
+in.
+
+\code{counter}, \code{sipo8} and \code{piso8} in the exercises take \code{reset_s2_n} for the same
+reason. None of them is a design you put on a board by itself: a counter, a shift register and a
+receiver are parts, and a part is entitled to assume that the design around it has handled the
+synchronisation. So this whole chapter takes the synchronised reset signal, and only the wrapper
+modules in \secref{c6:sec:counterdemo} and \ref{c6:sec:shiftdemo}, which own the pins, ever see a raw
+\code{reset_n}.
+
+A \textbf{top level} is named the other way round: it takes \code{reset_n} and instantiates
+\code{reset_sync} itself, since it is the one holding the pin. \code{blinker} and
+\code{walking_led} in \chapref{c7:ch}, and both capstones in \chapref{c8:ch}, are written that way.
+Get into the habit of reading \code{_s2} as a requirement on the caller, because from here on most
+of what you write is a subcomponent.
+\end{aside}
+
+\vhdlfile{lectures/L06/serial_rx8/serial_rx8.vhd}
+
+At every rising edge where \code{shift_enable = '1'}, \code{serial_in} is shifted into bit 0 with
+\secref{c6:sec:sipo}'s idiom unchanged, so the first bit to arrive has travelled up to bit 7 by the
+time the eighth lands, and an internal bit counter of type \code{natural range 0 to 7} increments.
+At the edge where that counter already stands at \code{7}, \code{data_ready} pulses high for one
+cycle and the counter clears back to \code{0}, ready for the next byte. \code{data_out} is driven by
+a concurrent assignment from the shift register, so the complete byte is on it during the cycle
+where \code{data_ready} is high.
+
+Note that the counter is \emph{cleared} here rather than left to wrap: \code{0 to 7} is a
+power-of-two range so it would wrap for free, but writing it out keeps the simulator in agreement
+with the hardware, per \secref{c6:sec:counter}.
+
+Two details are worth dwelling on, since both are patterns you have met more than once:
+\begin{itemize}
+  \item \textbf{\code{data_ready} is a pulse, not a level.} It is driven low unconditionally at the
+    top of the clocked branch and raised only at the edge completing a byte: the same one-cycle
+    shape as the edge detector in \secref{c3:sec:edge}. A consumer that misses it has missed the
+    byte, which is exactly why it is paired with a \code{data_out} that \emph{holds} its value
+    afterwards. A real peripheral would put a holding register or a small FIFO here so that a slow
+    consumer cannot lose data.
+  \item \textbf{\code{shift_enable} gates the bit counter, not just the shifting.} Both advance
+    together or neither does, so a gap in the incoming stream pauses the receiver mid-byte instead
+    of corrupting it, and it resumes on exactly the bit it was waiting for.
+\end{itemize}
+
+\paragraph{Checking it}
+The example comes with a \file{serial_rx8_tb.vhd}, which shifts in two bytes with a pause between
+them and checks that \code{data_ready} pulses once per byte, never early:
+
+\begin{shell}
+cd lectures/L06/serial_rx8
+ghdl -a --std=93 serial_rx8.vhd serial_rx8_tb.vhd
+ghdl -e --std=93 serial_rx8_tb
+ghdl -r --std=93 serial_rx8_tb --assert-level=error --stop-time=10ms
+\end{shell}
+
+Clocked at \code{50 MHz} and continuously enabled, this receiver swallows a byte in 160~ns, which no
+LED can show you. That is why the testbench matters here in a way it did not for a blinking LED, and
+that is how most of real digital design goes. But it is no reason to skip the board, because
+\code{shift_enable} is precisely the way out: see \secref{c6:sec:shiftdemo}.
+
+% ------------------------------------------------------------------------------------------
+\section{On the board: watching a counter wrap}
+\label{c6:sec:counterdemo}
+
+The counter is demonstrated on the DE0-CV during the session, built the same way as every design
+since \chapref{c1:ch}: a Quartus Prime Lite project against \code{5CEBA4F23C7N}, the \file{.vhd}
+file added, compile, assign every port a physical pin in the Pin Planner, then recompile and program
+the board.
+
+One thing has to change first, and it is worth seeing why. Clocked at \code{50 MHz}, a 4-bit counter
+runs through all sixteen states and wraps every \code{320 ns}, about three million times a second. An
+LED driven straight from it does not blink, it simply glows at half brightness. To see a wraparound
+you have to watch a much slower bit: count in a wider register, say 28 bits, and assign the
+\textbf{top} four bits to the LEDs.
+
+The demonstration is therefore a wrapper around two modules rather than the exercise's entity on its
+own: a \code{reset_sync} taking the raw \code{reset_n} from the pin, and the widened counter taking
+its \code{reset_s2_n} from there. The counter's port is called \code{reset_s2_n} precisely so that
+this connection is the only one that type-checks, and \secref{c6:sec:shiftdemo} repeats the pattern
+with a third module.
+
+\begin{itemize}
+  \item \code{clock} to the 50 MHz oscillator, \code{reset_n} to a push button (into
+    \code{reset_sync}, never straight into the counter), \code{count(27 downto 24)} to four LEDs.
+  \item Bit 24 changes once every $2^{24}$ clock cycles, about a third of a second, so the four LEDs
+    count visibly from \code{0000} up to \code{1111} and then, with nothing in the circuit doing it,
+    back to \code{0000}. A full round takes about five seconds.
+\end{itemize}
+
+Dividing a clock by watching a high bit is the crudest timer imaginable, and its limitation is worth
+naming now: the period is locked to a power of two, and the only way to change it is to pick a
+different bit. \Chapref{c7:ch} replaces it with a counter compared against a target value you
+choose, which is all a timer really is.
+
+% ------------------------------------------------------------------------------------------
+\section{On the board: shifting in a byte by hand}
+\label{c6:sec:shiftdemo}
+
+\Secref{c6:sec:rx8} said that a byte arrives too fast to follow. The solution is not to slow the
+clock down, which would be the software instinct and is the wrong move in hardware: the clock is the
+one thing in a synchronous design you do not fiddle with. \code{serial_rx8} already has the right
+control, and it is \code{shift_enable}, which ``gates the bit counter, not just the shifting''. Hold
+it low and the receiver stops dead, mid-byte, for as long as you like. Raise it for exactly one
+cycle and exactly one bit goes in.
+
+So drive \code{shift_enable} from a \textbf{button} instead of holding it high. One press, one bit.
+
+The demonstration is a small wrapper around three modules you already have, and no new logic beyond
+a single flip-flop:
+\begin{itemize}
+  \item \code{reset_sync} (\secref{c4:sec:resetsync}), turning the raw \code{reset_n} into
+    \code{reset_s2_n} for everything else.
+  \item \code{button_sync} (\secref{c4:sec:buttonsync}) with \code{COUNT = 1}, turning a press into
+    the one-cycle pulse \code{shift_enable} wants. This is no optional garnish: a raw button
+    connected to \code{shift_enable} would shift in a random handful of bits per press, one per
+    clock cycle for as long as the contacts bounce.
+  \item \code{serial_rx8} itself, unchanged, with its \code{reset_s2_n} taken from
+    \code{reset_sync} above rather than from the button. That is the whole reason the port is called
+    \code{reset_s2_n}: the wrapper owns the raw \code{reset_n}, and the receiver only ever gets to
+    see the synchronised one.
+  \item A flip-flop latching \code{data_ready}, set when the pulse arrives and cleared by reset.
+    Without it there is nothing to see: \code{data_ready} is high for 20~ns, and no LED can show you
+    that.
+\end{itemize}
+
+On the board: \code{clock} to the 50 MHz oscillator, \code{reset_n} to a push button,
+\code{serial_in} to a switch (that is the bit you are about to send), the shift button to a second
+push button, \code{data_out(7 downto 0)} to eight LEDs, and the latched \code{data_ready} to a
+ninth.
+
+Now set the switch, press the button, and watch one bit come in at the rightmost LED and the whole
+pattern step left. Send \code{10110010} one bit at a time and the byte builds up across the LEDs in
+front of you, most significant bit first, exactly as \secref{c6:sec:sipo}'s idiom says it must. At
+the eighth press the ninth LED lights and the bit counter starts over.
+
+Three things this makes visible that the testbench can only assert:
+\begin{itemize}
+  \item \textbf{The bit order.} The first bit you send ends up in bit 7. Reading that off a waveform
+    is a chore; watching it travel across a row of LEDs is not.
+  \item \textbf{What \code{shift_enable} is for.} Let go of the button for a minute mid-byte and
+    nothing moves, nothing is lost, and the eighth bit still completes the byte. That is the
+    ``pauses mid-byte instead of corrupting it'' property, demonstrated rather than claimed.
+  \item \textbf{Pulse versus level, once more.} The reason a flip-flop has to be added for
+    \code{data_ready} is that whole distinction, and it is the same reason the edge detector in
+    \secref{c3:sec:edge} existed.
+\end{itemize}

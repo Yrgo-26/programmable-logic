@@ -1,0 +1,38 @@
+% Avsnitt 16.8, ur lectures/L16/README.md.
+
+\section{Sammanfattning}
+\label{c16:sec:review}
+
+\needspace{6\baselineskip}
+\subsection*{Det här ska du kunna nu}
+\begin{itemize}
+  \item Rita CAN-ramens tillståndsdiagram och säga vilket fält varje tillstånd svarar mot.
+  \item Förklara varför varje fält behöver ett \code{LOAD}-tillstånd före sitt skifttillstånd.
+  \item Implementera sändvägen: ladda skiftregistret, skifta ut, och gå vidare vid rätt puls.
+  \item Driva bussen med öppen dränering korrekt: \code{bus_en} styr, \code{tx_bus} bestämmer vad.
+  \item Grinda CRC-motorn rätt, och säga varför fel grindning ger en CRC som ser rimlig ut och är
+    fel.
+\end{itemize}
+
+\needspace{6\baselineskip}
+\subsection*{Frågor att testa dig själv med}
+\begin{enumerate}
+  \item Varför behöver varje fält ett eget \code{LOAD}-tillstånd?
+  \item En nod som sänder släpper bussen under ACK-luckan. Varför, och vad förväntar den sig se där?
+  \item \code{bus_en} och \code{tx_bus} är två separata signaler. Vad hade gått förlorat med bara
+    en?
+  \item Varför grindas \code{crc15} på \code{bit_valid and not stuff} och inte på \code{bit_done}?
+  \item Vilka fält täcks av CRC:n, och var slutar täckningen exakt?
+  \item Varför är tillståndsmaskinen en Mooremaskin här?
+\end{enumerate}
+
+\needspace{6\baselineskip}
+\subsection*{Riktvärde}
+Sändvägen bör vara på plats när \chapref{c17:ch} börjar, eftersom mottagarvägen byggs in i samma
+maskin. Kommer du inte hela vägen: gör klart sändningen fram till och med CRC-fältet, och lämna ACK
+och EOF till nästa pass.
+
+\needspace{6\baselineskip}
+\subsection*{Blicken framåt}
+\Chapref{c17:ch} färdigställer \code{can_controller} med mottagning och arbitrering, och kör
+systemtestbänken hela vägen.

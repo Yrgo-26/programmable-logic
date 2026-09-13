@@ -1,0 +1,79 @@
+% Avsnitt 15.8, ur lectures/L15/appendix/b_exercises.md.
+
+\section{Övningar}
+\label{c15:sec:exercises}
+
+\begin{aside}
+De här övningarna befäster kapitlet. Konstruera din egen \file{rx_shift_reg.vhd} utifrån
+specifikationen i \secref{c15:sec:iface} till \ref{c15:sec:trace}; den utdelade testbänken, körd
+enligt bilaga~\ref{app:sim}, är kontrollen av att den beter sig korrekt.
+\end{aside}
+
+\exercise{\code{rx_shift_reg}}{VHDL}
+\label{c15:ex:rxsr}
+Skriv din egen \file{rx_shift_reg.vhd} utifrån kapitlet. Verifiera den:
+
+\begin{shell}
+cd controller
+ghdl -a --std=93 can_def.vhd rx_shift_reg.vhd rx_shift_reg_tb.vhd
+ghdl -e --std=93 rx_shift_reg_tb
+ghdl -r --std=93 rx_shift_reg_tb --assert-level=error
+\end{shell}
+
+Om en kontroll fallerar, läs assertion-meddelandet; det namnger exakt vilket sampel det gäller och
+vad som förväntades.
+
+\exercise{Ett medvetet stoppbitsbrott}{Simulering}
+\label{c15:ex:violation}
+\xpart{a} Konstruera (på papper) en 6-bitars sekvens på ledningen som utgör ett äkta brott mot
+stoppbitsregeln: fem lika riktiga bitar i rad, följda av en sjätte lika bit där en stoppbit skulle ha
+brutit följden.
+
+\xpart{b} Mata in din sekvens från \textbf{a)} i \code{rx_shift_reg} (antingen genom att utöka
+\file{rx_shift_reg_tb.vhd} eller genom att skriva en kort ny testbänk) och bekräfta att
+\code{stuff_error} pulsar på exakt den sjätte biten, inte tidigare.
+
+\xpart{c} \code{rx_shift_reg} försöker inte återhämta sig eller omsynkronisera efter ett
+\code{stuff_error}; den rapporterar det bara under en cykel och fortsätter att ackumulera som om
+ingenting hänt. Förklara, med en eller två meningar, varför det är en godtagbar design här, givet hur
+\code{can_controller} (\chapref{c17:ch}) kommer att reagera på det.
+
+\exercise{Högerjusteringen, och det som ligger ovanför den}{Simulering}
+\label{c15:ex:justify}
+\Secref{c15:sec:iface} säger att en färdig grupp hamnar \textbf{högerjusterad i sina lägsta
+\code{bit_count} bitar}, och att \code{can_controller} förlitar sig på det när det skivar upp
+rekonstruerade fält. Test 3 och 4 i den utdelade testbänken prövar det: en 6-bitars grupp, sedan en
+3-bitars grupp, utan reset emellan, med \code{bit_count} ändrat mellan grupperna på precis det sätt
+\code{can_controller} gör mellan ett fält och nästa.
+
+Anta en nyss nollställd \code{rx_shift_reg}, \code{enable = '1'} och inga stoppbitar någonstans
+(ingen följd når någonsin fem). Processen i \secref{c15:sec:process} skiftar in varje accepterad bit
+i registrets minst signifikanta ände och nollställer aldrig registret mellan grupper; anta att din
+gör detsamma. Den utdelade testbänken kräver egentligen inte det, och del \textbf{d)} återkommer
+till varför.
+
+\xpart{a} Mata med \code{bit_count = 6} in de sex bitarna \code{0 1 0 1 0 1} (i den ordningen, en per
+\code{sample}). Skriv ut alla åtta bitarna i \code{data} när \code{valid} pulsar. Vad står i
+\code{data(7 downto 6)}, och varför?
+
+\xpart{b} Sätt \code{bit_count = 3} utan att nollställa, och mata in \code{0 1 1}. Skriv ut alla åtta
+bitarna i \code{data} när \code{valid} pulsar igen. Vad står nu i \code{data(7 downto 3)}?
+
+\xpart{c} Ditt svar på \textbf{b)} visar att bitarna ovanför \code{bit_count} håller rester från den
+\emph{föregående} gruppen. Förklara varför det är ofarligt här, och vad \code{can_controller} måste
+göra (och aldrig får göra) när det läser \code{rxsr_data} för ett fält som är smalare än 8 bitar.
+
+\xpart{d} \code{rx_shift_reg} håller två ganska olika sorters tillstånd: skiftregistret som
+ackumulerar den aktuella gruppen, och följdräknaren (\code{consecutive}, \code{last_bit}) som avgör
+var stoppbitar hör hemma. Att nollställa dem är inte lika säkert i båda fallen.
+\begin{itemize}
+  \item Anta att modulen nollställde sitt \textbf{skiftregister} vid varje \code{valid}. Vilket av
+    dina svar ovan skulle ändras, och skulle något fält någonsin bli \emph{felläst} som en följd?
+    Notera att den utdelade testbänken bara kontrollerar de lägsta \code{bit_count} bitarna i
+    \code{data}, så båda designerna passerar den.
+  \item Anta att den nollställde \textbf{följdräknaren} i samma ögonblick. Namnge vad som går sönder,
+    och säg vilken regel från \chapref{c14:ch} det speglar.
+\end{itemize}
+
+Skillnaden mellan de två svaren är skälet till att \secref{c15:sub:defaults} säger att följdräknaren
+nollställs bara av reset och inte säger någonting alls om skiftregistret.

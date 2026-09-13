@@ -1,0 +1,140 @@
+% Avsnitt 12.1, ur lectures/L12/appendix/a_meta_prev.md.
+
+\section{Att konstruera \code{meta_prev}}
+\label{c12:sec:metaprev}
+
+\code{rx_bus} anländer från en transceiver på ett annat chip, och \code{reset_n} från en knapp eller
+en övervakare, så ingenting i den här FPGA:n har någonsin styrt någondera. Att sampla en av dem
+direkt in i \code{clock}s domän kan lämna en vippa metastabil, vilket är problemet \chapref{c4:ch}
+löste med två vippor i serie. Du har byggt den här modulen förut, som \code{sync} i
+Övning~\ref{c5:ex:sync}; den här är samma idé, skriven en gång, ordentligt, för att behållas i den
+här designen.
+
+\Secref{c11:sec:sync} avgjorde redan \emph{att} kontrollern synkroniserar sina egna två asynkrona
+ingångar, och varför: de är asynkrona vem som än instansierar \code{can_controller}, så kontrollern
+äger dem och en integratör kopplar båda rakt till pinnar utan att tänka mer på det. Det här avsnittet
+bygger modulen som gör det. Den är den enda modulen i hela boken som inte innehåller någonting alls
+om CAN, vilket är precis därför den är återanvändbar nog att sluta med tre instanser vid
+\chapref{c19:ch}.
+
+\subsection{Gränssnitt}
+\label{c12:sub:mpiface}
+
+\modulefig[0.62]{lectures/L12/appendix/images/meta_prev.png}
+
+\begin{booktable}{@{}p{5em}p{4.4em}p{11.4em}L@{}}
+  \thead{Port / generic} & \thead{Riktn.} & \thead{Typ} & \thead{Betydelse} \\
+  \midrule
+  \code{WIDTH} & generic & \code{natural := 1} & Antal oberoende bitar att synkronisera. \\
+  \code{clock} & in & \code{std_logic} & 50 MHz systemklocka, domänen som korsas \emph{in i}. \\
+  \code{async_in} & in & \code{std_logic_vector(WIDTH-1 downto 0)} & Den eller de asynkrona
+    ingångarna. \\
+  \code{sync_out} & out & \code{std_logic_vector(WIDTH-1 downto 0)} & Samma bitar, säkra att använda
+    i den här domänen. \\
+\end{booktable}
+
+\code{meta_prev_tb} binder sina portar positionellt, som allt i den här boken gör, så ordningen och
+typerna ovan måste stämma exakt. \textbf{Generic-mappningen är också positionell}, så \code{WIDTH}
+måste vara modulens enda generic (eller åtminstone dess första). Testbänken instansierar modulen två
+gånger, en gång med standardbredden och en gång med bredd 4, så att både standardvärdet och genericen
+övas. Den är också den enda modulen här som inte läser något paket alls, så den behöver varken
+\code{can_def} eller något annat.
+
+\subsection{Beteende}
+\label{c12:sub:mpbehav}
+
+Två vippor per bit, i serie, på \code{clock}s stigande flank: den första kan bli metastabil, och den
+andra ger den en hel klockperiod att stabilisera sig innan något nedströms ser den.
+\code{sync_out} följer därför \code{async_in} efter exakt två stigande flanker.
+
+Tre saker skiljer sig från modulen \code{sync} du skrev i Övning~\ref{c5:ex:sync}, och alla tre är
+avsiktliga:
+\begin{itemize}
+  \item \textbf{Ingen resetport.} \code{sync} tog en \code{reset_s2_n}. Den här tar ingen: efter två
+    klockflanker håller en synkroniserare riktig data oavsett vad den startade från. Att stryka
+    porten är också det som låter \emph{samma} modul synkronisera en reset, utan cirkulariteten i att
+    en resetsynkroniserare behöver en synkroniserad reset. Testbänken klockar igenom den
+    ursprungliga nivån innan den kontrollerar någonting, av precis det skälet.
+  \item \textbf{Ingen generic \code{PRESET}.} \Chapref{c5:ch} argumenterade utförligt för att det
+    säkra resetvärdet beror på vad signalen \emph{betyder}, och att bara den instansierande designen
+    vet det. Det argumentet handlade om de två cyklerna efter reset, och det överlever inte att
+    reseten stryks: utan resetgren finns inget värde att förinställa. Det som ersätter det är
+    anroparens skyldighet att ignorera \code{sync_out} under de två första flankerna, vilket är samma
+    skyldighet uttryckt annorlunda.
+  \item \textbf{\code{SIZE} heter \code{WIDTH}.} Samma generic, samma uppgift, omdöpt till namnet
+    varje delblock i det här projektet använder.
+\end{itemize}
+
+Den här designen instansierar den tre gånger, alla med \code{WIDTH = 1}: två gånger inuti
+\code{can_controller}, för \code{reset_n} och för \code{rx_bus}, och en gång på \code{can_spi_node}s
+toppnivå för dess egen reset (\chapref{c19:ch}). En modul, tre instanser, inga kopior. Genericen gör
+ändå skäl för sin plats \textemdash{} testbänken övar \code{WIDTH = 4}, och en synkroniserare skriven
+för en bit är en synkroniserare du kopierar nästa gång du behöver fyra.
+
+\begin{warning}
+En reservation att nämna redan nu, eftersom \chapref{c19:ch} lutar sig mot den: en synkroniserare
+hanterar metastabilitet, inte \emph{skevhet}. Den andra vippan gör det överväldigande osannolikt att
+ett metastabilt värde fortplantar sig (aldrig omöjligt; sannolikheten faller exponentiellt med
+stabiliseringstiden, vilket är därför två vippor är den accepterade avvägningen), men varje bit
+korsar fortfarande oberoende, så två bitar som ändras tillsammans kan landa en klocka isär. Det är
+skälet till att en synkroniserare inte är ett generellt svar för en buss vars bitar måste hålla ihop
+\textemdash{} och det är därför \code{can_spi_node} synkroniserar sin reset med den här modulen men
+lämnar SPI-ledningarna till \code{spi_slave}, som ramar in dem, snarare än att bredda en
+\code{meta_prev} över dem.
+\end{warning}
+
+\subsection{Vad testbänken låser fast}
+\label{c12:sub:mptb}
+
+\begin{itemize}
+  \item \code{sync_out} följer \code{async_in} efter exakt två stigande flanker: inte en (en enda
+    vippa är ingen synkroniserare) och inte tre.
+  \item Detsamma gäller från hög till låg som från låg till hög.
+  \item Med \code{WIDTH = 4} anländer alla fyra bitarna tillsammans, två flanker efter att ingången
+    ändrats.
+  \item En stabil ingång lämnar \code{sync_out} stabil.
+\end{itemize}
+
+Det här är den första testbänken i projektet som faktiskt \emph{körs} snarare än bara analyseras, så
+det är också här det tredje GHDL-steget anländer. \Chapref{c11:ch} analyserade och elaborerade; se
+bilaga~\ref{app:sim} för vad \code{ghdl -r} tillför och varför \code{--assert-level=error} inte är
+valfritt.
+
+\subsection{Att lägga in den i \code{can_controller}}
+\label{c12:sub:mpwire}
+
+\code{meta_prev}s portar är vektorer även vid bredd 1, så en skalär port behöver en enelementssignal
+på vardera sidan. I arkitekturens deklarativa del (mellan \code{is} och \code{begin}):
+
+\begin{vhdlcode}
+    -- meta_prev, synchronizing the two inputs that arrive from off-chip.
+    signal reset_n_v, reset_s2_n_v : std_logic_vector(0 downto 0);
+    signal rx_bus_v,  rx_bus_s2_v  : std_logic_vector(0 downto 0);
+    signal reset_s2_n, rx_bus_s2   : std_logic;
+\end{vhdlcode}
+
+och efter \code{begin}:
+
+\begin{vhdlcode}
+    reset_n_v(0) <= reset_n;
+    rx_bus_v(0)  <= rx_bus;
+
+    reset_s2_n <= reset_s2_n_v(0);
+    rx_bus_s2  <= rx_bus_s2_v(0);
+
+    reset_sync: entity work.meta_prev
+        port map(clock, reset_n_v, reset_s2_n_v);
+
+    rx_bus_sync: entity work.meta_prev
+        port map(clock, rx_bus_v, rx_bus_s2_v);
+\end{vhdlcode}
+
+Två instanser i stället för en med \code{WIDTH => 2}. Båda bitarna skulle åka med tillsammans
+alldeles utmärkt, eftersom de är oberoende och skevhet mellan dem inte betyder något, men en namngiven
+instans per angelägenhet läser sig bättre på diagrammet, och att senare låta reseten hävdas asynkront
+skulle då inte riva upp någonting.
+
+Från och med nu \textbf{tar varje block \code{reset_s2_n}, aldrig \code{reset_n}, och varje block som
+läser bussen läser \code{rx_bus_s2}, aldrig \code{rx_bus}}. Det är hela skälet till att de här två
+instanserna finns, det gäller \code{bit_timer} redan i nästa avsnitt, och det är lätt att glömma igen
+när \code{rx_shift_reg} kopplas in i \chapref{c15:ch}.

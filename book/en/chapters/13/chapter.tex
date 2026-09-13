@@ -1,0 +1,32 @@
+% Chapter 13, typeset from lectures/L13: Appendix A becomes sections 13.1-13.6, Appendix B the
+% exercises.
+
+\chapter{The CRC-15 engine}
+\label{c13:ch}
+
+{\large\itshape One engine, two jobs.\par}
+
+\begin{chapterbox}{In this chapter}
+\begin{itemize}
+  \item \code{crc15}: a bit-serial CRC-15 engine.
+  \item Why the same engine both generates and checks a CRC, with no mode switch.
+  \item Why it nonetheless needs a \code{clear}, and what an aborted frame leaves behind without it.
+  \item A short CRC worked through the recursion by hand.
+  \item Instantiating \code{crc15} inside \code{can_controller}.
+\end{itemize}
+\end{chapterbox}
+
+CAN's CRC-15 is computed \textbf{bit-serially}: one bit fed in per enabled clock edge, with no
+separate ``compute the checksum now'' step. The property that makes this book's design simple:
+\textbf{exactly the same engine, run in exactly the same way, both generates a CRC and checks one.}
+
+\Canref{3} is the protocol side of this chapter: what the polynomial is, which fields are counted in,
+and why stuff bits are kept out. This chapter builds the engine; that book says what it is to compute
+over.
+
+Design it from the contract and the recursion below, and then verify against the testbench handed
+out. \code{crc15} does not depend on \code{bit_timer} and may well have been built already.
+
+\input{chapters/13/crc15}
+\input{chapters/13/summary}
+\input{chapters/13/exercises}

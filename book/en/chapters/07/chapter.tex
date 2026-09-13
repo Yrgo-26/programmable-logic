@@ -1,0 +1,29 @@
+% Chapter 7, typeset from lectures/L07: Appendix A becomes sections 7.1-7.5, and Appendix B the
+% exercises.
+
+\chapter{Timers}
+\label{c7:ch}
+
+{\large\itshape A counter with a target value, drawn by hand before it is written.\par}
+
+\begin{chapterbox}{In this chapter}
+\begin{itemize}
+  \item Timers: a counter raising a flag when it reaches a target value.
+  \item Turning clock cycles into real time, and the equality comparator that does it.
+  \item The same timer in VHDL, reusable thanks to a \code{generic} rather than through rewiring.
+  \item Composing a design out of finished modules instead of rewriting their logic.
+  \item \code{walking_led}: a single lit bit walking along a row of LEDs.
+\end{itemize}
+\end{chapterbox}
+
+Before the timer runs: predict at which count value \code{timeout} fires, and why that is every
+eleventh edge rather than every tenth. That off-by-one is the whole reason the module's generic is
+called \code{TICK_COUNT} and not \code{PERIOD}.
+
+\code{walking_led} in \secref{c7:sec:walking} is the payoff from the last four chapters: three
+modules, two of them unchanged from \chapref{c4:ch} and one written here, composed into something
+you can see from the back row.
+
+\input{chapters/07/timers}
+\input{chapters/07/summary}
+\input{chapters/07/exercises}

@@ -1,0 +1,147 @@
+% Avsnitt 11.8, ur lectures/L11/appendix/b_exercises.md.
+
+\section{Övningar}
+\label{c11:sec:exercises}
+
+\begin{aside}
+De här övningarna befäster \secref{c11:sec:arch} till \ref{c11:sec:regmap}: blockarkitekturen,
+gränssnittet den landar i, och registerkartan den avbildas på. Paketet \code{can_def} som de alla
+vilar på skrevs i \chapref{c10:ch}.
+
+Övning~\ref{c11:ex:reason} och \ref{c11:ex:groups} görs på papper. Övning~\ref{c11:ex:entity} och
+\ref{c11:ex:iface} görs vid tangentbordet, mot den \file{controller/can_controller.vhd} som skrevs
+under det här passet. \code{meta_prev} och dess övningar hör till \chapref{c12:ch}, tillsammans med
+\code{bit_timer}.
+\end{aside}
+
+% ------------------------------------------------------------------------------------------
+\exerciseset{Resonemang om arkitekturen}
+
+\exercise{Vem äger vad}{Resonemang}
+\label{c11:ex:reason}
+\xpart{a} \code{tx_shift_reg} och \code{rx_shift_reg} vet inte om bitarna de skiftar hör till ID:t,
+kontrollfältet, en databyte eller CRC-värdet. Förklara, med hänvisning till blockschemat,
+\emph{vilket} block som vet det, och hur det kan återanvända samma skiftregister till alltihop i
+stället för att behöva fem olika.
+
+\xpart{b} \code{crc15} matas en bit i taget och får veta när den ska sluta av den av
+\code{tx_shift_reg} och \code{rx_shift_reg} som är aktiv för tillfället (via respektive utgångar
+\code{stuff} och \code{real_bit_valid}, som grindar \code{crc15.enable}). Varför måste \code{crc15}
+få veta att den ska \emph{hoppa över} just stoppbitar, i stället för att bara matas med varje bit som
+dyker upp på ledningen?
+
+\xpart{c} \code{can_controller} instansierar de fyra andra blocken inuti sig, så utifrån sett är hela
+kontrollern en enda komponent. Anta att någon föreslår att kontrollen av arbitreringsförlust bryts ut
+till ett eget block \emph{bredvid} \code{can_controller}. Förklara vad det blocket skulle behöva
+tillgång till, och varför det gör lösningen sämre än att låta kontrollen ligga kvar där den är.
+
+\exercise{Att dela upp en annan ram i grupper}{Resonemang}
+\label{c11:ex:groups}
+\Secref{c11:sec:trace} följer en ram med DLC \code{2} genom blocken och kommer fram till att den når
+bussen som åtta laddningar av \code{tx_shift_reg}, tillsammans 50 bitar, plus en 10-bitars svans som
+drivs direkt.
+
+\xpart{a} Gör om den uppdelningen för en ram med ID \code{0x7A0} och DLC \code{5}. Ange listan av
+grupper (varje grupps innehåll och antal bitar, i sändningsordning), det totala antalet bitar i det
+stoppade området, och det totala antalet bitar i ramen innan någon stoppbit satts in.
+
+\xpart{b} Hur många grupper skulle en ram med DLC \code{0} behöva, och vilka poster ur din lista i
+\textbf{a)} försvinner? Vad säger det dig om hur \code{can_controller} måste vara strukturerad kring
+datafältet, jämfört med identifieraren eller CRC:n?
+
+\xpart{c} Fyra av grupperna i din lista är smalare än 8 bitar, och \code{tx_shift_reg}:s dataingång
+är alltid en hel byte. Namnge dem, och säg vad \code{can_controller} måste skicka med tillsammans med
+datan för att registret ska sända rätt antal bitar. (Du behöver inte \chapref{c14:ch}:s svar på
+\emph{hur}; frågan är vilken information registret inte kan räkna ut på egen hand.)
+
+\xpart{d} Inget av dina gruppantal är antalet bitar som faktiskt drivs ut på ledningen. Förklara vad
+som saknas, varför det inte går att veta enbart utifrån DLC:n, och vilket block som ansvarar för det.
+
+% ------------------------------------------------------------------------------------------
+\exerciseset{Entiteten och gränssnittet}
+
+\exercise{Entiteten, kontrollerad}{Simulering}
+\label{c11:ex:entity}
+\xpart{a} Kör \code{make build-project} från roten av gruppens repo, precis som i \chapref{c10:ch}.
+Två egna filer bör nu rapporteras, vid sidan av de två utdelade \file{bridge/}-filerna, och varje
+testbänk bör fortfarande hoppas över:
+
+\begin{console}
+--> controller/can_def.vhd analyzes cleanly
+--> controller/can_controller.vhd analyzes cleanly
+--> bridge/spi_def.vhd analyzes cleanly
+--> bridge/spi_slave.vhd analyzes cleanly
+
+==> meta_prev_tb (skipped: no meta_prev.vhd yet)
+==> bit_timer_tb (skipped: no bit_timer.vhd yet)
+==> crc15_tb (skipped: no crc15.vhd yet)
+==> tx_shift_reg_tb (skipped: no tx_shift_reg.vhd yet)
+==> rx_shift_reg_tb (skipped: no rx_shift_reg.vhd yet)
+==> can_controller_tb (skipped: no meta_prev.vhd bit_timer.vhd crc15.vhd tx_shift_reg.vhd rx_shift_reg.vhd yet)
+==> register_bank_tb (skipped: no register_bank.vhd yet)
+==> spi_reg_bridge_tb (skipped: no spi_reg_bridge.vhd yet)
+
+0 testbench(es) run, 8 skipped.
+\end{console}
+
+Den andra raden är hela poängen med den här övningen: en entitet med en tom arkitektur är ändå en
+komplett, giltig designenhet. Gå nu längre än vad \code{make build-project} gör och elaborera den för
+hand, vilket är det andra av GHDL:s tre steg:
+
+\begin{shell}
+cd controller
+ghdl -a --std=93 can_def.vhd can_controller.vhd
+ghdl -e --std=93 can_controller
+\end{shell}
+
+Den elaboreras rent, utan några underblock inuti sig och utan något att simulera. Det finns inget
+tredje steg att köra här, eftersom en design utan beteende inte har något att kontrollera och ingen
+egen testbänk; \code{can_controller_tb} driver den \emph{färdiga} kontrollern och väntar på
+\chapref{c17:ch}. Det är i \chapref{c12:ch} det tredje steget dyker upp, med den första modulen som
+har en egen testbänk.
+
+\xpart{b} \code{can_controller_tb} ligger redan i \file{controller/}, och den behöver sju moduler,
+varav du har skrivit två. Säg vilka fem som saknas och i vilket kapitel var och en kommer. Varför är
+det bättre att bygget hoppar över den testbänken än att det försöker och misslyckas?
+
+\xpart{c} \emph{Valfritt, och bara om du har Quartus Prime Lite installerat.} Ta samma fil genom
+Quartus, enligt bilaga~\ref{app:quartus}: New Project Wizard, enhet \code{5CEBA4F23C7N}, lägg till
+\file{can_def.vhd} och \file{can_controller.vhd}, sätt \code{can_controller} som toppnivåentitet, och
+kompilera.
+
+Det går igenom. Läs varningarna i stället för att hoppa över dem, och säg vilka av dem som är
+oundvikliga för en arkitektur som inte driver någonting alls. Leta sedan upp antalet pinnar i
+fitterns rapport och jämför det med vad ett DE0-CV faktiskt erbjuder en människa: tio omkopplare,
+fyra knappar, tio lysdioder. Skriv ner vad du tror måste sitta mellan den här entiteten och kortet,
+och spara anteckningen; \chapref{c18:ch} och \ref{c19:ch} bygger precis det, och kallar det
+\code{register_bank} och \code{can_spi_node}.
+
+Ingenting senare i boken beror på det här, och \chapref{c12:ch} till \ref{c19:ch} behöver bara GHDL.
+Det står här för att just det antalet pinnar är hela argumentet för de två lagren ovanför
+kontrollern, sju kapitel i förväg, och att läsa av det ur en riktig fitterrapport gör det till ditt
+eget i stället för en siffra som boken påstår.
+
+\xpart{d} Byt tillfälligt plats på \code{tx_bus} och \code{bus_en} i entitetens portlista, så att de
+står i omvänd ordning, och kör om \code{make build-project}. Båda är utgångar av typen
+\code{std_logic}, så filen analyseras fortfarande rent. Förklara varför ingenting fångar det nu, i
+vilket kapitel det först skulle ställa till skada, och hur den skadan skulle se ut på bussen
+(ledtråden är \secref{c11:sec:interface}:s avsnitt om bussidans fem portar). Säg sedan varför en
+förväxling mellan två portar av samma typ är svårare att hitta än ett felstavat namn skulle ha varit,
+givet att allt i den här boken binds positionsvis. Byt tillbaka dem.
+
+\exercise{Att läsa gränssnittet}{Resonemang}
+\label{c11:ex:iface}
+\xpart{a} En anropare vill sända en ram med ID \code{0x123}, DLC \code{3} och databytesen
+\code{AA BB CC}. Lista varje port den måste driva, och värdet på var och en. \code{tx_data} är
+\code{data_t}, 64 bitar bred, och byte 0 ligger i de mest signifikanta bitarna: ange den i sin
+helhet.
+
+\xpart{b} Samma anropare vill nu veta om ramen blev sänd. Den har tre statusportar till sitt
+förfogande (\code{tx_done}, \code{rx_valid}, \code{error}). Vilken pollar den, och vad är den enda
+sak den \emph{aldrig} kan få veta av dem, hur ofta den än pollar? (Ledtråden är
+\secref{c11:sec:interface}:s anmärkning om vad \code{error} betyder; skälet är
+\secref{c10:sec:frameformat}:s ACK-fält.)
+
+\xpart{c} \code{error} ligger hög tills nästa ram börjar, medan \code{tx_done} och \code{rx_valid}
+är pulser på en cykel. Förklara vad som skulle gå fel för parallellklassens C++-drivrutin om
+\code{error} vore en puls som de andra två.

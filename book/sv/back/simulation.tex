@@ -1,0 +1,247 @@
+% Bilaga A, satt ur info/simulation_workflow.md.
+
+\chapter{Simulering med GHDL}
+\label{app:sim}
+
+Det här är bokens permanenta referens för simulering. Varje kapitel som verifierar en modul mot en
+testbänk pekar hit i stället för att upprepa stegen. \Secref{c2:sec:testbenches} är den mjukare
+introduktionen, skriven för första gången du kör en testbänk över huvud taget; den här bilagan är den
+du kommer tillbaka till, och den täcker grupprojektets bygge i synnerhet.
+
+% ------------------------------------------------------------------------------------------
+\section{Varför simulera}
+\label{app:sim:why}
+
+\Chapref{c1:ch} till \ref{c8:ch} verifierar varje konstruktion för hand, i CircuitVerse eller direkt
+på DE0-CV. Det fungerar för små kretsar med en handfull ingångar som en människa kan växla.
+
+Det slutar fungera så snart en konstruktions korrekthet beror på exakta tidsförhållanden över flera
+cykler mellan flera moduler, vilket är grupprojektets situation rakt igenom.
+
+\begin{itemize}
+  \item En \textbf{testbänk} är ett litet, utdelat VHDL-program som driver en konstruktions ingångar
+    och kontrollerar dess utgångar automatiskt.
+  \item \textbf{GHDL} är verktyget som kompilerar och kör den, helt i programvara, utan att någon
+    FPGA är inblandad.
+  \item Du ombeds aldrig skriva den testbänk som \emph{verifierar} en modul du bygger. Varje sådan
+    är utdelad; du kör den och läser vad den rapporterar.
+  \item Några övningar bjuder in dig att skriva en kort \emph{provisorisk} rigg, tjugo rader som
+    matar in din egen bitsekvens i en modul och \code{report}:ar vad som kommer ut. Det är
+    utforskande, och alltid frivilligt till formen: ingenting du bedöms på beror på en testbänk du
+    själv skrivit.
+\end{itemize}
+
+% ------------------------------------------------------------------------------------------
+\section{Att installera GHDL}
+\label{app:sim:install}
+
+På Ubuntu eller WSL:
+
+\begin{shell}
+sudo apt-get update && sudo apt-get install -y ghdl
+\end{shell}
+
+Bekräfta att det gick vägen:
+
+\begin{shell}
+ghdl --version
+\end{shell}
+
+GHDL 3.x eller senare. Kursens CI kör samma GHDL-kommandon som nedan, så det som passerar lokalt
+passerar också i CI.
+
+% ------------------------------------------------------------------------------------------
+\section{Var filerna bor}
+\label{app:sim:layout}
+
+Grupprojektets VHDL ligger i \textbf{två platta kataloger i repots rot}: modulerna du skriver, vid
+sidan av de utdelade testbänkarna (\file{*_tb.vhd}) som kontrollerar dem. Det finns inga kataloger
+per pass och ingenting att kopiera mellan dem; \file{can_def.vhd} i synnerhet skrivs \emph{en} gång,
+i \chapref{c10:ch}, och varje senare kontrollermodul läser den enda filen.
+
+Uppdelningen mellan de två katalogerna är protokollgränsen: allt i \file{controller/} vet något om
+CAN och ingenting om SPI, och allt i \file{bridge/} tvärtom.
+
+\begin{textdrawing}
+controller/   can_def.vhd            kap 10, din
+              can_controller.vhd     kap 11, din (först bara portar, växer genom kap 17)
+              meta_prev.vhd          kap 12, din
+              bit_timer.vhd          kap 12, din
+              crc15.vhd              kap 13, din
+              tx_shift_reg.vhd       kap 14, din
+              rx_shift_reg.vhd       kap 15, din
+              + de sex utdelade *_tb.vhd
+
+bridge/       register_bank.vhd      kap 18, din
+              spi_reg_bridge.vhd     kap 19, din
+              can_spi_node.vhd       kap 19, din
+              + utdelade spi_slave.vhd, spi_def.vhd,
+                register_bank_tb.vhd, spi_reg_bridge_tb.vhd
+\end{textdrawing}
+
+De två katalogerna innehåller från början bara de utdelade filerna: åtta testbänkar, plus
+\file{spi_slave.vhd} och \file{spi_def.vhd}. Varje kapitel från \chapref{c10:ch} lägger till en
+modul, med undantaget att \file{can_controller.vhd} skrivs tidigt (\chapref{c11:ch}) som en entitet
+med en tom arkitektur och sedan \emph{växer}: \chapref{c16:ch} fyller i dess sändväg och
+\chapref{c17:ch} dess mottagväg, utan att någon ny fil dyker upp för någondera. Det är därför
+\code{can_controller_tb}, den enda testbänk som prövar hela kontrollern, är grindad på mer än att
+filerna finns; \secref{app:sim:make} återkommer till det.
+
+% ------------------------------------------------------------------------------------------
+\section{De tre GHDL-stegen}
+\label{app:sim:steps}
+
+Varje VHDL-konstruktion (och testbänk) går igenom samma tre steg, i den här ordningen:
+
+\begin{enumerate}
+  \item \textbf{Analysera} (\code{ghdl -a}): tolkar en \file{.vhd}-fil, kontrollerar den mot
+    syntax- och typfel, och registrerar dess designenheter (entiteter, arkitekturer, paket) i ett
+    arbetsbibliotek. Beroenden måste analyseras före de enheter som använder dem:
+    \file{can_def.vhd} före varje modul som säger \code{use work.can_def.all;}, och en modul före
+    sin egen testbänk.
+  \item \textbf{Elaborera} (\code{ghdl -e}): löser upp en viss toppnivåentitets fullständiga
+    instansieringshierarki till något körbart.
+  \item \textbf{Köra} (\code{ghdl -r}): simulerar den på riktigt.
+\end{enumerate}
+
+För en modul med utdelad testbänk, till exempel \chapref{c12:ch}:s \code{meta_prev}, som inte läser
+något paket alls och därför bara behöver sina egna två filer:
+
+\begin{shell}
+cd controller
+ghdl -a --std=93 meta_prev.vhd meta_prev_tb.vhd
+ghdl -e --std=93 meta_prev_tb
+ghdl -r --std=93 meta_prev_tb --assert-level=error
+\end{shell}
+
+Varje annan kontrollermodul läser \code{can_def}, så paketet kommer först:
+
+\begin{shell}
+cd controller
+ghdl -a --std=93 can_def.vhd bit_timer.vhd bit_timer_tb.vhd
+ghdl -e --std=93 bit_timer_tb
+ghdl -r --std=93 bit_timer_tb --assert-level=error
+\end{shell}
+
+\file{bridge/} fungerar likadant, med en krumelur: \code{register_bank} läser \code{can_def}, som
+ligger en katalog bort.
+
+\begin{shell}
+cd bridge
+ghdl -a --std=93 ../controller/can_def.vhd register_bank.vhd register_bank_tb.vhd
+ghdl -e --std=93 register_bank_tb
+ghdl -r --std=93 register_bank_tb --assert-level=error
+\end{shell}
+
+\begin{itemize}
+  \item \code{--std=93} väljer VHDL-93 genom hela kursen. Varje utdelad testbänk avslutar sig själv
+    snyggt, genom att sätta en \code{done}-signal som klockgenereringsprocessen kontrollerar och
+    sedan anropa \code{wait;}, i stället för att förlita sig på någon ”stoppa simulatorn”-procedur
+    ur en senare standard.
+  \item \code{--assert-level=error} säger åt GHDL att stanna simuleringen, med en utgångskod skild
+    från noll, vid varje misslyckad kontroll som rapporterats på nivån \code{error} eller högre.
+    \textbf{Skicka alltid med den när du kör en projekttestbänk.} Nästa avsnitt säger varför den inte
+    är valfri här.
+\end{itemize}
+
+\subsection{Varför \code{--assert-level=error} spelar roll, och var den inte gör det}
+\label{app:sim:assert}
+
+GHDL stannar på en misslyckad assertion bara när assertionens allvarlighetsgrad når assert-nivån,
+och GHDL:s förvalda nivå är \code{failure}. Bokens två halvor ligger på var sin sida om den gränsen,
+vilket är värt att veta eftersom det förklarar varför flaggan ser valfri ut i del~\ref{part:vhdl} och
+inte är det i del~\ref{part:can}:
+
+\begin{booktable}{lcLL}
+  & \thead{Grad} & \thead{Utan flaggan} & \thead{Med flaggan} \\
+  \midrule
+  Kapitlens testbänkar & \code{failure} & stannar, avslutar 1 & stannar, avslutar 1 \\
+  Projektets testbänkar & \code{error} & \textbf{skriver ut, kör vidare, avslutar 0} & stannar,
+    avslutar 1 \\
+\end{booktable}
+
+För en projekttestbänk gör alltså ett utelämnande av flaggan om ett verkligt fel till ett meddelande
+som rullar förbi ovanför en nollställd utgångskod, vilket är precis vad ett ”tyst godkänt” ser ut som.
+Skicka med den varje gång så slutar skillnaden spela roll.
+
+\code{--stop-time=10ms} är värd att lägga till av samma slags skäl. En testbänk som väntar på en
+händelse din modul aldrig producerar \emph{fallerar} inte; den hänger. Stopptiden gör om det till en
+körning som tar slut. Den står inte i kommandona ovan därför att projektets testbänkar alla begränsar
+sina egna väntor, men den kostar ingenting och \secref{c2:sec:testbenches} gör den till en vana.
+
+Varje testbänk rapporterar bara godkänt eller underkänt (och, vid underkänt, orsaken), ingenting
+annat. En godkänd körning slutar med en rad som denna:
+
+\begin{console}
+bit_timer_tb.vhd:148:9:@7312ns:(report note): bit_timer: all checks passed!
+\end{console}
+
+En underkänd körning stannar tidigt med ett \code{(assertion error)}-meddelande som namnger exakt
+vilken kontroll som fallerade och varför. Läs det meddelandet; det är skrivet för att tala om
+specifikt vad som gick fel.
+
+% ------------------------------------------------------------------------------------------
+\section{Att bygga allt på en gång}
+\label{app:sim:make}
+
+\code{make build-project}, från repots rot, gör allt det här automatiskt för varje testbänk vars
+moduler du skrivit. Det är användbart för att bekräfta att hela ditt träd fortfarande passerar, men
+det är förståelsen av de tre enskilda stegen ovan som låter dig felsöka en enskild modul snabbt under
+ett pass.
+
+Eftersom projektet byggs upp en modul i taget \textbf{hoppar} \code{make build-project} över varje
+testbänk vars moduler ännu inte finns, i stället för att fallera på dem, och säger det:
+
+\begin{console}
+==> meta_prev_tb
+controller/meta_prev_tb.vhd:114:9:@311ns:(report note): meta_prev: all checks passed!
+==> bit_timer_tb (skipped: no bit_timer.vhd yet)
+\end{console}
+
+Så ser \chapref{c12:ch} ut halvvägs: \file{meta_prev.vhd} skriven och godkänd, \file{bit_timer.vhd}
+kvar att göra. \file{can_def.vhd} namnges inte som saknad, eftersom \chapref{c10:ch} redan skrev den.
+
+Överhoppad är inte underkänd, med flit. Projektet löper över tio pass och det mesta av trädet saknas
+under de flesta av dem; ett bygge som lyste rött tills den sista modulen landade skulle inte säga
+något användbart under någon av de nio föregående. Antalet testbänkar som faktiskt kör växer alltså
+allteftersom: inga efter \chapref{c10:ch} eller \ref{c11:ch}, två efter \chapref{c12:ch}, sedan en
+till i vart och ett av \chapref{c13:ch}, \ref{c14:ch} och \ref{c15:ch}, en till i \chapref{c17:ch},
+en i \chapref{c18:ch}, och den sista i \chapref{c19:ch}.
+
+\begin{aside}
+\code{can_controller_tb} är \textbf{grindad på mer än att filen finns}, och det är värt att veta
+innan det förbryllar dig. \file{can_controller.vhd} skrivs i \chapref{c11:ch} som en entitet med tom
+arkitektur och växer genom \chapref{c16:ch} och \ref{c17:ch}, så från \chapref{c15:ch} och framåt
+finns varje fil testbänken behöver medan kontrollern fortfarande inte kan ta emot en ram. Att köra
+den då skulle fallera, två gånger om: en gång i \chapref{c15:ch}, och igen i \chapref{c16:ch}, som
+kan sända men ännu inte ta emot. Eftersom testbänken fungerar genom att låta en nod ta emot en annans
+ram är det den faktiskt kräver en \textbf{mottagväg}, och den kommer i \chapref{c17:ch}.
+Byggskriptet tittar därför inuti din \file{can_controller.vhd} efter \chapref{c17:ch}:s CRC-grindning
+på mottagarsidan och rapporterar:
+
+\begin{console}
+==> can_controller_tb (skipped: can_controller.vhd has no receive path yet;
+    set CI_BUILD_ALL=1 to run it anyway)
+\end{console}
+
+Den kontrollen är en heuristik snarare än ett verkligt beroende, och den har ett felläge värt att
+namnge: om din \chapref{c17:ch} är korrekt men stavar de uttrycken annorlunda än kapitlet får du det
+här hoppmeddelandet när testbänken borde ha körts. Ingenting är trasigt; kör
+\code{CI_BUILD_ALL=1 make build-project} för att tvinga fram varje testbänk oavsett. Kontrollen kan
+inte fallera åt andra hållet, eftersom markören inte kan dyka upp innan en mottagväg gör det.
+\end{aside}
+
+% ------------------------------------------------------------------------------------------
+\section{Att städa upp}
+\label{app:sim:clean}
+
+GHDL:s analyssteg skapar \file{work-obj93.cf} och liknande filer i den katalog du körde dem från.
+Byggskriptet håller sig i stället med en egen \file{work/}-katalog, så de filerna skräpar inte ner
+källträdet. Kör du de tre stegen för hand i \file{controller/} eller \file{bridge/}, städa med:
+
+\begin{shell}
+make clean
+\end{shell}
+
+som tar bort de genererade \file{work/}-katalogerna, eventuella kvarglömda \file{work-obj*.cf}, och
+de vågforms- och exekverbara filer en handkörning lämnar efter sig.

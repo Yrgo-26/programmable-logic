@@ -1,0 +1,373 @@
+% Sections 15.1-15.6, from lectures/L15/appendix/a_rx_shift_reg.md.
+
+\section{Interface}
+\label{c15:sec:iface}
+
+\modulefig[0.62]{lectures/L15/appendix/images/rx_shift_reg.png}
+
+\begin{booktable}{@{}p{6.8em}p{3.4em}p{10em}L@{}}
+  \thead{Port} & \thead{Dir.} & \thead{Type} & \thead{Meaning} \\
+  \midrule
+  \code{clock}, \code{reset_s2_n} & in & \code{std_logic} & 50 MHz clock, synchronised active-low
+    reset. \\
+  \code{sample} & in & \code{std_logic} & One pulse per CAN bit (\code{bit_timer.sample}) marking
+    when \code{rx_bus} is to be read. \\
+  \code{rx_bus} & in & \code{std_logic} & The bus level, valid at the sample point. \\
+  \code{bit_count} & in & \code{std_logic_vector(3 downto 0)} & Number of \textbf{real} bits to
+    collect, 1--8; read live, may change between groups. \\
+  \code{enable} & in & \code{std_logic} & Decides whether \code{sample} pulses are acted on. \\
+  \code{data} & out & \code{byte_t} & The collected group, \textbf{right-justified} in its lowest
+    \code{bit_count} bits. \\
+  \code{valid} & out & \code{std_logic} & Pulses when \code{bit_count} real bits have been
+    collected. \\
+  \code{stuff_error} & out & \code{std_logic} & Pulses if an expected stuff bit does not invert. \\
+  \code{real_bit} & out & \code{std_logic} & The single destuffed bit accepted at this sample. \\
+  \code{real_bit_valid} & out & \code{std_logic} & \code{'1'} at a sample that accepted a real bit;
+    \code{'0'} at a discarded stuff bit. \\
+\end{booktable}
+
+\code{data} and \code{real_bit} are levels; \code{valid}, \code{stuff_error} and
+\code{real_bit_valid} are \textbf{one-cycle pulses}, defaulted to \code{'0'} at the top of the
+clocked process, exactly like \code{tx_shift_reg}'s. \code{real_bit_valid} is the one that bites:
+\code{can_controller} gates \code{crc15}'s enable directly on it (\chapref{c17:ch}), so a level
+lingering until the next sample feeds the same bit in for a whole bit period and silently destroys
+the CRC. The testbench checks that it has fallen again the cycle after every sample, for exactly that
+reason.
+
+There is no \code{load}: the sampling happens mid-period (\code{sample}, not \code{bit_done}), once
+every node's signals have had time to settle. A transmitter changes the bus at a period boundary, so
+a receiver also acting on \code{bit_done} would read at the very moment the level changes;
+\secref{c12:sub:bttrace}'s tick trace shows the two pulses and the 14 ticks between them.
+\code{can_controller} only changes \code{bit_count} between groups; \code{valid} itself reports every
+group's completion. \code{rx_shift_reg_tb} binds \textbf{positionally}, so the order and the types
+above are what has to match; the names are yours.
+
+% ------------------------------------------------------------------------------------------
+\section{What the module has to remember}
+\label{c15:sec:state}
+
+As in \chapref{c14:ch}: list the state before any process is written. The receive side has the same
+two jobs, mirrored \textemdash{} keeping a group \emph{filling up}, and keeping the bit stuffing rule
+honest \textemdash{} plus one it did not have: \emph{predicting} where the transmitter must have
+inserted a stuff bit. Every rule below speaks in terms of exactly these five signals:
+
+\begin{vhdlcode}
+signal data_reg      : byte_t;                     -- Collected real bits, filling from the right.
+signal collected     : natural range 0 to 8;       -- Real bits accepted toward this chunk so far.
+signal last_bit      : std_logic;                  -- The bit most recently sampled off the bus.
+signal consecutive   : natural range 0 to MAX_RUN; -- Current run length; 0 = none.
+signal stuff_expected: std_logic;                  -- The next sampled bit must be a stuff bit.
+\end{vhdlcode}
+
+\begin{itemize}
+  \item \textbf{\code{data_reg} and \code{collected} are the group filling up.} Every accepted bit is
+    shifted in from the right (\code{data_reg(6 downto 0) & rx_bus}), which is where the
+    right-justification comes from, and \code{collected} counts accepted bits towards
+    \code{bit_count}. The register behind \code{data} has to be this internal signal, with
+    \code{data <= data_reg;} as a concurrent assignment outside the process: an \code{out} port
+    cannot be \emph{read}, and a shift is a read-modify-write.
+  \item \textbf{\code{last_bit} and \code{consecutive} are the same run tracker as \chapref{c14:ch}'s},
+    character for character: the bit most recently on the wire, and how long the identical run it
+    ended is. Both sides of the link run the same tracker over the same bits, against the same
+    \code{MAX_RUN} from \code{can_def}; that is what keeps them agreeing on where the stuff bits
+    belong. As in \chapref{c14:ch}, the pair is written from a single procedure the process declares.
+  \item \textbf{\code{stuff_expected} is the mirror image of \chapref{c14:ch}'s
+    \code{stuff_pending}} \textemdash{} the same flag with the opposite job. The transmitter's flag
+    says ``I \emph{owe} a stuff bit next''; the receiver's says ``the next bit had better \emph{be}
+    one''. The same arming condition (a run reaching five), the same timing (checked at the next
+    event), the opposite direction of obligation \textemdash{} and the receiver's version can be
+    \emph{disappointed}, and that is where \code{stuff_error} comes from.
+\end{itemize}
+
+The outputs are registered in the same process: \code{data} and \code{real_bit} are levels;
+\code{valid}, \code{stuff_error} and \code{real_bit_valid} are the one-cycle pulses
+\secref{c15:sec:iface} described.
+
+% ------------------------------------------------------------------------------------------
+\section{The process, top to bottom}
+\label{c15:sec:process}
+
+One clocked process holds all of the above, plus one concurrent assignment outside it. As in
+\chapref{c14:ch}, the walkthrough follows the code in the order it is written. \textbf{The run
+tracker} is line for line \chapref{c14:ch}'s, with only the flag renamed after what it now means: the
+same procedure, declared inside this module's process and called from every branch taking a bit off
+the wire but one, and the exception is noted where it arises. As in \chapref{c14:ch},
+\code{collected} is compared against \code{bit_count} via \code{to_integer(unsigned(...))}, so the
+file needs \code{use ieee.numeric_std.all;}.
+
+\textbf{The skeleton.} The concurrent line first: \code{data} is an \code{out} port and cannot be
+\emph{read}, while a shift is a read-modify-write, so the register is the internal \code{data_reg}
+and the port merely mirrors it. Then the process, with its procedure declared before \code{begin},
+asynchronous reset first and everything else on the rising edge:
+
+\begin{vhdlcode}
+data <= data_reg;  -- Concurrent, outside the process.
+
+process(clock, reset_s2_n) is
+    -- One procedure, the run tracker (below).
+begin
+    if (reset_s2_n = '0') then
+        -- Clear everything.
+    elsif (rising_edge(clock)) then
+        -- Defaults, then the sample branch.
+    end if;
+end process;
+\end{vhdlcode}
+
+\subsection{The run tracker, written once}
+\label{c15:sub:tracker}
+
+\Chapref{c14:ch}'s procedure with \code{stuff_expected} in place of \code{stuff_pending}; that single
+rename is the whole difference on the receive side. Everything \secref{c14:sub:tracker} says about the
+idiom (why it reads the signals directly, why it is declared inside the process rather than in the
+architecture, why an \code{in} parameter preserves the pre-edge timing, and why synthesis inlines it)
+applies here unchanged:
+
+\begin{vhdlcode}
+    -- The run tracker: runs on the bit just taken off the wire.
+    procedure track_run(new_bit: in std_logic) is
+    begin
+        if ((new_bit = last_bit) and (consecutive /= 0)) then
+            consecutive <= consecutive + 1;
+            if (consecutive = MAX_RUN - 1) then -- Run reaches MAX_RUN.
+                stuff_expected <= '1';
+            end if;
+        else
+            consecutive <= 1;                   -- Start a new run.
+        end if;
+        last_bit <= new_bit;
+    end procedure;
+\end{vhdlcode}
+
+\subsection{Reset and defaults}
+\label{c15:sub:defaults}
+
+\textbf{Reset clears everything}: the group (\code{data_reg}, \code{collected}), the run tracker
+(\code{last_bit}, \code{consecutive}, \code{stuff_expected}) and the outputs. This is the
+\textbf{only} place the tracker is ever cleared. The groups do not clear it: the transmitter's stream
+is continuous over the whole frame, so the receiver's picture of it has to be as well.
+
+\textbf{The defaults next, and only these three}, so that the branches below only \emph{raise} them:
+
+\begin{vhdlcode}
+valid          <= '0';
+stuff_error    <= '0';
+real_bit_valid <= '0';
+\end{vhdlcode}
+
+\begin{warning}
+\code{stuff_expected} does \textbf{not} belong here, for exactly the same reason
+\code{stuff_pending} did not belong in \chapref{c14:ch}'s defaults: it is state, armed at the sample
+completing a run and settled at the \emph{next} sample, a whole bit period (fifty clock edges) later.
+Default it low and the prediction evaporates before it can fall due, and then stuff bits are neither
+discarded nor checked. It is written in exactly three places: cleared at reset, armed inside
+\code{track_run}, and cleared when the prediction falls due (both outcomes below).
+\end{warning}
+
+\subsection{The sample branch}
+\label{c15:sub:sample}
+
+\textbf{\code{(sample = '1') and (enable = '1')} is the only working branch}; there is no
+\code{load} on the receive side. It does exactly one of three things, tested in this priority order.
+First: an outstanding prediction falls due, and the sampled bit settles it one way or the other:
+
+\begin{vhdlcode}
+if ((sample = '1') and (enable = '1')) then
+    if (stuff_expected = '1') then
+        if (rx_bus /= last_bit) then
+            stuff_expected <= '0';    -- The stuff bit arrived; prediction settled.
+
+            track_run(rx_bus);        -- A stuff bit is a bit off the wire like any other.
+        else
+            stuff_error    <= '1';    -- Six identical bits: a stuffing violation.
+            stuff_expected <= '0';
+            consecutive    <= 1;      -- Restart the run at the violating bit; the
+                                      -- tracker must never count past MAX_RUN.
+        end if;
+\end{vhdlcode}
+
+The arrived stuff bit is \emph{discarded}: no shift, no change to \code{collected}, and
+\code{real_bit_valid} stays \code{'0'}, since a stuff bit is never a real bit (this is the bit
+\code{crc15} must not see). The call to the tracker is the mirror image of \chapref{c14:ch}'s in its
+stuff branch: a discarded stuff bit resyncs the tracker exactly as a transmitted one does, since the
+wire does not distinguish real bits from stuff bits and the tracker must not either. Here it needs no
+special argument, since \code{rx_bus /= last_bit} is this branch's own condition, so
+\code{track_run(rx_bus)} takes the new-run path by construction and restarts the count at 1.
+
+In the \code{else} branch, six identical bits in a row are impossible on a correctly stuffed bus, so
+\code{stuff_error} pulses. The cleanest thing for the rest is to clear the flag, accept nothing, and
+restart the run count at the violating bit (\code{last_bit} already holds its value), since it is not
+this module's job to decide what a violation \emph{means}. The restart is not optional tidiness:
+without it \code{consecutive} stays at \code{MAX_RUN}, the next identical bit runs the tracker's
+\code{+ 1}, and the signal's declared range is exceeded; the testbench feeds in a bit past the
+violation to pin down exactly that. This is also the one placement \code{track_run} cannot serve, and
+for the same reason: \code{rx_bus = last_bit} here, so the call would take the \code{+ 1} path with
+\code{consecutive} already at \code{MAX_RUN}. The violating bit is the exception to the rule the
+procedure encodes, so its two lines stay written out. \code{can_controller} treats it as fatal and
+aborts the reception (\chapref{c17:ch}), exactly as a real controller would.
+
+Otherwise: accept a real bit, shift it in from the right, expose it bit-wise to \code{crc15},
+complete the group if this bit completes it, and run the tracker on the bit just accepted:
+
+\begin{vhdlcode}
+    else
+        data_reg       <= data_reg(6 downto 0) & rx_bus;  -- Shift in from the right.
+        real_bit       <= rx_bus;
+        real_bit_valid <= '1';
+
+        if (collected = to_integer(unsigned(bit_count)) - 1) then
+            valid     <= '1';                 -- This bit completes the chunk.
+            collected <= 0;
+        else
+            collected <= collected + 1;
+        end if;
+
+        track_run(rx_bus);   -- rx_bus was just accepted off the wire.
+    end if;
+end if;
+\end{vhdlcode}
+
+The comparison here is \chapref{c14:ch}'s pre-edge signal read: \code{collected} against
+\code{bit_count - 1} is the ``run-is-now-full'' idiom applied to the group's completion, the same
+shape as \code{consecutive = MAX_RUN - 1} inside \code{track_run}. Nothing else happens at a group
+boundary: \code{bit_count} is read live, so the next group simply begins with the next accepted bit at
+whatever width \code{can_controller} has set by then, and \code{data_reg} is \emph{not} cleared; the
+new group's bits are shifted in beneath whatever the old group left above them
+(Exercise~\ref{c15:ex:justify} is about exactly that).
+
+Two mirror notes worth stopping at:
+\begin{itemize}
+  \item \textbf{There is no closing sample.} \Chapref{c14:ch}'s \code{done} had to lag by one shift,
+    since a sent bit still needed its full period on the bus. A receiver samples mid-period, once the
+    bit has already had its settling time, so the moment the last real bit is accepted the group is
+    simply \emph{there}: \code{valid} goes at that very sample, with nothing to wait for.
+  \item \textbf{\code{data}/\code{valid} are per group, \code{real_bit}/\code{real_bit_valid} per
+    bit.} A whole group is too coarse for \code{crc15}, which needs every real bit as it arrives;
+    \code{real_bit} and \code{real_bit_valid} expose exactly the single accepted bit, the receive
+    side's counterpart to \code{tx_shift_reg}'s pair \code{bit_valid}/\code{stuff}. Counterpart, not
+    mirror image: on the transmit side stuff bits still carry \code{bit_valid = '1'} and the caller
+    masks them out with \code{stuff}, while the discarded stuff bit here never raises
+    \code{real_bit_valid} at all, so \code{real_bit_valid} alone is already the CRC gating
+    (\chapref{c17:ch}).
+\end{itemize}
+
+% ------------------------------------------------------------------------------------------
+\section{One group, sample by sample}
+\label{c15:sec:trace}
+
+Receiving is not simply \chapref{c14:ch} backwards. A transmitter \emph{decides} to insert a stuff
+bit; a receiver \emph{predicts} one and then has to check whether it actually came. That difference
+is where both of this module's interesting outputs come from.
+
+Here is the wire sequence \code{tx_shift_reg} produced for \code{"11111000"} in
+\secref{c14:sec:trace}, arriving at a just-reset \code{rx_shift_reg} with \code{bit_count = 8}. Every
+row is a \code{sample} pulse. The \code{run} column is the number of identical bits in a row after the
+sample, and \code{data} shows the register filling from below.
+
+\begin{textdrawing}
+            rx_bus     action  real_bit  real_bit_valid    run      data  valid
+sample 1         1     accept         1               1     1  00000001      0
+sample 2         1     accept         1               1     2  00000011      0
+sample 3         1     accept         1               1     3  00000111      0
+sample 4         1     accept         1               1     4  00001111      0
+sample 5         1     accept         1               1     5  00011111      0
+sample 6         0    discard         -               0     1  00011111      0
+sample 7         0     accept         0               1     2  00111110      0
+sample 8         0     accept         0               1     3  01111100      0
+sample 9         0     accept         0               1     4  11111000      1
+\end{textdrawing}
+
+Nine samples to recover eight bits, exactly the nine presentations \chapref{c14:ch}'s transmitter
+needed to send them. Three rows carry the lesson:
+\begin{itemize}
+  \item \textbf{Sample 5} takes the fifth \code{'1'} in a row. Nothing is discarded here. Reaching
+    five only means that the \emph{next} bit is expected to be a stuff bit; this bit is real and is
+    collected as usual.
+  \item \textbf{Sample 6} is the discarded stuff bit. \code{real_bit_valid} falls to \code{'0'} and
+    \code{data} does not move: the group makes no progress. This is the row that matters to
+    \chapref{c13:ch}'s engine, since \code{crc15} must not see this bit. The run resyncs to 1 and
+    takes the stuff bit's own value as the start of the new run.
+  \item \textbf{Sample 9} completes the eighth \emph{real} bit, so \code{valid} pulses and
+    \code{data} reads \code{11111000}, the original group. The stuff bit has vanished without
+    \code{can_controller} ever finding out it existed.
+\end{itemize}
+
+Note that \code{data} fills from the right, one position per accepted bit. After nine samples the
+group happens to occupy all eight bits, but a 6-bit group would end up with its bits in
+\code{data(5 downto 0)} and leave whatever sits above alone. That is the right-justification, and
+Exercise~\ref{c15:ex:justify} is about what sits above it.
+
+\textbf{When the stuff bit does not come.} The same mechanism, one bit different. Six \code{'0'}s in a
+row where the sixth should have inverted:
+
+\begin{textdrawing}
+            rx_bus    expected     action  real_bit_valid    run  stuff_error
+sample 1         0    real bit     accept               1     1            0
+sample 2         0    real bit     accept               1     2            0
+sample 3         0    real bit     accept               1     3            0
+sample 4         0    real bit     accept               1     4            0
+sample 5         0    real bit     accept               1     5            0
+sample 6         0   stuff '1'  violation               0     1            1
+\end{textdrawing}
+
+The violation is detected at sample \textbf{6}, not sample 5. Five identical bits are perfectly legal
+and are even required before any stuff bit exists at all; it is the sixth, arriving where an inverted
+bit was owed, that is impossible on a correctly stuffed bus. \code{stuff_error} pulses for one cycle
+and the module goes on collecting; deciding what a violation \emph{means} belongs to
+\code{can_controller}, which aborts the frame (\chapref{c17:ch}).
+
+% ------------------------------------------------------------------------------------------
+\section{What the testbench pins down}
+\label{c15:sec:tb}
+
+\begin{itemize}
+  \item The wire sequence for \code{"11111000"} (stuff bit after the fifth \code{'1'}) is destuffed
+    back to \code{"11111000"}, \code{valid} pulses at the last sample, and \code{real_bit_valid} is
+    \code{'0'} at the discarded stuff bit and \code{'1'} (with \code{real_bit = rx_bus}) at every
+    real bit.
+  \item \code{real_bit_valid} is back at \code{'0'} the cycle \emph{after} every sample, so a version
+    holding the level fails even if it destuffs perfectly.
+  \item Six \code{'1'}s in a row raise \code{stuff_error} at the sixth sample, and a seventh identical
+    bit is accepted as usual afterwards: the run count restarted at the violating bit instead of
+    counting past \code{MAX_RUN}.
+  \item A 6-bit group pulses \code{valid} at its sixth sample, not its eighth, and lands
+    right-justified in \code{data(5 downto 0)}.
+  \item A 3-bit group fed in immediately afterwards, \textbf{with no reset in between}, picks up the
+    new \code{bit_count} and lands in \code{data(2 downto 0)}. This is the group-to-group resizing
+    \code{can_controller} performs between every field.
+\end{itemize}
+
+% ------------------------------------------------------------------------------------------
+\section{Putting it into \code{can_controller}}
+\label{c15:sec:wire}
+
+The last of the four CAN blocks, and the first whose port map connects to something other than the
+clock and its own signals:
+
+\begin{vhdlcode}
+    -- rx_shift_reg.
+    signal rxsr_bit_count                     : std_logic_vector(3 downto 0);
+    signal rxsr_enable                        : std_logic;
+    signal rxsr_data                          : byte_t;
+    signal rxsr_valid,    rxsr_stuff_error    : std_logic;
+    signal rxsr_real_bit, rxsr_real_bit_valid : std_logic;
+\end{vhdlcode}
+
+\begin{vhdlcode}
+    rx_shift_reg1: entity work.rx_shift_reg
+        port map(clock, reset_s2_n, bt_sample, rx_bus_s2, rxsr_bit_count, rxsr_enable,
+                 rxsr_data, rxsr_valid, rxsr_stuff_error, rxsr_real_bit, rxsr_real_bit_valid);
+\end{vhdlcode}
+
+Two of the connections there are worth stopping at. \code{sample} comes straight from
+\code{bit_timer1}'s output, so the receive path samples on the same 70~\% tick the rest of the design
+times against; nothing in between decides when the bus is read. And the bus level is
+\code{rx_bus_s2}, the output of \chapref{c12:ch}'s \code{rx_bus_sync} instance, \textbf{not} the
+\code{rx_bus} port itself. \code{rx_shift_reg} is the only block that reads the bus, and it reads the
+synchronised copy; nothing in the design reads the raw pin. (As with \code{tx_shift_reg}: take the
+\code{reset_s2_n} connection as it is for now; \chapref{c17:ch} moves both shift registers to a
+per-frame reset.)
+
+With this, \code{can_controller}'s architecture holds all four CAN subblocks and their signals,
+alongside \chapref{c12:ch}'s \code{meta_prev}, and no frame behaviour at all. Every remaining
+connection between them is \chapref{c16:ch}'s state machine.

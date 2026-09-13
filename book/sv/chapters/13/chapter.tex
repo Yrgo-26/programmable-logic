@@ -1,0 +1,31 @@
+% Kapitel 13, satt ur lectures/L13: Appendix A blir avsnitt 13.1-13.6, Appendix B övningarna.
+
+\chapter{CRC-15-motorn}
+\label{c13:ch}
+
+{\large\itshape En motor, två jobb.\par}
+
+\begin{chapterbox}{I det här kapitlet}
+\begin{itemize}
+  \item \code{crc15}: en bitseriell CRC-15-motor.
+  \item Varför samma motor både genererar och kontrollerar en CRC, utan lägesomkoppling.
+  \item Varför den ändå behöver ett \code{clear}, och vad en avbruten ram lämnar efter sig utan det.
+  \item En kort CRC arbetad genom rekursionen för hand.
+  \item Att instansiera \code{crc15} inuti \code{can_controller}.
+\end{itemize}
+\end{chapterbox}
+
+CAN:s CRC-15 beräknas \textbf{bitseriellt}: en bit inmatad per aktiverad klockflank, utan något
+separat ”beräkna checksumman nu”-steg. Egenskapen som gör den här bokens konstruktion enkel:
+\textbf{exakt samma motor, körd på exakt samma sätt, både genererar en CRC och kontrollerar en.}
+
+\Canref{3} är protokollsidan av det här kapitlet: vad polynomet är, vilka fält som räknas in, och
+varför stoppbitar hålls utanför. Det här kapitlet bygger motorn; den boken säger vad den ska räkna
+på.
+
+Konstruera den utifrån kontraktet och rekursionen nedan, och verifiera sedan mot den utdelade
+testbänken. \code{crc15} beror inte på \code{bit_timer} och kan mycket väl ha byggts redan.
+
+\input{chapters/13/crc15}
+\input{chapters/13/summary}
+\input{chapters/13/exercises}

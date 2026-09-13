@@ -1,0 +1,31 @@
+% Chapter 11, typeset from lectures/L11: Appendix A becomes sections 11.1-11.6, Appendix B the
+% exercises.
+
+\chapter{Architecture, the top level and the register map}
+\label{c11:ch}
+
+{\large\itshape From protocol to block diagram, and the top level every later module is instantiated
+in.\par}
+
+\begin{chapterbox}{In this chapter}
+\begin{itemize}
+  \item Mapping CAN concepts onto hardware blocks: bit timer, CRC engine, shift registers, and the
+    frame-sequencing state machine controlling them.
+  \item Who owns what: \code{bit_timer} owns \emph{when}, the shift registers own the bit stuffing,
+    \code{crc15} knows nothing about frames, and \code{can_controller} is the only block that knows
+    the frame format.
+  \item A first look at the register map the driver class will consume.
+  \item Writing \file{can_controller.vhd} from scratch: its fifteen ports, and an architecture that
+    starts empty and grows chapter by chapter.
+  \item Which of the ports are asynchronous, and why the controller synchronises them itself.
+\end{itemize}
+\end{chapterbox}
+
+\Chapref{c10:ch} gave the protocol. This chapter turns it into an \emph{architecture}: five blocks
+with one responsibility each, an entity holding them together, and an interface that stays fixed for
+the rest of the book. None of the parts is built here. What is written is the entity they are all to
+live in, and its architecture is deliberately left empty.
+
+\input{chapters/11/architecture}
+\input{chapters/11/summary}
+\input{chapters/11/exercises}

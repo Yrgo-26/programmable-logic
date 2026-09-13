@@ -1,0 +1,44 @@
+% Section 2.8, from lectures/L02/README.md.
+
+\section{Summary}
+\label{c2:sec:review}
+
+\needspace{6\baselineskip}
+\subsection*{What you should be able to do now}
+\begin{itemize}
+  \item Derive a minimised equation from a Karnaugh map and turn it into a VHDL architecture.
+  \item Read and write ports and signals of type \code{std_logic_vector}.
+  \item Write a \code{process} with a correct sensitivity list and a \code{case} that covers every
+    input value.
+  \item Build a design out of more than one \code{entity} with a positional \code{port map}, and
+    say why two instances of the same module put two copies of its gates on the FPGA.
+  \item Verify a module by running its testbench, and read a failed \code{assert}.
+\end{itemize}
+
+\needspace{6\baselineskip}
+\subsection*{Questions to test yourself with}
+\begin{enumerate}
+  \item Given a truth table, can you derive its equation both directly and by way of a Karnaugh
+    map? What is the difference between the two results?
+  \item Why can a \code{case} not stand directly in an architecture body?
+  \item What does \code{when others} protect you from, when the selector ``can only'' be \code{0}
+    or \code{1}?
+  \item In \code{display1: entity work.display}, what does \code{display1} name, and what does
+    \code{work.display} name? Could a second instance reuse the same label?
+  \item \code{hex_display}'s architecture contains no logic at all. Where do the gates in the
+    finished design come from?
+  \item You instantiated \code{display} twice instead of writing its \code{case} twice. Does the
+    FPGA get one copy of that logic or two? So what did you actually gain?
+  \item The book always writes \code{port map} positionally. What breaks if an entity's ports are
+    declared in a different order from the one the testbench expects, and when do you notice?
+\end{enumerate}
+
+\needspace{6\baselineskip}
+\subsection*{Looking ahead}
+\Chapref{c3:ch} goes on with:
+\begin{itemize}
+  \item Sequential networks: circuits that remember.
+  \item The D latch, and the D flip-flop built from a pair of them.
+  \item Clocking, and when a signal assignment actually takes effect.
+  \item Edge detection: a button press that toggles an LED.
+\end{itemize}

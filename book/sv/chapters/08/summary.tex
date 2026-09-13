@@ -1,0 +1,63 @@
+% Avsnitt 8.7, ur lectures/L08/README.md.
+
+\section{Sammanfattning}
+\label{c8:sec:review}
+
+\needspace{6\baselineskip}
+\subsection*{Det här ska du kunna nu}
+\begin{itemize}
+  \item Förklara vad en ändlig tillståndsmaskin är, och peka ut dess tillstånd, övergångar,
+    ingångar och utgångar i en given krets.
+  \item Konstruera en Mooremaskin för hand, från specifikation via tillståndsdiagram och
+    tillståndstabell till Karnaughhärledda ekvationer, och bygga resultatet i CircuitVerse.
+  \item Modellera samma maskin i VHDL med en uppräknad typ \code{state_t} och en
+    \code{case}-process.
+  \item Känna igen en Mealymaskin på sekunden och säga vad dess utgång kostar och köper, en
+    klockcykels latens mot ett extra tillstånd, och varför Moore är standardvalet här och i
+    CAN-projektet.
+  \item Komponera en tillståndsmaskin med tidigare byggda subkomponenter i stället för att skriva
+    om dem. I capstonen betyder det tre tidigare kapitels moduler runt en maskin som är den enda
+    nya logiken, med skift- och räknaridiom från ytterligare ett.
+\end{itemize}
+
+\needspace{6\baselineskip}
+\subsection*{Frågor att testa dig själv med}
+\begin{enumerate}
+  \item Vad gör en krets till en tillståndsmaskin, snarare än bara ett register med lite logik
+    omkring?
+  \item Vad är \code{X} exakt i den handkonstruerade maskinen, och varför måste det vara en puls på
+    en klockcykel snarare än knappens nivå?
+  \item Varför är den maskinens tillståndskodning en Graykod? Vad kan gå fel med en vanlig
+    binärräkning?
+  \item En räknare och ett skiftregister är tekniskt sett också tillståndsmaskiner. Vad skiljer dem
+    från maskinen som konstruerades här?
+  \item Vilka signaler får en Mooreutgång bero på, och vilka får en Mealyutgång bero på? Hur avgör
+    du, givet en enda rad VHDL som driver en utgång, vilken av dem du tittar på?
+  \item Varför behöver Mooreversionen i \secref{c8:sec:mealy}:s jämförelse ett extra tillstånd, och
+    varför ligger dess utgång exakt en klockcykel efter Mealyversionens?
+  \item Varför läser \code{LED_PROCESS} i \file{fsm_led.vhd} bara \code{state}, aldrig
+    \code{button_edge_s2} eller \code{button_n} direkt? Vad skulle ändras om den gjorde det?
+  \item Varför går inte \code{din} i \code{seq_detect_mealy} genom en synkroniserare, till skillnad
+    från \code{reset_n}?
+  \item Vad köper \code{when others} dig i ett \code{case} för tillståndsövergångar, när
+    \code{state_t} bara har de värden du deklarerat?
+  \item Varför går timern i capstone-mottagaren sexton gånger så fort som baudhastigheten snarare
+    än en gång per bit, och varför gör det att designen tål en sändare vars klocka skiljer sig något
+    från din, att sampla mitt i en bit?
+  \item Capstone-sändaren använder en helbitstimer och behöver ingenting mitt i biten. Vad har den
+    som mottagaren inte har, som gör skillnaden?
+\end{enumerate}
+
+\needspace{6\baselineskip}
+\subsection*{Blicken framåt}
+Det här är sista kapitlet i bokens första del. Över åtta kapitel har vi gått från grindar och
+Karnaughdiagram, via register, metastabilitet och själva VHDL-språket, till räknare, skiftregister
+och timers, och nu ändliga tillståndsmaskiner, i varje steg med resonemang om kretsen för hand innan
+den skrevs i syntetiserbar VHDL och kördes på en riktig FPGA. Varje mönster som byggts längs vägen,
+dubbelvippsynkroniseraren, kodstilen med \code{process} och \code{case}, och nu Mooremaskinen, har
+återanvänts i det här kapitlets egna exempel, och följer med oförändrat in i det som kommer härnäst.
+
+Härnäst är \chapref{c9:ch}, den första praktiska tentamen: tre timmar, individuell, vid datorn med
+GHDL, över allt de åtta första kapitlen har byggt. Efter den börjar grupprojektet, där en
+CAN-kontroller konstrueras i VHDL över tio kapitel och avslutas mot en riktig mikrokontroller över
+SPI.

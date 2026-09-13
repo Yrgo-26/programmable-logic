@@ -1,0 +1,139 @@
+% Section 12.4, from lectures/L12/appendix/c_exercises.md.
+
+\section{Exercises}
+\label{c12:sec:exercises}
+
+\begin{aside}
+Exercise~\ref{c12:ex:metaprev} consolidates \secref{c12:sec:metaprev};
+Exercise~\ref{c12:ex:bittimer} to \ref{c12:ex:drift} consolidate \secref{c12:sec:bittimer}. Design
+each module from the specification in its own section; the testbenches handed out, run per
+appendix~\ref{app:sim}, are the check that they behave correctly.
+\end{aside}
+
+% ------------------------------------------------------------------------------------------
+\exerciseset{The synchroniser}
+
+\exercise{\code{meta_prev}}{VHDL}
+\label{c12:ex:metaprev}
+You have built this module before, so most of what is here is about the two things that are new.
+
+\xpart{a} Write your own \file{meta_prev.vhd} from \secref{c12:sec:metaprev} and run its testbench:
+
+\begin{shell}
+cd controller
+ghdl -a --std=93 meta_prev.vhd meta_prev_tb.vhd
+ghdl -e --std=93 meta_prev_tb
+ghdl -r --std=93 meta_prev_tb --assert-level=error
+\end{shell}
+
+Note that no \file{can_def.vhd} appears on the first line. \code{meta_prev} is the only module in the
+book that reads no package at all, which is also why it is the one reused three times.
+
+\xpart{b} Remove one of the two flip-flops, leaving a single register, and rerun. Which check fails,
+and what does its message tell you? Put it back. (A one-flip-flop version is not merely weaker; it is
+exactly the bug the testbench exists to catch, and it would otherwise pass every functional
+simulation in the book, since nothing in a simulator is ever metastable.)
+
+\xpart{c} \code{meta_prev} has no reset. Say what \code{sync_out} reads at the first clock edge after
+power-up, why that is harmless here, and what would go wrong in \code{can_controller} itself if the
+module \emph{had} had a \code{reset_s2_n} input: the \code{reset_sync} instance is the one producing
+\code{reset_s2_n}, so what would it take for its own reset?
+
+\xpart{d} \code{can_controller} instantiates it twice, both at the default width. Say which two of
+its fifteen ports that concerns, and why those two and no others. Then say what the design's third
+instance synchronises \textemdash{} the one \code{can_spi_node} owns at its top level in
+\chapref{c19:ch} \textemdash{} and why that one in particular cannot sit inside
+\code{can_controller} instead.
+
+\xpart{e} Two switches are flipped at the same instant into an instance with \code{WIDTH = 10}.
+Explain why \code{sync_out} can briefly show one switch's new value and the other's old one, why that
+is not a bug in \code{meta_prev}, and why it would matter considerably more if the ten bits were a
+counter being read across a clock domain boundary instead of switches set by hand.
+
+% ------------------------------------------------------------------------------------------
+\exerciseset{The bit timer}
+
+\exercise{\code{bit_timer}}{VHDL}
+\label{c12:ex:bittimer}
+Write your own \file{bit_timer.vhd} from \secref{c12:sec:bittimer}. Then verify it:
+
+\begin{shell}
+cd controller
+ghdl -a --std=93 can_def.vhd bit_timer.vhd bit_timer_tb.vhd
+ghdl -e --std=93 bit_timer_tb
+ghdl -r --std=93 bit_timer_tb --assert-level=error
+\end{shell}
+
+If a check fails, read the assertion message (appendix~\ref{app:sim}); it names exactly which tick
+and which expected value it concerns.
+
+\exercise{A configurable resynchronisation offset}{Simulation}
+\label{c12:ex:offset}
+Real CAN hardware sometimes needs a bit timer that can resynchronise \emph{and} immediately jump
+forward a fixed number of ticks (a simplified stand-in for the phase segment adjustments real CAN bit
+timing logic performs, mentioned in \secref{c10:sec:bittiming}).
+
+\xpart{a} Add a new generic, \code{RESYNC_OFFSET: natural := 0}, to \code{bit_timer}. When
+\code{resync = '1'} the counter should be set to \code{RESYNC_OFFSET} (instead of always \code{0}) at
+the next clock edge.
+
+\xpart{b} With \code{RESYNC_OFFSET = 0} your modified entity has to behave exactly like the original;
+confirm that by running the \emph{unchanged} \file{bit_timer_tb.vhd} against it; it should still pass
+with no changes to the testbench.
+
+\xpart{c} Work out on paper where \textbf{both} outputs land when \code{RESYNC_OFFSET} is \code{10}:
+how many ticks after a \code{resync} pulse \code{sample} fires, and how many ticks after it
+\code{bit_done} does. Both move, and for the same reason \textemdash{} the counter restarts at
+\code{10} instead of \code{0}, so the whole period is ten ticks shorter.
+
+Then let the testbench handed out measure it for you. Temporarily change your generic's default value
+to \code{10} and rerun \code{bit_timer_tb}. It binds no generic map, so it picks up whatever default
+you set, and case 4 is the one that notices:
+
+\begin{console}
+bit_timer_tb.vhd:132:17:@6832ns:(assertion error): bit_timer: unexpected sample at tick 25 after resync!
+\end{console}
+
+Note \textbf{which} of the two checks fails first. Case 4 checks not only that \code{bit_done} comes
+at the right tick but also that the sample point moves with it, and the sample point comes first in
+the period \textemdash{} so it is the one that fires, fourteen ticks before the \code{bit_done} check
+would have. Under \code{--assert-level=error} the simulation stops there, so you never see the
+message about \code{bit_done}.
+
+The message names the tick itself: \code{sample} came at tick 25, that is,
+\code{SAMPLE_TICK - RESYNC_OFFSET}. If you want to see \code{bit_done} too, lower the sample check's
+\code{severity error} to \code{severity note} in your own copy of the testbench and rerun; it then
+reports tick 39, that is, \code{TICKS_PER_BIT - 1 - RESYNC_OFFSET}. Confirm that both agree with your
+paper answer, then put the default back to \code{0} and check that the \emph{unchanged} testbench
+passes again.
+
+That is worth noticing in itself: a testbench that fails \emph{usefully} says not only that a design
+is wrong but by how much, which is why the assertion messages in this project all name the tick or
+the value they expected.
+
+\exercise{How long can a bit timer free-run?}{Reasoning}
+\label{c12:ex:drift}
+\code{bit_timer} resynchronises \textbf{once per frame}, at SOF, and free-runs from there
+(\secref{c10:sec:stuffing}'s clock recovery argument). That works only if the node's own oscillator
+stays close enough to every other node's for the whole frame. This exercise puts a number on ``close
+enough''.
+
+Suppose a node's 50 MHz oscillator in fact runs 1~\% fast, so that its ticks are 1~\% shorter than
+the transmitter's, and that everything else is as specified: \code{TICKS_PER_BIT = 50},
+\code{SAMPLE_TICK = 35}.
+
+\xpart{a} How many ticks has this node's counter gained on the transmitter's after one bit period?
+(Express it as a fraction of one tick.)
+
+\xpart{b} The node samples at tick 35 of 50, so relative to the true bit it can drift 15 ticks
+\emph{later} before it samples past the bit's end, or 35 ticks \emph{earlier} before it samples
+before the bit begins. A fast clock drifts the sample point earlier. After how many bit periods has
+it drifted the full 35 ticks?
+
+\xpart{c} A standard frame with 8 data bytes runs to about 110--130 bits on the wire once the stuff
+bits are counted. Compare that with your answer to \textbf{b)}: is this node still sampling correctly
+at EOF? At roughly which field does it start sampling the wrong bit?
+
+\xpart{d} Real CAN controllers resynchronise \emph{during} a frame, not only at SOF, using the phase
+segments and the synchronisation jump width \secref{c10:sec:bittiming} mentions. Explain in one or
+two sentences what that buys them, expressed in terms of your answer to \textbf{b)}.

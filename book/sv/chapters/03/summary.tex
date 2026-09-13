@@ -1,0 +1,44 @@
+% Avsnitt 3.10, ur lectures/L03/README.md.
+
+\section{Sammanfattning}
+\label{c3:sec:review}
+
+\needspace{6\baselineskip}
+\subsection*{Det här ska du kunna nu}
+\begin{itemize}
+  \item Säga varför sekvensnät finns, förklara den funktionella skillnaden mellan ett D-lås och en
+    D-vippa, och varför synkrona designer nästan uteslutande byggs av vippan.
+  \item Läsa och skriva den synkrona processmallen, och känna igen ett register som flera vippor
+    som delar klocka, reset och enable.
+  \item Säga när en signaltilldelning får effekt: \code{<=} schemalägger snarare än tillämpar, så
+    två tilldelningar i en klockad process bygger en kedja, och deras inbördes ordning spelar ingen
+    roll.
+  \item Bygga en flankdetektor av en vippa och en grind, och säga exakt vilken signal den
+    producerar och hur länge.
+\end{itemize}
+
+\needspace{6\baselineskip}
+\subsection*{Frågor att testa dig själv med}
+\begin{enumerate}
+  \item Vad är den funktionella skillnaden mellan ett D-lås och en D-vippa, och under vilket
+    villkor ändrar var och en sin utgång?
+  \item Varför uppdaterar synkrona kretsar sitt tillstånd vid en enda klockflank i stället för att
+    kontinuerligt reagera på sina ingångar?
+  \item Givet en signal och en vippa som håller dess värde från en cykel tidigare, hur kombinerar
+    du dem till en puls som är hög i exakt en klockcykel när signalen går hög?
+  \item Varför måste \code{clock} vara den enda signalen i en vippprocess känslighetslista, om inte
+    designen har en asynkron reset?
+  \item En klockad process innehåller \code{b <= a;} och därefter \code{c <= b;}. Vad håller
+    \code{c} efter en klockflank, och varför är det inte \code{a}? Vad ändras om du byter plats på
+    raderna, och varför?
+\end{enumerate}
+
+\needspace{6\baselineskip}
+\subsection*{Blicken framåt}
+\Chapref{c4:ch} går vidare med:
+\begin{itemize}
+  \item Varför den råa knappen som matar det här kapitlets flankdetektor kan driva en vippa in i
+    ett odefinierat, instabilt tillstånd, och varför det är ett annat sorts problem än något här.
+  \item Dubbelvippsynkroniseraren, och vad den gör och inte gör åt en studsande knapp.
+  \item Samma lysdiodsväxling, ombyggd så att den faktiskt är säker på riktig hårdvara.
+\end{itemize}

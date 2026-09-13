@@ -1,0 +1,315 @@
+% Avsnitt 1.8, ur lectures/L01/appendix/b_exercises.md.
+
+\section{Övningar}
+\label{c1:sec:exercises}
+
+\begin{aside}
+\textbf{Så kontrollerar du ditt arbete.} Övning~\ref{c1:ex:sop} är en kort uppvärmning med papper
+och penna på den notation boken använder rakt igenom; den kräver varken VHDL, GHDL eller kort, och
+anger vad ett bra svar täcker.
+
+Från Övning~\ref{c1:ex:gates} och framåt har varje övning som ber dig skriva en VHDL-modul en
+utdelad självkontrollerande testbänk under \file{lectures/L01/exercises/}. Skriv din modul i dess
+katalog \file{exercises/<module>/}, med det entitetsnamn och den \textbf{portordning} övningen
+anger, och kör den sedan med GHDL \textemdash{} se \secref{c2:sec:testbenches} för de tre
+kommandona.
+
+Inget FPGA-kort behövs till någon övning. Stegen med Quartus-syntes och kortprogrammering
+demonstreras under passet; ditt jobb efteråt är att få VHDL-koden rätt, och testbänken är hur du
+bekräftar det.
+\end{aside}
+
+% ------------------------------------------------------------------------------------------
+\exerciseset{Sanningstabeller och grindar}
+
+\exercise{En funktion som beror på mindre än den ser ut att göra}{Krets}
+\label{c1:ex:sop}
+En funktion av två ingångar \code{A}, \code{B} och en utgång \code{X} har sanningstabellen nedan:
+
+\begin{narrowtable}{ccc}
+  \thead{A} & \thead{B} & \thead{X} \\
+  \midrule
+  0 & 0 & 1 \\
+  0 & 1 & 0 \\
+  1 & 0 & 1 \\
+  1 & 1 & 0 \\
+\end{narrowtable}
+
+\xpart{a} Härled summa-av-produkter-ekvationen för \code{X} direkt ur sanningstabellen
+(\secref{c1:sec:boolean}). Två rader har $X = 1$, så du får två AND-termer.
+
+\xpart{b} Förenkla den algebraiskt. Bryt ut det som de två termerna delar, och tillämpa
+$A + A' = 1$ och $1 \cdot B' = B'$ från \secref{c1:sec:boolean}. Du ska hamna i en enda literal.
+
+\xpart{c} Ditt svar på \textbf{b)} säger något om \code{A}. Vad? Vilken enda grind ur tabellen i
+\secref{c1:sec:gates} beräknar funktionen, och vad händer med ingången \code{A} när du ritar den?
+
+\xpart{d} Bygg den enkelgrindsversionen i CircuitVerse och bekräfta att den återger varje rad i
+sanningstabellen ovan. Lämna ingången \code{A} okopplad, eller utelämna den helt enkelt ur
+ritningen; \textbf{b)} är motiveringen till att göra så.
+
+% ------------------------------------------------------------------------------------------
+\exerciseset{Entiteter och arkitekturer}
+
+\exercise{\code{and_gate} och \code{nand_gate}}{VHDL}
+\label{c1:ex:gates}
+Skriv två små grindar som kompletta VHDL-moduler, \code{and_gate} och \code{nand_gate}.
+
+Ingen av grindarna är poängen, och du ska inte förvänta dig att någon av dem är svår. Poängen är
+att det är här en entitet och en arkitektur slutar vara något du läser om i \secref{c1:sec:vhdl}
+och blir något du skriver, och att de två halvorna är värda att skriva i den ordningen.
+
+Båda entiteterna har samma portar:
+
+\begin{narrowtable}{lll}
+  \thead{Port} & \thead{Riktning} & \thead{Typ} \\
+  \midrule
+  \code{a} & in & \code{std_logic} \\
+  \code{b} & in & \code{std_logic} \\
+  \code{x} & out & \code{std_logic} \\
+\end{narrowtable}
+
+\xpart{a} Skriv \code{entity}-deklarationen för \code{and_gate}, och ingenting annat. I VHDL är en
+moduls gränssnitt något du kan skriva ner och resonera om innan någon implementation alls finns,
+vilket är den vana den här deluppgiften finns till för att bygga. Identifiera vilka portar som
+krävs, riktningen på var och en, och typen på var och en.
+
+\xpart{b} Lägg till en \code{architecture} som implementerar AND-grinden med en enda konkurrent
+signaltilldelning.
+
+\xpart{c} Skriv nu \code{nand_gate}: samma gränssnitt med inverterad utgång, med VHDL:s
+\code{nand}-operator direkt. Skriv \textbf{inte} \code{not (a and b)}.
+
+De två är likvärdiga som boolesk algebra, och på en FPGA gör de ingen skillnad alls, eftersom båda
+hamnar i samma lookup-tabell. Det spelar roll på den sortens hårdvara som Övning~\ref{c1:ex:nand}
+nedan handlar om, där NAND är den grind du fysiskt har och allt annat måste byggas av den. Att
+skriva vad du menar, och låta verktygen avgöra vad det kostar, är vanan; att sträcka sig förbi en
+operator språket redan ger dig är det som ska undvikas.
+
+\modulefig[0.52]{lectures/L01/appendix/images/and_gate.png}
+\modulefig[0.52]{lectures/L01/appendix/images/nand_gate.png}
+
+\begin{selfcheck}
+\textbf{Självkontroll.} Döp dina entiteter till \code{and_gate} och \code{nand_gate}, var och en
+med portarna \code{a}, \code{b} (in) och \code{x} (out), deklarerade i den ordningen; deras
+testbänkar ligger i \file{exercises/and_gate/} och \file{exercises/nand_gate/}, och var och en
+kontrollerar alla fyra raderna i motsvarande sanningstabell.
+\end{selfcheck}
+
+\exercise{\code{xor3}: udda paritet med tre ingångar}{VHDL}
+\label{c1:ex:xor3}
+En XOR-grind har tre ingångar, \code{a}, \code{b}, \code{c}, och en utgång, \code{x}. Utgången är
+\code{1} när ett udda antal av ingångarna är \code{1} (XOR med tre ingångar, eller
+paritetsfunktionen).
+
+\xpart{a} Skriv sanningstabellen för \code{x} över alla åtta kombinationer av \code{a}, \code{b},
+\code{c}, och bekräfta att den stämmer med beskrivningen ”ett udda antal \code{1}:or”.
+
+\xpart{b} Implementera grinden i VHDL, som en egen modul med en entitet vars portar är tre
+\code{std_logic}-ingångar och en \code{std_logic}-utgång, och en arkitektur som driver \code{x}
+med en enda konkurrent tilldelning. \Secref{c1:sec:vhdl} visar mönstret entitet/arkitektur och
+noterar att VHDL:s \code{xor}-operator arbetar direkt på \code{std_logic};
+\secref{c1:sec:module} visar en komplett modul från början till slut.
+
+\xpart{c} Bygg samma grind i CircuitVerse och bekräfta att den återger varje rad i din
+sanningstabell.
+
+\note[Tips]\code{xor} kedjar från vänster till höger, så hela arkitekturkroppen är en enda rad,
+\code{x <= a xor b xor c;}, utan behov av vare sig intern \code{signal} eller mellanliggande
+grindar.
+
+\modulefig[0.52]{lectures/L01/appendix/images/xor3.png}
+
+\begin{selfcheck}
+\textbf{Självkontroll.} Döp din VHDL-entitet till \code{xor3}, med portarna \code{a}, \code{b},
+\code{c} (in) och \code{x} (out), deklarerade i den ordningen; dess testbänk ligger i
+\file{exercises/xor3/}, och \secref{c1:sec:module} listar de tre kommandon som kör den.
+\end{selfcheck}
+
+\exercise{\code{majority3}: en trippelredundant omröstning}{VHDL}
+\label{c1:ex:majority3}
+En \textbf{majoritetsgrind} har tre ingångar, \code{a}, \code{b}, \code{c}, och en utgång,
+\code{x}. Utgången är \code{1} när \emph{minst två} av de tre ingångarna är \code{1}.
+
+Det här är kretsen bakom en trippelredundant omröstning: tre sensorer rapporterar samma mätvärde,
+och systemet agerar på det svar två av dem är överens om, så att en enskild trasig sensor inte kan
+bestämma något på egen hand.
+
+\xpart{a} Skriv sanningstabellen för \code{x} över alla åtta kombinationer av \code{a}, \code{b},
+\code{c}.
+
+\xpart{b} Härled summa-av-produkter-ekvationen för \code{x} direkt ur sanningstabellen
+(\secref{c1:sec:boolean}):
+\begin{itemize}
+  \item Fyra rader har $x = 1$, så du får fyra AND-termer.
+  \item Varje term innehåller alla tre ingångarna, primmade där ingången är \code{0} på sin rad.
+\end{itemize}
+
+\xpart{c} Implementera grinden i VHDL, som en egen modul:
+\begin{itemize}
+  \item En entitet med tre \code{std_logic}-ingångar och en \code{std_logic}-utgång.
+  \item En arkitektur som driver \code{x} med en enda konkurrent tilldelning, och som översätter
+    dina fyra AND-termer rakt av (\secref{c1:sec:vhdl}).
+\end{itemize}
+
+\xpart{d} Bygg samma nät i CircuitVerse och bekräfta att det återger varje rad i din
+sanningstabell.
+
+\note[Tips]Skriv ut ekvationen på papper innan du öppnar vare sig editorn eller CircuitVerse. Fyra
+AND-termer med tre ingångar plus en OR-grind med fyra ingångar är mycket ledningsdragning att
+rätta i efterhand.
+
+\note[Blick framåt]Räkna grindarna din ekvation kräver, och övertyga dig sedan genom inspektion om
+att $x = ab + ac + bc$ beräknar samma funktion med tre AND-grindar med två ingångar i stället för
+fyra med tre. Summa-av-produkter gav dig ett \emph{korrekt} nät, inte det \emph{minsta}; att hitta
+det mindre systematiskt, snarare än genom att stirra på det, är vad \chapref{c2:ch} är till för.
+
+\modulefig[0.52]{lectures/L01/appendix/images/majority3.png}
+
+\begin{selfcheck}
+\textbf{Självkontroll.} Döp din VHDL-entitet till \code{majority3}, med portarna \code{a},
+\code{b}, \code{c} (in) och \code{x} (out), deklarerade i den ordningen; dess testbänk ligger i
+\file{exercises/majority3/} och kontrollerar alla åtta raderna. Vilken som helst av ekvationerna
+går igenom \textemdash{} testbänken kontrollerar funktionen, inte vilket nät du valde.
+\end{selfcheck}
+
+\exercise{\code{half_adder}: den första modulen med två utgångar}{VHDL}
+\label{c1:ex:half_adder}
+Skriv en \textbf{halvadderare}: \code{sum} och \code{carry} ur två enskilda bitar. Du kan kretsen;
+skälet till att den står här är att den är bokens första modul med \textbf{två utgångar}, och det
+är en VHDL-fråga snarare än en logikfråga.
+
+\xpart{a} Implementera den, med två konkurrenta tilldelningar och utan intern \code{signal}.
+
+Två utgångar betyder inte två entiteter, två arkitekturer eller en process. Varje utgångsport
+drivs av sin egen konkurrenta tilldelning, och de två är inte steg som sker i en ordning: de
+beskriver två separata ledningsstycken, båda aktiva hela tiden. Om du kommer på dig själv med att
+sträcka dig efter en process för att ”returnera” två värden är den instinkten
+mjukvaruinstinkten, och \secref{c1:sec:vhdl}:s ”en konkurrent tilldelning beskriver en ledning”
+är rättelsen.
+
+\xpart{b} Bygg den i CircuitVerse och bekräfta båda utgångarna, så att du har sett formen med två
+utgångar som en ritning innan du möter den som en entitet med flera \code{out}-portar i
+\chapref{c2:ch}.
+
+\note[Blick framåt]Det här är cellen som räknaren i \chapref{c6:ch} är byggd av. Adderaren med
+fyra bitar där är fyra sådana kedjade carry-till-carry, och räknaren är den adderaren med sin
+utgång återkopplad till sin ingång, vilket är därför överslaget inte behöver någon logik alls.
+
+\modulefig[0.56]{lectures/L01/appendix/images/half_adder.png}
+
+\begin{selfcheck}
+\textbf{Självkontroll.} Döp din entitet till \code{half_adder}, med portarna \code{a}, \code{b}
+(in) och \code{sum}, \code{carry} (out), deklarerade i den ordningen; dess testbänk ligger i
+\file{exercises/half_adder/} och kontrollerar \code{sum} och \code{carry} var för sig, så att en
+konstruktion som har den ena rätt och den andra fel får veta vilken som är vilken.
+\end{selfcheck}
+
+% ------------------------------------------------------------------------------------------
+\exerciseset{Universella grindar}
+
+\exercise{\code{or_from_nand}}{VHDL}
+\label{c1:ex:nand}
+\Secref{c1:sec:gates} slår fast att varje boolesk funktion kan byggas med enbart
+\code{NAND}-grindar. Den här övningen får dig att bevisa det för dig själv för de tre operatorer
+du har använt.
+
+\xpart{a} Härled \code{OR}-fallet på papper innan du bygger något, eftersom De Morgan
+(\secref{c1:sec:boolean}) ger dig det direkt. Utgå från $(A'B')'$ och tillämpa lagen; du ska komma
+fram till $A + B$. Läs nu tillbaka det uttrycket som en krets: vad är $A'B'$ med en inversion på
+sin utgång, och hur många \code{NAND}-grindar är alltihop?
+
+\xpart{b} Bygg i CircuitVerse var och en av följande av enbart \code{NAND}-grindar, och stäm av
+var och en mot dess sanningstabell i \secref{c1:sec:gates} efter hand:
+\begin{itemize}
+  \item \code{NOT a}: en NAND-grind räcker, om du matar samma signal till båda dess ingångar.
+  \item \code{a AND b}: en NAND-grind, följd av den \code{NOT} du just byggde.
+  \item \code{a OR b}: nätet du härledde i \textbf{a)}. Stäm av ditt grindantal mot vad du
+    förutsade.
+\end{itemize}
+
+\xpart{c} Skriv \code{OR}-versionen i VHDL, som en egen modul:
+\begin{itemize}
+  \item En entitet med två \code{std_logic}-ingångar och en \code{std_logic}-utgång.
+  \item En arkitektur som driver \code{x} med en enda konkurrent tilldelning.
+  \item Använd enbart VHDL:s \code{nand}-operator: ingen \code{or}, ingen \code{and}, ingen
+    \code{not} någonstans i uttrycket.
+\end{itemize}
+
+\xpart{d} Förklara varför det här spelar roll i praktiken. Tänk på att en chiptillverkningsprocess
+fysiskt måste implementera varje grindtyp den erbjuder, och att \code{NAND} är den billigaste
+grinden att bygga i CMOS.
+
+\note[Tips]VHDL:s \code{nand}-operator kedjar inte så som \code{and} och \code{or} gör:
+\code{a nand b nand c} är inte giltigt. Parentessätt varje NAND explicit, vilket ändå är vad du
+vill här, eftersom varje parentespar är en fysisk grind i din CircuitVerse-ritning.
+
+\modulefig[0.52]{lectures/L01/appendix/images/or_from_nand.png}
+
+\begin{selfcheck}
+\textbf{Självkontroll.} Döp din VHDL-entitet till \code{or_from_nand}, med portarna \code{a},
+\code{b} (in) och \code{x} (out), deklarerade i den ordningen; dess testbänk ligger i
+\file{exercises/or_from_nand/} och kontrollerar den mot alla fyra raderna i
+\code{OR}-sanningstabellen.
+\end{selfcheck}
+
+% ------------------------------------------------------------------------------------------
+\exerciseset{Att sätta ihop det hela}
+
+\exercise{Bromsassistenten i VHDL}{VHDL}
+\label{c1:ex:adas}
+Skriv bromsassistenten från \secref{c1:sec:adas} i VHDL.
+
+\Secref{c1:sec:adas} lät dig härleda dess ekvationer, räkna dess grindar och skissa dess nät
+\emph{före} passet, och passet byggde den sedan live. Det är här du skriver den själv, och där en
+testbänk avgör om din läsning av kravet stämmer med den i sanningstabellen.
+
+Entiteten måste ha:
+
+\begin{booktable}{@{}p{8em}p{3.4em}p{5.6em}L@{}}
+  \thead{Port} & \thead{Riktn.} & \thead{Typ} & \thead{Beskrivning} \\
+  \midrule
+  \code{driver_brake} & in & \code{std_logic} & Föraren står på bromspedalen. \\
+  \code{sensor} & in & \code{std_logic} & Avståndssensorn ser ett hinder. \\
+  \code{radar} & in & \code{std_logic} & Radarn ser ett hinder. \\
+  \code{error} & in & \code{std_logic} & Assistanssystemet rapporterar ett fel. \\
+  \code{engine_brake} & out & \code{std_logic} & Lägg an bromsarna. \\
+\end{booktable}
+
+\xpart{a} Implementera den utifrån \textbf{dina egna} ekvationer snarare än utifrån det som stod
+på skärmen. Om de två är oense är den oenigheten det mest användbara den här övningen kan ge dig,
+och testbänken talar om vilken av dem sanningstabellen håller med.
+
+Använd två konkurrenta tilldelningar och en intern \code{signal}:
+\begin{itemize}
+  \item Signalen håller assistanssystemets eget beslut, innan förarens pedal vägs in.
+  \item Det här är bokens första övning med en intern signal, och det är anledningen till att
+    nyckelordet finns: ett namn på ett mellanresultat, så att varje rad fortfarande läser sig som
+    den sats i kravet den kom ifrån.
+\end{itemize}
+
+\xpart{b} Gör nu sönder den avsiktligt, på det specifika sätt \secref{c1:sec:adas} varnar för.
+Mata \code{driver_brake} \emph{genom} fellogiken i stället för att låta den gå förbi:
+
+\begin{vhdlcode}
+engine_brake <= (driver_brake or sensor or radar) and (not error);
+\end{vhdlcode}
+
+Det är en grind enklare, och det ser rimligt ut. Kör testbänken mot den och svara:
+\begin{itemize}
+  \item Vilken ingångskombination faller den på först, och vad händer fysiskt i bilen i det
+    ögonblicket?
+  \item Hur många av de sexton raderna får den fel, och vad har de alla gemensamt?
+  \item De rader som fallerar är precis de som säkerhetskravet skrevs för. Vad säger det dig om
+    värdet av en sanningstabell du härlett ur ett krav, till skillnad från en du läst av ur en
+    krets du redan byggt?
+\end{itemize}
+
+\modulefig[0.72]{lectures/L01/appendix/images/adas.png}
+
+\begin{selfcheck}
+\textbf{Självkontroll.} Döp din entitet till \code{adas}, med ingångarna \code{driver_brake},
+\code{sensor}, \code{radar}, \code{error} och utgången \code{engine_brake}, deklarerade i den
+ordningen; dess testbänk ligger i \file{exercises/adas/} och kontrollerar alla sexton raderna i
+\secref{c1:sec:adas}:s sanningstabell.
+\end{selfcheck}

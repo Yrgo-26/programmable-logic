@@ -1,0 +1,66 @@
+% Avsnitt 13.8, ur lectures/L13/appendix/b_exercises.md.
+
+\section{Övningar}
+\label{c13:sec:exercises}
+
+\begin{aside}
+De här övningarna befäster kapitlet. Konstruera din egen \file{crc15.vhd} utifrån
+\secref{c13:sec:iface} till \ref{c13:sec:worked}; den utdelade testbänken, körd enligt
+bilaga~\ref{app:sim}, är kontrollen av att den beter sig korrekt.
+\end{aside}
+
+\exercise{\code{crc15}}{VHDL}
+\label{c13:ex:crc15}
+Skriv din egen \file{crc15.vhd} utifrån specifikationen i det här kapitlet. Verifiera den sedan:
+
+\begin{shell}
+cd controller
+ghdl -a --std=93 can_def.vhd crc15.vhd crc15_tb.vhd
+ghdl -e --std=93 crc15_tb
+ghdl -r --std=93 crc15_tb --assert-level=error
+\end{shell}
+
+Om en kontroll fallerar, läs assertion-meddelandet (bilaga~\ref{app:sim}).
+
+\exercise{CRC för hand, sedan i simulering}{Simulering}
+\label{c13:ex:byhand}
+\xpart{a} Räkna för hand ut, med \secref{c13:sec:recursion}:s rekursion, vilket CRC-15-resultat som
+blir följden av att mata in 4-bitarssekvensen \code{1010} (MSB först) i en nyss nollställd motor.
+Visa uträkningen en bit i taget (återkoppling, skift, villkorlig XOR).
+
+\xpart{b} Bekräfta ditt handräknade svar med GHDL: skriv en kort testbänk (eller anpassa strukturen i
+\file{crc15_tb.vhd}) som nollställer \code{crc15}, matar in \code{1010} och rapporterar det
+resulterande \code{crc}-värdet, antingen via en \code{assert} eller via en
+\code{report ... severity note;} som du läser direkt.
+
+\xpart{c} Utgången \code{valid} hos \code{crc15} läser \code{'1'} direkt efter reset, innan någon
+riktig data alls har matats in. Förklara varför det inte är en bugg, med hänvisning till vad
+\code{can_controller} (\chapref{c17:ch}) faktiskt gör med \code{valid}, och när.
+
+\exercise{Felet som en summerad checksumma missar}{Simulering}
+\label{c13:ex:missed}
+\Secref{c10:sec:framing} påstod att en CRC ”fångar en betydligt bredare, matematiskt välförstådd
+klass av fel” än den enkla bytevisa summa som dess eget ramformat använder. Den här övningen gör det
+konkret genom att köra en korruption som summan bevisligen inte kan se genom motorn du just byggt.
+
+Ta nyttolasten \code{0x3C, 0x91} och korruptionen \code{0x34, 0x99}: bit 3 nollställd i den första
+byten, bit 3 satt i den andra, så att den ena byten förlorar exakt det den andra vinner.
+
+\xpart{a} Räkna ut den bytevisa checksumman för båda nyttolasterna och bekräfta att de är
+\textbf{identiska}: båda blir \code{0xCD}. En enkel summa registrerar bara totalen, så en mottagare
+som kontrollerar den skulle godta den korrupta ramen som hel.
+
+\xpart{b} Mata nu in alla 16 bitarna av den \emph{ursprungliga} nyttolasten i en nyss nollställd
+\code{crc15} (MSB först, första byten först) och notera det resulterande \code{crc}-värdet. Nollställ
+sedan och gör samma sak med den \emph{korrupta} nyttolasten. Stämmer de två CRC-värdena överens?
+Använd simulering; en \code{report} av båda värdena räcker.
+
+\xpart{c} Egenskapen att generering och kontroll är samma operation (\secref{c13:sec:twojobs}) säger
+att en ram vars egna CRC-bitar matas tillbaka in återför registret till noll. Mata in den
+\textbf{korrupta} nyttolasten följd av den \textbf{ursprungliga} nyttolastens CRC-bitar, alltså
+precis det en mottagare skulle se om den här korruptionen inträffade under transporten. Når registret
+noll? Går \code{valid} hög? Förklara vad mottagaren drar för slutsats.
+
+\xpart{d} Säg med en mening vilken egenskap hos CRC-rekursionen som gör att den märker en förändring
+som en summa inte kan, med hänvisning till vad varje bit gör med registret i
+\secref{c13:sec:recursion}.

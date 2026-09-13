@@ -1,0 +1,384 @@
+% Avsnitt 11.1-11.6, ur lectures/L11/appendix/a_architecture_and_register_map.md.
+
+\section{Kontrollerns arkitektur}
+\label{c11:sec:arch}
+
+Varje regel från \chapref{c10:ch} avbildas på ett av fem block:
+\begin{itemize}
+  \item \textbf{\code{bit_timer}} äger ingenting om \emph{vad} som sänds, bara \emph{när}. Den är det
+    enda i den här konstruktionen som ens gränsar till en klockdomänövergång: den frilöper
+    kontinuerligt så snart den är aktiverad, och resynkroniserar exakt en gång per ram, vid SOF
+    (\secref{c10:sec:stuffing}:s resonemang om klockåtervinning, tillämpat).
+  \item \textbf{\code{tx_shift_reg}} och \textbf{\code{rx_shift_reg}} äger bitstoppningen och
+    ingenting annat: de serialiserar eller deserialiserar upp till 8 riktiga bitar i taget och sätter
+    transparent in eller tar bort stoppbitar. De har ingen aning om huruvida bitarna de skiftar är
+    ett ID, en databyte eller ett CRC-värde; det är \code{can_controller}s jobb.
+  \item \textbf{\code{crc15}} äger CRC-15-beräkningen, en bit i taget, utan någon föreställning om
+    ”ramar” eller ”fält” den heller; den ackumulerar bara den bit den får, när den blir tillsagd.
+  \item \textbf{\code{can_controller}} är det enda block som känner till det faktiska CAN-ramformatet:
+    det sekvenserar genom SOF, arbitrering, kontrollfältet, data, CRC, ACK och EOF, i ordning, driver
+    de andra fyra blocken och läser deras utgångar. Detektering av förlorad arbitrering bor också
+    här, eftersom den specifikt handlar om att jämföra vad den här kontrollern bestämde sig för att
+    sända mot vad bussen faktiskt visar.
+\end{itemize}
+
+\lecfig[0.92]{lectures/L11/appendix/images/can_controller_diagram.png}{\code{can_controller}s
+blockarkitektur.}{c11:fig:arch}
+
+Två konventioner håller bilden läsbar. \code{clock} når varje delblock, och den synkroniserade
+\code{reset_s2_n} når alla utom de två \code{meta_prev}-instanser som producerar den och dess
+bussmotsvarighet; båda lämnas oritade, som brukligt i ett blockschema. Varje utgångsport
+(\code{tx_done}, \code{tx_bus}, \code{bus_en}, \code{rx_id}, \code{rx_dlc}, \code{rx_data},
+\code{rx_valid}, \code{error}) drivs av ramtillståndsmaskinen och av ingenting annat.
+
+Tre av de elva interna kopplingarna är värda att läsa två gånger, eftersom det är de som folk ritar
+om fel ur minnet:
+\begin{itemize}
+  \item De två linjerna vid \code{crc15} går i \textbf{motsatta} riktningar. \code{clear},
+    \code{enable} och \code{data} går upp in i den, en riktig bit i taget; \code{crc} och
+    \code{valid} kommer tillbaka ner ur den. (\code{clear} är \chapref{c13:ch}:s reset per ram
+    \textemdash{} motorn måste börja varje ram på noll, och en avbruten ram skulle annars lämna
+    rester efter sig; \chapref{c16:ch} driver den från \code{STATE_START}.)
+  \item \code{rx_shift_reg} har \textbf{tre} linjer som anländer: \code{sample} från
+    \code{bit_timer}, \code{rx_bus_s2} från synkroniseraren som \chapref{c12:ch} lägger till, och
+    \code{bit_count} plus \code{enable} från ramtillståndsmaskinen. Utan de två första har den ingen
+    datakälla alls.
+  \item \code{tx_shift_reg} och \code{rx_shift_reg} kopplas aldrig till varandra, och ingen av dem
+    kopplas till \code{crc15}. Ramtillståndsmaskinen bär varje bit mellan dem. \code{rx_shift_reg}
+    är på samma sätt det enda delblock som över huvud taget läser bussen, och till och med det läser
+    den synkroniserade kopian snarare än porten; se \secref{c11:sec:sync}.
+\end{itemize}
+
+\paragraph{Hur de nästlas}
+Diagrammet läses som en lagerbild, med det billigaste bekymret överst, men den faktiska
+VHDL-hierarkin är inneslutning, inte en pipeline: \code{can_controller} instansierar alla fyra av
+\code{bit_timer}, \code{crc15}, \code{tx_shift_reg} och \code{rx_shift_reg} inuti sig själv, vid
+sidan av den \code{meta_prev}-synkroniserare som \chapref{c12:ch} lägger till.
+\code{can_controller} är därför den enda entitet du någonsin instansierar för hand, och hela
+kontrollern är en komponent utifrån sett, exakt som registerbanken i \chapref{c18:ch} kommer att se
+den.
+
+Två lager till sitter sedan ovanför den: \code{register_bank} (\chapref{c18:ch}), som gör om de
+portarna på registernivå till den registerkarta en drivrutin pollar, och \code{can_spi_node}
+(\chapref{c19:ch}), toppnivån som lägger till SPI-transporten och kortets pinnar. Båda hör till att
+nå kontrollern, inte till att tala CAN, vilket är varför de dyker upp i de två sista kapitlen snarare
+än här.
+
+Den här uppdelningen \textemdash{} ett block per \emph{ansvar}, inte ett block per \emph{ramfält}
+\textemdash{} är medveten: \code{tx_shift_reg} återanvänds för ID:t, kontrollfältet, varje databyte
+och CRC-värdet, helt enkelt omladdat med olika data och olika bitantal varje gång, i stället för att
+skriva nästan identisk skiftlogik fem separata gånger.
+
+% ------------------------------------------------------------------------------------------
+\section{Att följa en ram genom blocken}
+\label{c11:sec:trace}
+
+Att namnge de fem blocken är inte samma sak som att veta hur de samarbetar. Det här avsnittet tar en
+konkret ram, ID \code{0x123}, DLC \code{2}, databytesen \code{A1 B2}, och följer den genom
+arkitekturen ovan. Det finns ingen VHDL här; frågan är bara vilket block som gör vad, och vad som
+passerar mellan dem.
+
+\paragraph{Först, det enda block som räknar tid}
+\code{bit_timer} delar upp 50 MHz-klockan i bitperioder och avger två pulser per period:
+\code{sample}, 70~\% in i perioden, när nivån på bussen hunnit stabilisera sig, och \code{bit_done},
+allra sist, när den aktuella biten är klar. Varje annat block agerar på en av de två pulserna, och
+inget av dem räknar klockcykler mot bussen själv. Sändning rör sig på \code{bit_done}, vid gränsen
+där en ny bit börjar. Mottagning rör sig på \code{sample}, mitt i en bit som redan ligger där. Just
+den skillnaden är varför en mottagare läser det värde en sändare lagt ut, i stället för att fånga
+det mitt i en förändring.
+
+\paragraph{Sändning: 60 bitar, 50 av dem genom ett register}
+Med fältbredderna från \chapref{c10:ch} är den här ramen $1$ (SOF) $+\ 11$ (ID) $+\ 1$ (RTR)
+$+\ 2$ (IDE, r0) $+\ 4$ (DLC) $+\ 16$ (data) $+\ 15$ (CRC) $=$ \textbf{50 bitar i det stoppade
+området}, följt av en ostoppad svans på $1 + 1 + 1 + 7 =$ \textbf{10 bitar}. Sextio bitar innan någon
+stoppbit satts in.
+
+De 50 bitarna når bussen som \textbf{åtta laddningar av ett enda \code{tx_shift_reg}}:
+
+\begin{narrowtable}{clr}
+  \thead{\#} & \thead{Grupp} & \thead{Bitar} \\
+  \midrule
+  1 & SOF & 1 \\
+  2 & Identifieraren, hög del & 8 \\
+  3 & Identifieraren, låg del + RTR & 4 \\
+  4 & IDE, r0, DLC & 6 \\
+  5 & Databyte 0 (\code{A1}) & 8 \\
+  6 & Databyte 1 (\code{B2}) & 8 \\
+  7 & CRC, hög del & 8 \\
+  8 & CRC, låg del & 7 \\
+\end{narrowtable}
+
+\code{can_controller} laddar om samma 8-bitarsregister åtta gånger, varje gång med ett annat värde
+och ett annat bitantal. Det är påståendet ”ett block per ansvar” ovan, gjort konkret: identifieraren
+är inget fält för skiftregistret, den är grupp 2. De återstående 10 svansbitarna når aldrig något
+skiftregister alls; de är fasta recessiva nivåer, och \code{can_controller} driver dem direkt medan
+den räknar \code{bit_done}-pulser.
+
+Inom en grupp händer fyra saker per bit:
+\begin{itemize}
+  \item \code{tx_shift_reg} producerar nästa bit. Laddningen presenterar den första omedelbart; varje
+    \code{bit_done} därefter skiftar ut nästa. Registret avgör också, på egen hand, om en stoppbit
+    ska sättas in, och annonserar på \code{stuff} vilken sorts bit det här var.
+  \item \code{can_controller} gör om biten till bussnivåer. Dominant betyder \code{bus_en = '1'} med
+    \code{tx_bus = '0'}; recessiv betyder \code{bus_en = '0'}, vilket släpper bussen. En nod driver
+    aldrig recessivt aktivt (\secref{c10:sec:can}:s wired-AND).
+  \item \code{crc15} matas med samma bit, men bara när den var en riktig. Stoppbitar hoppas över.
+    \code{crc15} har ingen aning om vad en stoppbit är; att bli tillsagd när den \emph{inte} ska
+    ackumulera är hela dess gränssnitt på den sidan.
+  \item \code{can_controller} jämför \code{rx_bus} mot biten den just drev. Den jämförelsen är
+    arbitreringen, och den stannar här snarare än i ett delblock eftersom den behöver både vad den
+    här noden avsåg och vad bussen faktiskt visar, och \code{can_controller} är det enda block som
+    håller båda.
+\end{itemize}
+
+Efter grupp 6 håller \code{crc15} CRC:n över allt som sänts hittills. \code{can_controller} läser
+den och matar tillbaka den rakt in i \code{tx_shift_reg} som grupp 7 och 8. Lägg märke till vad det
+betyder: motorn som beräknar CRC:n och registret som sänder den kopplas aldrig till varandra.
+\code{can_controller} bär värdet över, vilket är varför inget av blocken behöver veta att ett
+CRC-fält finns.
+
+\paragraph{Mottagning: samma väg, speglad}
+\code{rx_shift_reg} samplar \code{rx_bus} på \code{bit_timer.sample}, tar bort stoppbitar och
+rapporterar varje riktig bit på \code{real_bit} och \code{real_bit_valid}. De två signalerna matar
+\code{crc15} precis som \code{tx_shift_reg}s gör vid sändning: samma instans, samma regel om att
+bara ackumulera riktiga bitar, ingen lägesomkoppling någonstans (vilket är \chapref{c13:ch}:s poäng
+om att en motor gör båda jobben). Fullbordade grupper anländer på \code{data}, och
+\code{can_controller} skivar tillbaka dem till \code{rx_id}, \code{rx_dlc} och \code{rx_data}. En
+stoppbit som uteblir höjer \code{stuff_error}, och \code{rx_shift_reg} stannar där: den rapporterar
+brottet utan att avgöra vad det betyder. Att avgöra är \code{can_controller}s jobb, och den bestämmer
+sig för att avbryta ramen och höja \code{error}.
+
+\paragraph{Vad genomgången visar}
+Inget delblock vet vilket fält det hanterar. Vart och ett rapporterar fakta om \emph{bitar}: en är
+klar, den där sattes in, en stoppbit saknades, den här gruppen är fullbordad. \code{can_controller}
+levererar varenda del av meningen. Tre saker följer, och alla tre är värda att ha:
+\begin{itemize}
+  \item De fyra delblocken går att testa utan CAN. Deras testbänkar i \chapref{c12:ch} till
+    \ref{c15:ch} driver bitmönster och kontrollerar bitmönster; inte en enda av dem behöver en hel
+    ram för att vara meningsfull.
+  \item \code{can_controller} är det enda block som skulle ändras om ramformatet gjorde det. Utökade
+    29-bitars identifierare skulle till exempel betyda andra grupper, inte andra block.
+  \item Varje koppling mellan block är en signal på en bit eller en byte med exakt en skrivare. Det
+    finns ingen delad buss eller gemensam struktur som två block båda griper in i, vilket är det som
+    håller kopplingsarbetet i \chapref{c12:ch} till \ref{c15:ch} vid en port map i taget snarare än
+    en omkonstruktion varje kapitel.
+\end{itemize}
+
+% ------------------------------------------------------------------------------------------
+\section{Kontrollerns gränssnitt}
+\label{c11:sec:interface}
+
+\code{can_controller}s portar är vad omvärlden ser, och de ligger fast resten av boken:
+\chapref{c12:ch} till \ref{c17:ch} lägger till delblock \emph{inuti} den här entiteten utan att ändra
+en enda port. Två saker kopplas till den, och varje port hör till en av dem.
+
+\lecfig[0.66]{lectures/L11/appendix/images/can_controller.png}{\code{can_controller}s femton
+portar.}{c11:fig:ports}
+
+\paragraph{Bussidan, fem portar}
+Det är de portar som når omvärlden som fysiska pinnar; de tre första vetter mot CAN-transceivern:
+\begin{itemize}
+  \item \code{rx_bus} är den aktuella bussnivån, en bit, direkt från transceivern och asynkron mot
+    \code{clock}. Kontrollern synkroniserar den själv, med en \code{meta_prev}-instans som
+    \chapref{c12:ch} bygger, så att kortets toppnivå kan koppla den här porten till en pinne och inte
+    tänka mer på det. Kontrollern läser den för att ta emot, och också för att övervaka sina egna
+    sändningar under arbitreringen.
+  \item \code{tx_bus} är biten den här noden vill driva, och \code{bus_en} säger om den driver över
+    huvud taget. Paret modellerar beteendet hos öppen dränering: \code{bus_en = '1'} med
+    \code{tx_bus = '0'} drar bussen dominant, och \code{bus_en = '0'} släpper den så att en annan nod
+    kan göra det. En nod driver aldrig recessivt aktivt; den släpper helt enkelt taget. Det är det
+    som får \secref{c10:sec:can}:s wired-AND att fungera.
+  \item \code{clock} är 50 MHz-systemklockan, och \code{reset_n} en \textbf{rå}, aktivt låg reset,
+    direkt från en pinne. Precis som \code{rx_bus} är den asynkron, och precis som \code{rx_bus}
+    synkroniserar kontrollern den själv. Den synkroniserade kopian är en intern signal som heter
+    \code{reset_s2_n}, namnet övningen \code{reset_sync} gav den i \chapref{c4:ch} och namnet varje
+    delblock i projektet fortfarande tar.
+\end{itemize}
+
+\paragraph{Sändningssidan, fem portar}
+Det är dem en anropare fyller i för att sända en ram:
+\begin{itemize}
+  \item \code{tx_id}, \code{tx_dlc} och \code{tx_data} bär själva ramen, typade som \code{id_t},
+    \code{dlc_t} och \code{data_t} från \code{can_def}. \code{tx_data} håller byte 0 i sina mest
+    signifikanta bitar, i samma ordning som bussen sänder dem.
+  \item \code{tx_req} begär sändning. Kontrollern agerar på den bara när den själv är i vila
+    \textbf{och bussen också har varit ledig}, eftersom en nod inte får börja driva ovanpå en ram som
+    redan pågår (\chapref{c16:ch}). En begäran som höjs medan bussen är upptagen kastas i stället för
+    att köas, så anroparen får begära igen.
+  \item \code{tx_done} pulsar högt under en cykel så snart den här nodens egen ram har sänts färdigt.
+\end{itemize}
+
+\paragraph{Mottagningssidan, fem portar}
+De speglar sändningssidan exakt:
+\begin{itemize}
+  \item \code{rx_id}, \code{rx_dlc} och \code{rx_data} håller den senast mottagna ramen, samma typer
+    och samma byteupplägg som sina \code{tx_}-motsvarigheter.
+  \item \code{rx_valid} pulsar högt under en cykel när en fullständig, giltig ram har anlänt.
+  \item \code{error} är den enda port som \emph{inte} är en puls: den går hög vid förlorad
+    arbitrering, en stoppningsöverträdelse, en misslyckad CRC-kontroll eller en mottagen fjärram (en
+    recessiv RTR-bit), och stannar hög tills nästa ram börjar. En anropare som pollar den då och då
+    ser ändå felet.
+\end{itemize}
+
+Fyra saker med det här gränssnittet är värda att lägga märke till nu, eftersom de formar allt som
+följer:
+\begin{itemize}
+  \item \textbf{Det finns ingen serialisering i det.} Anroparen lämnar över en identifierare, en
+    längd och bytes. Varenda del av ramningen, stoppningen och CRC:n som \chapref{c10:ch} beskrev
+    sker inuti, på vägen till \code{tx_bus}. Det är hela poängen med att bygga en kontroller.
+  \item \textbf{Sändning och mottagning är symmetriska men inte samtidiga.} En nod sänder antingen
+    sin egen ram eller tar emot någon annans, aldrig båda, så gränssnittets två halvor är aldrig
+    aktiva samtidigt.
+  \item \textbf{\code{tx_done}, \code{rx_valid} och \code{error} är hela statusgränssnittet.} Varje
+    statusbit registerkartan erbjuder en drivrutin (\chapref{c18:ch}) härleds ur någon av de tre.
+  \item \textbf{Varje port på registersidan antas synkron mot \code{clock}.} \code{rx_bus} är
+    undantaget, och det hanterar kontrollern själv med \code{meta_prev}. Resten, sändningsportarna en
+    anropare driver och status- och mottagningsportarna den läser, förutsätter en anropare i samma
+    klockdomän, vilket är exakt vad \code{register_bank} (\chapref{c18:ch}) är. En anropare i en
+    \emph{annan} domän behöver en handskakning framför dem, inte en bredare \code{meta_prev}: att
+    köra 64 bitar \code{tx_data} genom en bit-för-bit-synkroniserare tar bort metastabiliteten men
+    låter fortfarande kontrollern låsa ett värde som aldrig skrevs, samma skevhetsproblem som
+    \chapref{c19:ch} lägger ut för omkopplarbanken. En synkroniseringskedja är rätt verktyg för en
+    bit vars grannar är oberoende, och fel verktyg för ett värde vars bitar måste stämma överens.
+\end{itemize}
+
+% ------------------------------------------------------------------------------------------
+\section{Att skriva \code{can_controller.vhd}}
+\label{c11:sec:writing}
+
+Det här kapitlet skriver filen från grunden, till \file{controller/can_controller.vhd}, bredvid den
+\file{can_def.vhd} som skrevs i \chapref{c10:ch}.
+
+\textbf{Entiteten} deklarerar de femton portarna som beskrevs ovan, i exakt den här ordningen, vilket
+är det \code{can_controller_tb} binder till:
+
+\begin{textdrawing}
+ 1 clock       4 tx_id     7 rx_bus     10 bus_en    13 rx_data
+ 2 reset_n     5 tx_dlc    8 tx_done    11 rx_id     14 rx_valid
+ 3 tx_req      6 tx_data   9 tx_bus     12 rx_dlc    15 error
+\end{textdrawing}
+
+\textbf{Varje ingång först, sedan varje utgång}, vilket är den här bokens konvention överallt och är
+varför \code{rx_bus} sitter sjua snarare än bredvid de bussutgångar den begreppsligt hör ihop med.
+Läs blockschemat ovan rakt ned för dess vänstra kolumn och sedan dess högra, så får du 1 till 15 i
+ordning. Typerna kommer från \code{can_def}, så filen öppnar med \code{use work.can_def.all;} vid
+sidan av det vanliga \code{ieee.std_logic_1164}, och portlistan blandar rent \code{std_logic} med
+paketets subtyper. De första raderna sätter mönstret för alla femton:
+
+\begin{vhdlcode}
+library ieee;
+use ieee.std_logic_1164.all;
+use work.can_def.all;
+
+entity can_controller is
+    port(clock   : in std_logic;
+         reset_n : in std_logic;
+         tx_req  : in std_logic;
+         tx_id   : in id_t;
+         ...
+\end{vhdlcode}
+
+\begin{warning}
+Få \textbf{ordningen} exakt rätt, eftersom det är den allt binder till: \code{can_controller_tb}
+associerar sina portar positionellt, och det gör varje instansiering i den här boken. Namnen är
+dina. Ett omkastat par analyserar alldeles utmärkt i dag, och till skillnad från ett felstavat namn
+kommer det inte att misslyckas med att analysera i \chapref{c17:ch} heller. Det kommer i tysthet att
+koppla ihop fel signaler, och testbänken kommer att rapportera beteende som inte går ihop, sex
+kapitel senare.
+\end{warning}
+
+\textbf{Arkitekturen börjar tom.} Inte en platshållare som ska bytas ut senare, utan genuint tom:
+
+\begin{vhdlcode}
+architecture behaviour of can_controller is
+begin
+end architecture;
+\end{vhdlcode}
+
+Det analyserar och elaborerar rent, och \code{make build} bekräftar att det gör det. Skriv det,
+kontrollera det, och titta på det ett ögonblick: en entitet utan något beteende alls är fortfarande
+en fullständig designenhet. Sedan lägger resten av projektet in det första inuti den.
+
+\paragraph{Varför skriva den nu, tom?}
+Därför att gränssnittet är ett beslut, och det är ett det här kapitlet är i läge att fatta. Du vet
+vad en CAN-ram innehåller (\chapref{c10:ch}), du vet vilka block som ska göra jobbet
+(\secref{c11:sec:arch}), och du vet vad en drivrutin så småningom behöver läsa och skriva
+(\secref{c11:sec:regmap}). Allt \chapref{c12:ch} och framåt lägger till är \emph{beteende bakom
+portar som redan finns}.
+
+Alternativet, att skriva delblocken först och upptäcka toppnivåns gränssnitt på slutet, är så
+konstruktionen skulle växa fram om ingen hade tänkt på den i förväg. Det betyder också att formen på
+det du bygger förblir ett mysterium ända till det allra sista kapitlet.
+
+\paragraph{Vad varje kapitel lägger till}
+Härifrån bygger varje kapitel ett block och instansierar det här, så att arkitekturen fylls i
+inifrån. \Chapref{c12:ch} gör två, eftersom båda är små:
+
+\begin{booktable}{@{}p{6em}L@{}}
+  \thead{Kapitel} & \thead{Lägger till i \code{can_controller}} \\
+  \midrule
+  \ref{c12:ch} & \code{meta_prev} två gånger, som synkroniserar \code{reset_n} och \code{rx_bus},
+    sedan \code{bit_timer} \\
+  \ref{c13:ch} & \code{crc15}, och signalerna som matar den en bit i taget \\
+  \ref{c14:ch} & \code{tx_shift_reg} \\
+  \ref{c15:ch} & \code{rx_shift_reg} \\
+  \ref{c16:ch} & Den ramsekvenserande tillståndsmaskinen, sändningsvägen \\
+  \ref{c17:ch} & Mottagningsvägen och arbitreringen, som fullbordar konstruktionen \\
+\end{booktable}
+
+Filen måste analysera rent i vart och ett av de stegen, inte bara på slutet. \code{make build}
+kontrollerar varje modul för sig så snart den finns, så en entitet som inte kompilerar fångas i det
+kapitel som skrev den.
+
+% ------------------------------------------------------------------------------------------
+\section{Vad kontrollern synkroniserar, och varför det är kontrollerns jobb}
+\label{c11:sec:sync}
+
+Ett beslut följer direkt ur den sista punkten i \secref{c11:sec:interface}, och det är värt att göra
+uttryckligt här eftersom varje senare kapitel hänger på det. \code{rx_bus} anländer från en
+transceiver på ett annat chip, och \code{reset_n} från en knapp eller en övervakare, så ingenting i
+den här FPGA:n har någonsin styrt någon av dem. Att sampla den ena direkt in i \code{clock}s domän
+kan lämna en vippa metastabil, problemet \chapref{c4:ch} löste med två vippor i serie.
+
+De två är kontrollerns \emph{enda} asynkrona ingångar, och de är asynkrona vem som än instansierar
+den, så \textbf{kontrollern synkroniserar dem själv} i stället för att lämna det till kortets
+toppnivå. Den som integrerar kopplar båda rakt till pinnar och tänker inte mer på det. Allt annat på
+entiteten är registergränssnittet, som är ett annat kontrakt: ett som en anropare i den här
+klockdomänen uppfyller gratis, och som en anropare i en annan domän måste uppfylla med en
+handskakning snarare än en bredare synkroniserare.
+
+Internt heter de synkroniserade kopiorna \code{reset_s2_n} och \code{rx_bus_s2}, enligt
+\chapref{c4:ch}:s konvention från \code{reset_sync}, och det är de namn varje delblock från
+\chapref{c12:ch} och framåt tar. \textbf{Inget block läser någonsin \code{reset_n} eller
+\code{rx_bus} direkt}, arbitreringsjämförelsen i \chapref{c17:ch} inräknad. Modulen som producerar
+dem, \code{meta_prev}, är \chapref{c12:ch}:s, vid sidan av bittimern; det här kapitlet slår fast att
+kontrollern äger problemet, och nästa bygger det som löser det.
+
+% ------------------------------------------------------------------------------------------
+\section{En första titt på registerkartan}
+\label{c11:sec:regmap}
+
+En parallellklass skriver en C++-drivrutin mot den här kontrollern, och talar med den genom
+\textbf{register som nås över SPI} snarare än via VHDL-portar direkt. Du bygger lagren som
+presenterar de registren: \code{register_bank} i \chapref{c18:ch} och \code{spi_reg_bridge} i
+\chapref{c19:ch}. Hela kartan och transaktionsformatet finns i bilaga~\ref{app:protocol}, och
+tillsammans är de hela kontraktet mellan de två klasserna.
+
+Den är värd en förhandstitt här, sju kapitel i förväg, eftersom det är exakt samma information som
+\code{can_controller}s portar redan bär \textemdash{} de senare lagren ändrar informationens
+\emph{form}, aldrig dess innehåll:
+
+\begin{booktable}{@{}p{14em}L@{}}
+  \thead{Begrepp (\code{can_controller})} & \thead{Register i kartan} \\
+  \midrule
+  \code{tx_id}, \code{tx_dlc}, \code{tx_data} & \code{TX_ID}, \code{TX_DLC},
+    \code{TX_DATA_LO}/\code{HI} \\
+  \code{tx_req}, \code{tx_done} & \code{TX_SEND}, en bit i \code{STATUS} \\
+  \code{rx_id}, \code{rx_dlc}, \code{rx_data} & \code{RX_ID}, \code{RX_DLC},
+    \code{RX_DATA_LO}/\code{HI} \\
+  \code{rx_valid} & en bit i \code{STATUS}, nollställd via \code{RX_ACK} \\
+  \code{error} & \code{ERROR_FLAGS} \\
+\end{booktable}
+
+Ha den här motsvarigheten i minnet genom \chapref{c19:ch}: allt parallellklassens drivrutin läser
+eller skriver är bara den här kontrollerns eget gränssnitt på portnivå, inslaget i register.

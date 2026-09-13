@@ -1,0 +1,242 @@
+% Avsnitt 3.11, ur lectures/L03/appendix/b_exercises.md.
+
+\section{Övningar}
+\label{c3:sec:exercises}
+
+\begin{aside}
+\textbf{Så kontrollerar du ditt arbete.} Varje övning nedan som ber dig skriva en VHDL-modul har
+en utdelad självkontrollerande testbänk under \file{lectures/L03/exercises/}. Skriv din modul i
+dess katalog \file{exercises/<module>/}, med det entitetsnamn och den \textbf{portordning}
+övningen anger, och kör den sedan med GHDL \textemdash{} se \secref{c2:sec:testbenches} för de tre
+kommandona. Det här är det första kapitlet vars övningar behöver det för en klockad design, så det
+är värt att läsa om innan du börjar med \code{register4}.
+\end{aside}
+
+% ------------------------------------------------------------------------------------------
+\exerciseset{D-låset}
+
+\exercise{Den första kretsen som minns}{Krets}
+\label{c3:ex:latch}
+Bygg den första kretsen i den här boken som kan \emph{minnas} något.
+
+Allt du har byggt hittills har varit kombinatoriskt: utgångarna följer ingångarna, och i samma
+ögonblick som ingångarna ändras ändras utgångarna med dem. Ett lås är det minsta möjliga avsteget
+från det. Det har en dataingång \code{D} och en styringång \code{enable}, och det har två
+utgångar, \code{Q} och dess komplement \code{Qn}. Så länge \code{enable} är hög är låset
+\textbf{genomsläppligt}: \code{Q} följer helt enkelt \code{D}, och det ser ut som en ledning. Det
+intressanta är vad som händer när \code{enable} går låg. Låset \textbf{låser}, och håller kvar det
+\code{D} var i det ögonblicket, och från och med då kan \code{D} göra vad det vill utan att
+\code{Q} märker det. Det hållna värdet är en bit minne, och det är byggt av ingenting annat än de
+grindar du redan känner till, kopplade så att utgången återkopplas till ingången.
+
+\code{Qn} är ingen dekoration. Återkopplingsslingan är det som får kretsen att minnas, och de två
+utgångarna är det som matar varandra: \code{Q} beräknas ur \code{Qn} och \code{Qn} ur \code{Q}.
+Bygg det så ser du slingan; det är hela poängen med att rita det för hand innan du ens möter
+VHDL:en.
+
+Använd ekvationerna från \secref{c3:sec:latch}:
+
+\[ Q = (D' \cdot \mathit{enable} + Q_n)' \qquad Q_n = (D \cdot \mathit{enable} + Q)' \]
+
+\xpart{a} Realisera motsvarande grindnät: rita nätet för hand, och återskapa och simulera det i
+CircuitVerse.
+
+\xpart{b} Testa det genomsläppliga och det låsta tillståndet. Sätt \code{enable = 1}, ändra
+\code{D}, och observera vad som händer med \code{Q} och \code{Qn}. Sätt sedan \code{enable = 0},
+ändra \code{D} igen, och observera vad som händer. Förklara skillnaden mellan de två fallen.
+
+\xpart{c} Kör \code{D} och \code{enable} genom kombinationerna \code{00}, \code{01}, \code{10},
+\code{11}, två gånger. Bekräfta att du observerar båda fallen: låset låser efter att ha varit
+genomsläppligt med \code{D = 1}, och låset låser efter att ha varit genomsläppligt med
+\code{D = 0}. Förklara hur värdet på \code{Q} beror på värdet på \code{D} i det ögonblick
+\code{enable} ändras från \code{1} till \code{0}.
+
+% ------------------------------------------------------------------------------------------
+\exerciseset{D-vippan}
+
+\exercise{Från lås till vippa}{Krets}
+\label{c3:ex:dff}
+Bygg ut D-låset från Övning~\ref{c3:ex:latch} till en D-vippa, enligt \secref{c3:sec:dff}.
+
+Vippan ska ha ingångarna \code{clock}, \code{reset_n}, \code{D} och \code{enable}, och utgångarna
+\code{Q} och \code{Qn}.
+
+Resetsignalen är \textbf{asynkron} (den får verkan utan att vänta på en klockflank) och
+\textbf{aktiv låg} (att sätta \code{reset_n = 0} ska tvinga \code{Q} till \code{0} omedelbart).
+
+\task{Tips}
+\begin{itemize}
+  \item Resetten måste göra två saker i vart och ett av de två interna låsen, inte en:
+  \begin{itemize}
+    \item Mata in ett aktivt högt \code{reset} (\code{reset_n} genom en NOT-grind) i den NOR-grind
+      som producerar \code{Q}. Det tvingar \code{Q} låg utan att vänta på en klockflank.
+    \item \code{AND}:a in \code{reset_n} i den AND-grind som producerar det låsets produkt av
+      \code{D} och \code{enable}. Det frigör \code{Qn} att gå hög.
+    \item Att grinda enbart återkopplingsvägen för \code{Q} räcker inte: med \code{enable = 1} och
+      \code{D = 1} lämnar det \code{Qn} låg, och en låg \code{Qn} är precis det som håller \code{Q}
+      hög, så resetten skulle inte göra någonting.
+  \end{itemize}
+  \item Driv de två interna låsens enable-ingångar med \code{clock} respektive inversen av
+    \code{clock}.
+  \item Följ \secref{c3:sec:dff} för hur den yttre \code{enable}-ingången styr om vippan tar emot
+    ett nytt värde.
+\end{itemize}
+
+\xpart{a} Realisera motsvarande grindnät: rita det för hand, återskapa och simulera det i
+CircuitVerse, och sätt klockperioden till \code{1000 ms}, långsamt nog för att observera beteendet
+med ögat.
+
+\xpart{b} Testa det klockade beteendet: ändra \code{D} under klockans höga fas, och sedan under
+dess låga fas, och observera \code{Q} och \code{Qn}. Bekräfta att utgångarna ändras bara vid den
+aktiva klockflanken, aldrig mellan klockflankerna. Förklara hur de två interna låsen samverkar för
+att ge flanktriggat beteende.
+
+\xpart{c} Testa den asynkrona resetten: sätt först \code{Q = 1}, aktivera sedan resetten genom att
+sätta \code{reset_n = 0}, och observera om \code{Q} nollställs omedelbart eller vid nästa
+klockflank. Förklara resultatet genom att hänvisa till skillnaden mellan en asynkron signal och en
+synkron signal.
+
+% ------------------------------------------------------------------------------------------
+\exerciseset{Register}
+
+\exercise{\code{register4}}{VHDL}
+\label{c3:ex:register4}
+Skriv en fullständig VHDL-entitet med namnet \code{register4}: fyra vippor sida vid sida, som delar
+en klocka, en reset och en enable.
+
+Det här är övningen där vippan slutar vara en kuriositet och blir en byggsten. En ensam D-vippa
+lagrar en bit, vilket inte är till mycket nytta i sig; vad en design egentligen vill ha är
+någonstans att förvara ett \emph{tal}. Sätt fyra vippor på rad, koppla samma klocka till dem alla,
+och du har ett fyrabitars register. Ingenting hos den enskilda vippan ändras. Bara bredden gör det.
+
+Det som är värt att lägga märke till är hur lite VHDL:en behöver ändras för att säga det. Du
+skriver samma synkrona processmall från \secref{c3:sec:template} som du redan använde för en bit,
+med \code{std_logic_vector(3 downto 0)} i stället för \code{std_logic}. Det finns ingen loop, ingen
+upprepning, inga fyra kopior av någonting. Det är ingen genväg som språket erbjuder dig; det är ett
+faktum om hårdvaran, och del \textbf{c)} nedan ber dig säga varför.
+
+Entiteten ska ha:
+
+\begin{booktable}{@{}p{5em}p{3.4em}p{10.8em}L@{}}
+  \thead{Port} & \thead{Riktn.} & \thead{Typ} & \thead{Beskrivning} \\
+  \midrule
+  \code{clock} & in & \code{std_logic} & Systemklocka. \\
+  \code{reset_n} & in & \code{std_logic} & Asynkron, aktiv låg. Nollställer registret till
+    \code{"0000"}. \\
+  \code{enable} & in & \code{std_logic} & \code{'0'} behåller nuvarande värde; \code{'1'} fångar
+    \code{d} vid nästa stigande flank. \\
+  \code{d} & in & \code{std_logic_vector(3 downto 0)} & Värdet som ska fångas. \\
+  \code{q} & out & \code{std_logic_vector(3 downto 0)} & Det lagrade värdet. \\
+\end{booktable}
+
+Skriv ut processen själv i stället för att kopiera det genomarbetade vippexemplet i
+\secref{c3:sec:dffvhdl}. Att knappa in den är vad som får mallen att sluta vara något du känner
+igen och börja vara något du kan producera ur minnet, och du kommer att skriva den i varenda
+återstående kapitel i den här boken.
+
+\xpart{a} Skriv entiteten och den synkrona processen, och anpassa mallen från en enda bit till en
+fyrabitars vektor.
+
+\xpart{b} Kontrollera den med testbänken, så som beskrivs högst upp i det här avsnittet.
+
+\xpart{c} Förklara varför samma mall skalar från en vippa till fyra utan någon strukturell ändring,
+medan en fyrabitars \emph{räknare} inte helt enkelt kan vara fyra enbitsräknare sida vid sida. Vad
+skiljer de två fallen åt?
+
+\modulefig[0.6]{lectures/L03/appendix/images/register4.png}
+
+\begin{selfcheck}
+\textbf{Självkontroll.} Döp din entitet till \code{register4}, med portarna \code{clock},
+\code{reset_n}, \code{enable}, \code{d} (\code{std_logic_vector(3 downto 0)}) och \code{q}
+(\code{std_logic_vector(3 downto 0)}), deklarerade i den ordningen; dess testbänk finns i
+\file{exercises/register4/}.
+\end{selfcheck}
+
+% ------------------------------------------------------------------------------------------
+\exerciseset{Flankdetektering}
+
+\exercise{Växlingskretsen för hand}{Krets}
+\label{c3:ex:edgehand}
+Konstruera en krets som växlar en lysdiod en gång för varje samplad stigande flank hos en
+knappsignal. Följ \secref{c3:sec:edge} och \secref{c3:sec:ledtoggle}.
+
+Kretsen ska ha ingångarna \code{button}, \code{clock} och \code{reset}, och utgången \code{led}.
+
+I den här övningen är \code{reset} aktiv hög, till skillnad från resetten i det genomarbetade
+exemplet. Den är fortfarande \textbf{asynkron}, som varje reset i den här boken: aktivera den så
+nollställs \code{led} omedelbart, utan att vänta på en klockflank. I mallen från
+\secref{c3:sec:template} betyder det att resetgrenen stannar utanför testet
+\code{rising_edge(clock)}, och att bara polariteten på resettestet ändras.
+
+\task{Tips}
+Använd två vippor. Den ena lagrar det föregående samplade värdet av \code{button}, och det värdet
+används för att detektera en stigande flank. Den andra lagrar lysdiodens nuvarande tillstånd, och
+växlas bara när en stigande flank detekteras.
+
+\xpart{a} Realisera motsvarande grindnät: rita det för hand, återskapa och simulera det i
+CircuitVerse, och sätt klockperioden till \code{1000 ms}.
+
+\xpart{b} Testa flankdetektorn: håll \code{button} hög under flera klockcykler i följd, bekräfta
+att \code{led} växlar exakt en gång, och att den inte växlar en gång per klockcykel. Förklara
+vilken lagrad signal som hindrar kretsen från att gång på gång detektera samma höga nivå som en ny
+stigande flank.
+
+\exercise{\code{led_toggle_single}}{VHDL}
+\label{c3:ex:ledsingle}
+Implementera kretsen från Övning~\ref{c3:ex:edgehand} i VHDL.
+
+\xpart{a} Skapa en entitet med namnet \code{led_toggle_single} med:
+
+\begin{booktable}{@{}p{5em}p{3.4em}p{5.6em}L@{}}
+  \thead{Port} & \thead{Riktn.} & \thead{Typ} & \thead{Beskrivning} \\
+  \midrule
+  \code{clock} & in & \code{std_logic} & Systemklocka. \\
+  \code{reset} & in & \code{std_logic} & Asynkron, och \textbf{aktiv hög}, till skillnad från varje
+    annan modul i den här boken. Aktivera den så nollställs \code{led} utan att vänta på en
+    klockflank, så resetgrenen hör hemma utanför testet \code{rising_edge(clock)}. \\
+  \code{button} & in & \code{std_logic} & Växlar \code{led} en gång per tryck. \\
+  \code{led} & out & \code{std_logic} & Lysdiodens tillstånd. \\
+\end{booktable}
+
+Lägg märke till enbitstyperna: det genomarbetade exemplet använder
+\code{std_logic_vector}-portar för två knappar och två lysdioder, medan den här driver ett enda
+par.
+
+Kopiera inte \file{led_toggle.vhd} rakt av. Gör så här i stället:
+\begin{itemize}
+  \item Härled de två klockade processerna själv: den ena lagrar det föregående värdet av
+    \code{button}, den andra lagrar och växlar det nuvarande värdet av \code{led}.
+  \item Härled flankdetekteringsekvationen för en stigande flank och en aktivt hög knapp, alltså
+    \secref{c3:sec:edge}:s $\mathit{edge} = \mathit{current} \cdot \mathit{previous}'$.
+  \item Använd inte ekvationen för fallande flank från det genomarbetade exemplet, som utgår från
+    en aktivt låg knapp.
+\end{itemize}
+
+\xpart{b} Verifiera designen med dess testbänk.
+
+Testbänken driver samma sekvens som du skulle gå igenom för hand på ett kort:
+\begin{itemize}
+  \item Den aktiverar \code{reset} och kontrollerar att \code{led} är nollställd.
+  \item Den drar \code{button} hög och kontrollerar att \code{led} växlar exakt en gång.
+  \item Den \textbf{håller \code{button} hög} under ytterligare några klockcykler och kontrollerar,
+    efter var och en av dem, att \code{led} \emph{inte} växlar igen.
+  \item Den släpper och trycker igen, och kontrollerar att det andra trycket växlar \code{led} en
+    gång till.
+  \item Den aktiverar \code{reset} med \code{led} tänd och \textbf{utan någon klockflank efteråt},
+    och kontrollerar att \code{led} nollställs ändå. Det är den kontroll som faller om du lägger
+    resetten inuti grenen \code{rising_edge(clock)}.
+\end{itemize}
+
+Den tredje kontrollen är den som faller om din flankdetektor är fel. En \code{led} som växlar varje
+klockcykel medan knappen hålls nedtryckt betyder att du drev växlingen från \code{button}s
+\textbf{nivå} i stället för från dess flank. Läs om ekvationen ovan: \code{edge} är hög bara när
+\code{button} är hög \emph{nu} och dess lagrade föregående värde är lågt.
+
+\modulefig[0.56]{lectures/L03/appendix/images/led_toggle_single.png}
+
+\begin{selfcheck}
+\textbf{Självkontroll.} Döp din entitet till \code{led_toggle_single}, med portarna \code{clock},
+\code{reset}, \code{button} (in) och \code{led} (out), deklarerade i den ordningen; dess testbänk
+finns i \file{exercises/led_toggle_single/}. Lägg märke till att \code{reset} är \textbf{aktiv hög}
+här, till skillnad från i det genomarbetade exemplet.
+\end{selfcheck}

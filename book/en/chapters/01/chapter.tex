@@ -1,0 +1,35 @@
+% Chapter 1, typeset from lectures/L01: the README is the opening and the summary, and Appendix A
+% and B respectively are the sections, in the same order and under the same subheadings.
+
+\chapter{Combinational logic and first VHDL}
+\label{c1:ch}
+
+{\large\itshape From a truth table to a working gate network, in CircuitVerse and in VHDL.\par}
+
+\begin{chapterbox}{In this chapter}
+\begin{itemize}
+  \item Logic gates and truth tables, and why digital logic tolerates noise that analogue does
+    not.
+  \item Boolean algebra: reading a sum of products straight out of a truth table.
+  \item Building and simulating a gate network by hand in CircuitVerse.
+  \item VHDL from the very first session: \code{entity}, \code{architecture}, \code{std_logic} and
+    the concurrent assignment.
+  \item A complete module, \code{or_gate}, from truth table to synthesisable file.
+  \item A brake assistant, derived from a requirement and demonstrated on a DE0-CV board.
+\end{itemize}
+\end{chapterbox}
+
+This chapter walks the path every circuit in the book walks: from a requirement, by way of a truth
+table and a Boolean equation, to a gate network built and simulated by hand, and only then to
+VHDL. The order is not a pedagogical detour. It is the working method the rest of the book rests
+on, and it is easiest to see on a circuit small enough to take in whole.
+
+Work the chapter in order. \Secref{c1:sec:gates} to \ref{c1:sec:cv} are the circuit;
+\secref{c1:sec:vhdl} and \ref{c1:sec:module} are exactly enough VHDL that you can read and write a
+gate network; \secref{c1:sec:adas} is the requirement the session builds live, and it is worth
+arriving there with an answer of your own to compare against. The exercises in
+\secref{c1:sec:exercises} are where you write the code yourself.
+
+\input{chapters/01/combinational}
+\input{chapters/01/summary}
+\input{chapters/01/exercises}

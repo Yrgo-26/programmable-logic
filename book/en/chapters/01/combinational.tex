@@ -1,0 +1,375 @@
+% Sections 1.1-1.6, from lectures/L01/appendix/a_combinational_logic.md (A.1-A.6).
+
+\section{Digital signals and logic gates}
+\label{c1:sec:gates}
+
+A digital signal takes one of two values, \code{0} or \code{1}, instead of the continuous range an
+analogue signal uses. Anything close enough to \code{0} or \code{1} reads as exactly \code{0} or
+\code{1}, so small amounts of electrical noise change nothing. That noise immunity is the reason
+nearly all modern computation, from microcontrollers to FPGAs, is digital.
+
+A \textbf{logic gate} has one or more single-bit inputs, a single-bit output and a fixed Boolean
+function between them.
+
+\textbf{Combinational logic}, this chapter's subject, produces outputs from the current inputs
+alone, with no memory. \textbf{Sequential networks} (\chapref{c3:ch}) depend on the current inputs
+\emph{and} on state stored in flip-flops.
+
+Every basic two-input gate, plus the unary \code{NOT}:
+
+\begin{narrowtable}{cc*{6}{c}}
+  \thead{A} & \thead{B} & \thead{AND} & \thead{OR} & \thead{NAND} & \thead{NOR} & \thead{XOR} &
+    \thead{XNOR} \\
+  \midrule
+  0 & 0 & 0 & 0 & 1 & 1 & 0 & 1 \\
+  0 & 1 & 0 & 1 & 1 & 0 & 1 & 0 \\
+  1 & 0 & 0 & 1 & 1 & 0 & 1 & 0 \\
+  1 & 1 & 1 & 1 & 0 & 0 & 0 & 1 \\
+\end{narrowtable}
+
+\begin{narrowtable}{cc}
+  \thead{A} & \thead{NOT A} \\
+  \midrule
+  0 & 1 \\
+  1 & 0 \\
+\end{narrowtable}
+
+Worth committing to memory straight from the tables:
+\begin{itemize}
+  \item \code{NAND}, \code{NOR} and \code{XNOR} are the inverses of \code{AND}, \code{OR} and
+    \code{XOR}.
+  \item \code{XOR} is \code{1} when the inputs differ. Beyond two inputs it generalises to
+    \textbf{odd parity}: \code{1} when an odd number of inputs are \code{1}
+    (Exercise~\ref{c1:ex:xor3}).
+  \item Every Boolean function can be built from \code{AND}, \code{OR} and \code{NOT}, and also
+    from \code{NAND} alone or \code{NOR} alone.
+\end{itemize}
+
+% ------------------------------------------------------------------------------------------
+\section{Boolean algebra as notation}
+\label{c1:sec:boolean}
+
+Three operators, which map straight onto the gates above:
+
+\begin{booktable}{@{}p{5em}L@{}}
+  \thead{Gate} & \thead{Notation in Boolean algebra} \\
+  \midrule
+  AND & multiplication: $A$ \textbf{AND} $B$ is written $AB$ \\
+  OR & addition: $A$ \textbf{OR} $B$ is written $A + B$ \\
+  NOT & prime: \textbf{NOT} $A$ is written $A'$ \\
+\end{booktable}
+
+A function written as an OR of AND terms, for example $X = AB' + CD$, is in \textbf{sum-of-products}
+form.
+
+Every truth table can be read off directly as a sum of products:
+\begin{enumerate}
+  \item Find every row where the output is \code{1}.
+  \item For each of them, write an AND term containing every input: plain if the input is \code{1}
+    on that row, primed if it is \code{0}.
+  \item OR those terms together.
+\end{enumerate}
+
+For example:
+
+\begin{narrowtable}{ccc}
+  \thead{A} & \thead{B} & \thead{X} \\
+  \midrule
+  0 & 0 & 0 \\
+  0 & 1 & 1 \\
+  1 & 0 & 1 \\
+  1 & 1 & 0 \\
+\end{narrowtable}
+
+The row $AB = 01$ contributes $A'B$ and the row $AB = 10$ contributes $AB'$, which gives
+$X = A'B + AB'$. Check it against the table: that is \code{XOR}, so the same network is a single
+\code{XOR} gate instead of two \code{AND} gates, two \code{NOT} gates and an \code{OR}.
+
+\subsection*{The laws, as a reminder}
+You have met them before. They are here so that the book has a single notation for them and so
+that later chapters can refer to them, not because they need teaching:
+
+\begin{booktable}{@{}p{8em}p{9em}L@{}}
+  \thead{Law} & \thead{With OR} & \thead{With AND} \\
+  \midrule
+  Identity & $A + 0 = A$ & $A \cdot 1 = A$ \\
+  Dominance & $A + 1 = 1$ & $A \cdot 0 = 0$ \\
+  Idempotence & $A + A = A$ & $A \cdot A = A$ \\
+  Complement & $A + A' = 1$ & $A \cdot A' = 0$ \\
+  Absorption & $A + AB = A$ & $A(A + B) = A$ \\
+  De Morgan & $(A + B)' = A'B'$ & $(AB)' = A' + B'$ \\
+\end{booktable}
+
+\textbf{De Morgan is the law this book leans on}, less for minimisation than as a rule for how an
+inversion moves through a gate: an \code{OR} with both inputs inverted \emph{is} a \code{NAND}, and
+an \code{AND} with both inputs inverted \emph{is} a \code{NOR}. That is why a \code{NAND} gate can
+build anything, which Exercise~\ref{c1:ex:nand} lets you write in VHDL, and it comes back every
+time an active-low signal meets logic written for active-high. In a course where every reset and
+every button is active-low, that is often.
+
+The gap between a directly read sum of products and the smallest network is what a \textbf{Karnaugh
+map} closes, and \secref{c2:sec:kmap} works through one from start to finish. Not because the
+technique is new to you, but because it is the minimised equation that gets written in VHDL, and
+\chapref{c8:ch} derives its state machine's next-state logic in exactly that way.
+
+% ------------------------------------------------------------------------------------------
+\section{Building and simulating a circuit in CircuitVerse}
+\label{c1:sec:cv}
+
+CircuitVerse (\url{https://circuitverse.org/simulator}) is a free, browser-based logic simulator.
+Every gate network in this book is built and tested there by hand before it is written in VHDL:
+\begin{enumerate}
+  \item Open the simulator and start a new project.
+  \item Place one \textbf{input} element per input signal and one \textbf{output} element per
+    output signal, renamed to match your variables.
+  \item Place the gates your equation calls for, from the \emph{Gates} panel.
+  \item Wire the network up one gate at a time, following your derived equation. You should
+    already know exactly which gates you need before you open the simulator, which is why
+    \secref{c1:sec:boolean} comes first.
+  \item Toggle every input and check that the output matches your truth table on \textbf{every}
+    row.
+  \item Save with \code{Project -> Save Online}, or \code{Project -> Download as image/data} for a
+    re-importable \file{.cv} file.
+\end{enumerate}
+
+\textbf{Step 5 is not optional, and nothing else does it for you.} Three rules make it a check
+rather than a formality:
+\begin{itemize}
+  \item \textbf{Exhaustive, not sampled.} Two inputs are four rows, three are eight. At those
+    sizes there is no excuse for sampling. For the sequential networks further on this becomes
+    ``step the clock and check at every edge'', the same discipline applied to time.
+  \item \textbf{Derive first, simulate second.} Draw the circuit and \emph{then} decide what it
+    should do, and you will read your own expectations out of the simulation, which proves
+    nothing.
+  \item \textbf{A discrepancy is information.} It says the drawing and the equation disagree, and
+    that one of them is wrong.
+\end{itemize}
+
+Every hardware bug you will chase is found by predicting a behaviour and then checking it. Doing it
+by hand on a circuit with four gates is how you learn to do it on one you cannot take in at a
+glance.
+
+Once the design is VHDL, a self-checking testbench takes that job over. Every worked example and
+every exercise has one handed out with it; you run them rather than write them, which
+\secref{c2:sec:testbenches} works through.
+
+% ------------------------------------------------------------------------------------------
+\section{Exactly enough VHDL that you can read and write a gate network}
+\label{c1:sec:vhdl}
+
+VHDL describes hardware, not a sequence of instructions. Every statement below runs concurrently
+and continuously, exactly like the gates it describes. The language arrives as it is needed; this
+section is enough for a simple combinational network.
+
+Every VHDL module has two parts:
+\begin{itemize}
+  \item An \textbf{entity}, the view from outside: the ports, and nothing about what happens
+    inside.
+  \item An \textbf{architecture}, the implementation behind it.
+\end{itemize}
+
+That split is a contract, not ceremony. The entity is everything another design needs in order to
+use the module, which is what lets one design instantiate another without reading it, and what lets
+you rewrite an implementation without touching what depends on it. The shape is a header beside a
+source file, or an interface beside its class; the difference is that VHDL requires it for every
+module, with no way to skip the interface or to leak the implementation through it.
+
+Take \code{or_gate}: the inputs \code{a}, \code{b}, the output \code{x}, and $x = a + b$.
+
+\begin{vhdlcode}
+entity or_gate is
+    port(a, b: in std_logic;
+         x   : out std_logic);
+end entity;
+\end{vhdlcode}
+
+\lecfig[0.62]{lectures/L01/appendix/images/or_gate_entity.png}{The entity \code{or_gate}: the view
+from outside, and nothing about what happens inside.}{c1:fig:entity}
+
+\code{std_logic} is the signal type for a single bit. It is not built into VHDL but comes from the
+package \code{std_logic_1164}, which is why every file in this book opens with:
+
+\begin{vhdlcode}
+library ieee;
+use ieee.std_logic_1164.all;
+\end{vhdlcode}
+
+It has nine values instead of two, because real hardware needs more than true and false:
+\begin{itemize}
+  \item \code{'0'} and \code{'1'}: driven low and driven high. The only two you will write in this
+    book.
+  \item \code{'Z'}: high impedance, nothing is driving the wire at all.
+  \item \code{'U'}: uninitialised, what a signal holds before anything has assigned it a value.
+  \item \code{'X'}: unknown, what a simulator shows when two things drive the same signal and
+    disagree.
+  \item \code{'-'}, \code{'W'}, \code{'L'}, \code{'H'}: don't-care values and weakly driving
+    values, rarely written by hand.
+\end{itemize}
+
+Recognising the seven you will not write still matters: they are how a simulator tells you
+something is wrong. A signal left sitting at \code{'U'} or \code{'X'} is a bug, not a value.
+
+The architecture fills the box in:
+
+\begin{vhdlcode}
+architecture behaviour of or_gate is
+begin
+    x <= a or b;
+end architecture;
+\end{vhdlcode}
+
+\lecfig[0.62]{lectures/L01/appendix/images/or_gate_arch.png}{The architecture \code{or_gate}: the
+implementation behind the entity.}{c1:fig:arch}
+
+Together they make up the complete module:
+
+\lecfig[0.62]{lectures/L01/appendix/images/or_gate_module.png}{The module \code{or_gate}: entity and
+architecture together.}{c1:fig:module}
+
+\code{x <= a or b;} is \secref{c1:sec:boolean}'s Boolean algebra almost verbatim: VHDL's
+\code{and}, \code{or}, \code{not} and \code{xor} work directly on \code{std_logic}, so every
+equation you derived by hand becomes VHDL with hardly any translation at all.
+
+The assignment is \textbf{concurrent}. It does not run once; it holds continuously, like a wire
+between real gates.
+
+The keyword \code{signal} declares an internal wire inside an architecture, as opposed to a port
+visible from outside. You use one in Exercise~\ref{c1:ex:adas} to name an intermediate result
+instead of nesting it in place, and \chapref{c2:ch} leans on the same idea throughout.
+
+% ------------------------------------------------------------------------------------------
+\section{The complete module: \code{or_gate}}
+\label{c1:sec:module}
+
+\Secref{c1:sec:vhdl}'s parts together make a complete, synthesisable file. This is the whole of
+\file{or_gate.vhd}, and it is a real design that synthesises and runs on the DE0-CV:
+
+\vhdlfile{lectures/L01/or_gate/or_gate.vhd}
+
+\begin{itemize}
+  \item The \code{library}/\code{use} clauses pull in \code{std_logic}.
+  \item \code{entity} declares the outside: two inputs, one output.
+  \item \code{architecture} implements the inside, as a single concurrent assignment.
+\end{itemize}
+
+That is the smallest complete VHDL design there is, and the shape never changes. Every module in
+this book, all the way up to the CAN controller in \chapref{c17:ch}, is the same
+\code{library}/\code{entity}/\code{architecture} skeleton. What grows is the architecture body,
+never the frame.
+
+\paragraph{Checking your work}
+\code{or_gate} comes with an \file{or_gate_tb.vhd}, which drives all four input combinations and
+checks the output:
+
+\begin{shell}
+cd lectures/L01/or_gate
+ghdl -a --std=93 or_gate.vhd or_gate_tb.vhd
+ghdl -e --std=93 or_gate_tb
+ghdl -r --std=93 or_gate_tb --assert-level=error --stop-time=10ms
+\end{shell}
+
+No output beyond a closing note means every check passed. Testbenches are treated properly in
+\secref{c2:sec:testbenches}; until then, take these three commands as the way you confirm that a
+module works.
+
+% ------------------------------------------------------------------------------------------
+\section{A brake assistant, from requirement to circuit}
+\label{c1:sec:adas}
+
+The session builds a different circuit from \code{or_gate}, live, so that you get to see the same
+path walked twice: once here in writing, and once on something you have not already read the answer
+to.
+
+The requirement: \textbf{the car brakes if the driver brakes, or if the assistance system decides
+to.} The assistance system decides to when either detector sees something, unless it is at the same
+time reporting a fault, in which case it is not trusted to brake at all.
+
+\begin{booktable}{@{}p{8em}p{4em}L@{}}
+  \thead{Port} & \thead{Direction} & \thead{Meaning} \\
+  \midrule
+  \code{driver_brake} & in & The driver is on the brake pedal. \\
+  \code{sensor} & in & The distance sensor sees an obstacle. \\
+  \code{radar} & in & The radar sees an obstacle. \\
+  \code{error} & in & The assistance system reports a fault. \\
+  \code{engine_brake} & out & Apply the brakes. \\
+\end{booktable}
+
+Three sentences together determine the whole structure:
+\begin{itemize}
+  \item either detector is enough on its own, and neither of them outweighs the other.
+  \item a fault raises no alarm; it \emph{prevents} the assistance system from being able to brake.
+  \item the driver can always brake, even when the assistance system is broken and doing nothing.
+\end{itemize}
+
+The last is a safety requirement, and it is the one to hold on to as you derive the network: the
+pedal is not an input to the assistance logic, it goes past it. Work out what changes if the pedal
+is instead fed through the fault logic, and you have found the bug the structure exists to prevent.
+
+\subsection*{The truth table}
+Sixteen rows, in the order a four-bit counter would produce them. \code{adas_brake} is not a port;
+it is the assistance system's own decision, shown as an intermediate column so that you can see
+where the structure comes from.
+
+\begin{narrowtable}{cccccc}
+  \thead{\code{driver_brake}} & \thead{\code{sensor}} & \thead{\code{radar}} &
+    \thead{\code{error}} & \thead{\code{adas_brake}} & \thead{\code{engine_brake}} \\
+  \midrule
+  0 & 0 & 0 & 0 & 0 & 0 \\
+  0 & 0 & 0 & 1 & 0 & 0 \\
+  0 & 0 & 1 & 0 & 1 & 1 \\
+  0 & 0 & 1 & 1 & 0 & 0 \\
+  0 & 1 & 0 & 0 & 1 & 1 \\
+  0 & 1 & 0 & 1 & 0 & 0 \\
+  0 & 1 & 1 & 0 & 1 & 1 \\
+  0 & 1 & 1 & 1 & 0 & 0 \\
+  1 & 0 & 0 & 0 & 0 & 1 \\
+  1 & 0 & 0 & 1 & 0 & 1 \\
+  1 & 0 & 1 & 0 & 1 & 1 \\
+  1 & 0 & 1 & 1 & 0 & 1 \\
+  1 & 1 & 0 & 0 & 1 & 1 \\
+  1 & 1 & 0 & 1 & 0 & 1 \\
+  1 & 1 & 1 & 0 & 1 & 1 \\
+  1 & 1 & 1 & 1 & 0 & 1 \\
+\end{narrowtable}
+
+The lower half is \code{1} throughout: as soon as \code{driver_brake} is set, nothing else changes
+the answer. That is what ``overrides everything'' looks like in a table.
+
+\subsection*{Four answers to bring to the session}
+Everything above is the specification. The derivation, the gate network and the VHDL code are what
+gets built live, and it is worth arriving there with an answer of your own to compare against
+rather than one you have already read. So, from the table above:
+\begin{itemize}
+  \item Read a sum-of-products equation for \code{engine_brake} straight out of it, the same way
+    \secref{c1:sec:boolean} did.
+  \item Simplify it by hand. The requirement is three sentences long, so the minimal network is
+    considerably smaller than what the row-by-row reading gives you. Work out how much smaller
+    before you are told.
+  \item Count the gates your simplified equation needs, and write the number down.
+  \item Sketch the network, and decide which single gate the safety argument above rests on.
+\end{itemize}
+
+Bring those four answers to the session. Being wrong about one of them is worth more than not
+having guessed, because you then know exactly which step to look at again when the live derivation
+reaches it. It is \secref{c1:sec:cv}'s ``derive first, simulate second'' applied to a circuit you
+have not built yet, and it is the habit the rest of the book is built on. Afterwards you write the
+VHDL code yourself, in Exercise~\ref{c1:ex:adas}, and a testbench decides whether your equations and
+the truth table above agree.
+
+\subsection*{Why there is a testbench for it}
+Sixteen combinations are few enough to check by hand once. They are not few enough to check every
+time someone edits the file, which is the situation every module in this book is in from here on.
+
+A \textbf{testbench} is a second VHDL file that does the checking. It is not part of the design and
+never reaches the FPGA: it drives the inputs through every case, works out what the output should
+have been, compares and reports. For \code{adas}, which is written alongside it during the session,
+that is a loop over the sixteen combinations restating the braking rule independently.
+
+\emph{Independently} is the important word. A testbench that read its expected answer out of the
+design would agree with it by construction, even when the design is wrong. Restating the
+requirement separately is what makes it a check.
+
+That is why nearly every directory in the course repository has a \file{_tb.vhd} beside the module:
+it is how you can be handed a module, change it, and know within a second whether you have broken
+it. \Secref{c2:sec:testbenches} works through how they are run; you are not asked to write one
+anywhere in this book.

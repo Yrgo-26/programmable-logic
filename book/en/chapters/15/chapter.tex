@@ -1,0 +1,34 @@
+% Chapter 15, typeset from lectures/L15: Appendix A becomes sections 15.1-15.6, Appendix B the
+% exercises.
+
+\chapter{Receive shift register and destuffing}
+\label{c15:ch}
+
+{\large\itshape The receive side's mirror image: deserialisation, removal of stuff bits, and flagging
+of stuffing errors.\par}
+
+\begin{chapterbox}{In this chapter}
+\begin{itemize}
+  \item \code{rx_shift_reg}: deserialisation, destuffing and detection of stuffing errors.
+  \item Sampling mid bit period (\code{bit_timer.sample}) rather than at \code{bit_done}.
+  \item \code{real_bit} and \code{real_bit_valid}: feeding \code{crc15} one destuffed bit at a time.
+  \item Instantiating \code{rx_shift_reg} inside \code{can_controller}.
+\end{itemize}
+\end{chapterbox}
+
+\code{rx_shift_reg} is the receive side's mirror image of \chapref{c14:ch}'s \code{tx_shift_reg}: it
+deserialises a group MSB first from the bus and \textbf{discards} the stuff bits \code{tx_shift_reg}
+inserted, and flags a violation if an expected stuff bit fails to appear. The run counting and the
+rule about five identical bits in a row are identical, only reversed \textemdash{} \canref{3} is the
+same rule seen from the protocol, and it is worth reading once more from here, since it is the one
+rule in the book that two modules have to agree on independently. \code{can_controller}
+(\chapref{c17:ch}) reuses \textbf{one single} \code{rx_shift_reg} for every stuffed field of an
+incoming frame, changing its \code{bit_count} between groups; the unstuffed tail (CRC delimiter, ACK,
+ACK delimiter, EOF) it reads directly, past this register.
+
+This chapter also contains the project's \textbf{compulsory code review seminar}; see
+appendix~\ref{app:project}.
+
+\input{chapters/15/rxshiftreg}
+\input{chapters/15/summary}
+\input{chapters/15/exercises}

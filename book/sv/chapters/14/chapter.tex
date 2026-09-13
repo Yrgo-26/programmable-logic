@@ -1,0 +1,40 @@
+% Kapitel 14, satt ur lectures/L14: Appendix A blir avsnitt 14.1-14.6, Appendix B övningarna.
+
+\chapter{Sändningsskiftregister och bitstoppning}
+\label{c14:ch}
+
+{\large\itshape Att serialisera ut på bussen, med samma stoppbitsregel som i \chapref{c10:ch}, nu i
+VHDL.\par}
+
+\begin{chapterbox}{I det här kapitlet}
+\begin{itemize}
+  \item \code{tx_shift_reg}: serialisering med mest signifikanta biten först, och insättning av
+    stoppbitar.
+  \item Varför en laddad grupps första bit måste presenteras omedelbart vid omladdning, och varför
+    \code{done} väntar en extra skiftning.
+  \item Varför stoppningstillståndet lever kvar över omladdningar.
+  \item \code{stuff} och \code{bit_valid}, och varför CRC-motorn grindas på dem.
+  \item Att instansiera \code{tx_shift_reg} inuti \code{can_controller}.
+\end{itemize}
+\end{chapterbox}
+
+\code{tx_shift_reg} serialiserar ut en grupp på upp till 8 bitar MSB först på bussen och \textbf{sätter
+in} en stoppbit efter fem lika utsända bitar i rad. Dess spegelbild, \code{rx_shift_reg} (som
+\emph{kastar} de stoppbitarna), är \chapref{c15:ch}.
+
+Själva stoppbitsregeln är oförändrad från \secref{c10:sec:stuffing} och \canref{3}, där du
+tillämpade den på papper på en hel bitföljd i taget, med möjlighet att se tillbaka över de bitar du
+redan hade skrivit ned.
+Här körs den kontinuerligt, en bit per klocka, utan någon följd att se tillbaka över och utan något
+”buffertslut” att stanna vid: vad regeln än behöver minnas måste bo i ett register.
+\code{can_controller} (\chapref{c16:ch}--\ref{c17:ch}) återanvänder \textbf{ett enda}
+\code{tx_shift_reg} för varje stoppat fält, och laddar om det och ändrar dess bitantal grupp för
+grupp. Den ostoppade svansen (CRC-avgränsare, ACK-plats och ACK-avgränsare, EOF) är fasta bitar som
+\code{can_controller} driver direkt, förbi det här registret.
+
+Det här är den första modulen där det lönar sig att rita tidsdiagrammet innan du skriver koden. Ta
+tid till det; de flesta fel här är tajmingfel med en cykel, inte logikfel.
+
+\input{chapters/14/txshiftreg}
+\input{chapters/14/summary}
+\input{chapters/14/exercises}

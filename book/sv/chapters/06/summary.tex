@@ -1,0 +1,53 @@
+% Avsnitt 6.8, ur lectures/L06/README.md.
+
+\section{Sammanfattning}
+\label{c6:sec:review}
+
+\needspace{6\baselineskip}
+\subsection*{Det här ska du kunna nu}
+\begin{itemize}
+  \item Bygga en 4-bitars räknare som grindnät, och förklara, med fingret på din egen ritning,
+    varför ingenting i den får räkningen att återgå till noll.
+  \item Implementera samma räknare i VHDL, förklara överslaget som en konsekvens av registrets
+    bitbredd, och säga varför en simulator invänder mot ett överslag som hårdvaran utför utan att
+    blinka.
+  \item Implementera ett skiftregister i både SIPO- och PISO-utförande, veta vilket som passar
+    vilket jobb, och veta vilket håll boken skiftar åt och varför det spelar roll att hålla sig
+    till ett.
+  \item Kombinera en räknare med ett skiftregister för att upptäcka att ett komplett ord anlänt,
+    och verifiera en klockad design genom att köra dess testbänk.
+\end{itemize}
+
+\needspace{6\baselineskip}
+\subsection*{Frågor att testa dig själv med}
+\begin{enumerate}
+  \item Varför återgår en räknare av typen \code{natural range 0 to 15} till \code{0} efter
+    \code{15} utan någon uttrycklig ”om maxvärdet, nollställ”-logik? Vad måste gälla för
+    intervallet? Vilket element utför överslaget?
+  \item En VHDL-simulator avbryter på det överslag din CircuitVerse-ritning utför utan invändning.
+    Vilken av de två modellerar hårdvaran, och vad säger det om att lita på någondera ensam?
+  \item Vad är den praktiska skillnaden mellan ett SIPO- och ett PISO-skiftregister? Vilket skulle
+    du gripa efter för att ta emot en ström av seriella bitar, och vilket för att driva en kedja av
+    lysdioder från ett fast mönster?
+  \item Ett skiftregister och en räknare är båda ”N vippor som delar en klocka”. Det som skiljer är
+    vad som matar varje vippas ingång. Beskriv den skillnaden för respektive.
+  \item Varför är \code{data_ready} i \code{serial_rx8} en puls på en klockcykel snarare än en nivå
+    som blir liggande hög när en byte anlänt?
+  \item Varför måste \code{shift_enable} grinda biträknaren och inte bara skiftningen?
+  \item Kortdemonstrationen driver \code{shift_enable} från en knapp i stället för att sakta ned
+    klockan. Varför är nedsaktad klocka fel svar, och vad skulle gå sönder om knappen kopplades
+    till \code{shift_enable} utan att först passera \code{button_sync}?
+  \item \code{data_ready} behöver en egen vippa innan en lysdiod kan visa den. Vilket kapitels
+    problem är det, i annan skepnad?
+\end{enumerate}
+
+\needspace{6\baselineskip}
+\subsection*{Blicken framåt}
+\Chapref{c7:ch} går vidare med:
+\begin{itemize}
+  \item Timers: en räknare med ett målvärde, vilket är det som gör klockcykler till riktig tid.
+  \item Byggd genom att lägga exakt två saker till räknaren du ritade här, en jämförare och en
+    nollställning, så spara det CircuitVerse-projektet.
+  \item Den vandrande lysdioden: det här kapitlets skiftregister, taktat av den timern och startat
+    av en synkroniserad knapp.
+\end{itemize}

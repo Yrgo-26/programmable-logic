@@ -1,0 +1,49 @@
+% Avsnitt 5.6, ur lectures/L05/README.md och appendix A.4.
+
+\section{Sammanfattning}
+\label{c5:sec:review}
+
+\needspace{6\baselineskip}
+\subsection*{Det här ska du kunna nu}
+\begin{itemize}
+  \item Säga vad som skiljer en \code{signal} från en \code{variable}, förutsäga det olika resultat
+    var och en ger ur samma kod, och välja mellan dem medvetet.
+  \item Förklara vad en FPGA fysiskt består av, varför två olika utseende beskrivningar av samma
+    krets ger samma hårdvara, och varför ett Karnaughdiagram köper mindre här än på diskret logik.
+  \item Förklara vad som begränsar en designs klockfrekvens, och varför fler register kan göra en
+    design snabbare snarare än långsammare.
+  \item Känna igen ett oavsiktligt lås på dess varning, säga vad som orsakade det och åtgärda det,
+    och säga varför ”det kompilerade utan fel” lovar mindre för en FPGA-design än för ett
+    C-program.
+\end{itemize}
+
+\needspace{6\baselineskip}
+\subsection*{Frågor att testa dig själv med}
+\begin{enumerate}
+  \item En \code{signal} tilldelas två gånger, med olika värden, i ett varv genom en
+    \code{process}. Vad hamnar på den, och när sker den uppdateringen egentligen?
+  \item Samma fråga för en \code{variable}.
+  \item Varför ger ackumulering över en loop med en \code{signal} ett annat, oftast felaktigt,
+    resultat?
+  \item Ingenting på en FPGA blir en grind. Vad blir en boolesk funktion i stället, och varför
+    kostar en funktion av fyra variabler lika mycket oavsett om du minimerade den först?
+  \item Vad är kritiska vägen, och varför kan fler vippor få en design att gå snabbare?
+  \item Ett kombinatoriskt \code{case} tilldelar sin utgång i tre grenar av fyra. Vad bygger
+    syntesverktyget för den fjärde, och varför är det det enda det \emph{kan} bygga?
+  \item Varför är ett oavsiktligt lås en varning och inte ett fel, och varför gör det saken
+    farligare snarare än mindre farlig?
+\end{enumerate}
+
+\needspace{6\baselineskip}
+\subsection*{Blicken framåt}
+Ingenting i \chapref{c6:ch} till \ref{c8:ch} inför något nytt idiom. Räknare, skiftregister och
+timers håller alla tillstånd över klockflanker med hjälp av \chapref{c3:ch}:s klockade process och
+schemaläggningsregeln ovan, och \chapref{c8:ch}:s tillståndsmaskiner lägger bara till en uppräknad
+typ och ett \code{case} på den. Det som ändras är vad tillståndet används till.
+
+Två saker att hålla utkik efter. \Chapref{c6:ch}:s \code{serial_rx8} är den första designen vars
+korrekthet du inte kan kontrollera med ögat på en lysdiod, vilket är där de utdelade testbänkarna
+slutar vara en formalitet. Och \secref{c4:sec:generics}:s generic sätts i arbete direkt:
+\chapref{c7:ch}:s \code{timer} använder en för sitt tickantal, och \code{walking_led} instansierar
+den timern vid sidan av \code{reset_sync} och \code{button_sync}, och skriver nästan ingen egen
+logik.

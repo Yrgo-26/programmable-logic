@@ -1,0 +1,30 @@
+% Chapter 17, typeset from lectures/L17: Appendix A becomes sections 17.1-17.6, Appendix B the
+% exercises.
+
+\chapter{The CAN controller II: reception and arbitration}
+\label{c17:ch}
+
+{\large\itshape Completing \code{can_controller}. After this chapter the CAN half of the project is
+finished.\par}
+
+\begin{chapterbox}{In this chapter}
+\begin{itemize}
+  \item The receive role: the timing of \code{rx_shift_reg}'s enable, and the single cycle of
+    pre-emption.
+  \item Reassembling a received frame, and feeding \code{crc15} on the receive side.
+  \item A clean slate between frames, and why both shift registers are held in reset while the bus is
+    idle.
+  \item Detecting lost arbitration, checked bit by bit across the arbitration field.
+  \item Running \code{can_controller_tb} all the way through, transmission and reception together.
+\end{itemize}
+\end{chapterbox}
+
+\Chapref{c16:ch} built the transmit path. This chapter completes \code{can_controller} with the
+\code{role = '0'} path (reception) and the arbitration logic deciding which of two competing
+transmitters gets to carry on. The frame layout, the state sequence and the per-field group sizes are
+the same as in \chapref{c16:ch}; the receive side merely reads every field back instead of driving
+it.
+
+\input{chapters/17/receive}
+\input{chapters/17/summary}
+\input{chapters/17/exercises}

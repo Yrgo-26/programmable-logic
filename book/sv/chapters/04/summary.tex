@@ -1,0 +1,51 @@
+% Avsnitt 4.10, ur lectures/L04/README.md.
+
+\section{Sammanfattning}
+\label{c4:sec:review}
+
+\needspace{6\baselineskip}
+\subsection*{Det här ska du kunna nu}
+\begin{itemize}
+  \item Förklara vad metastabilitet är, varför en asynkron ingång kan orsaka det, och varför två
+    vippor gör det osannolikt snarare än omöjligt.
+  \item Tillämpa dubbelvippsynkroniseraren på vilken asynkron ingång som helst, inklusive mönstret
+    ”aktivera asynkront, släpp synkront” som används för reset.
+  \item Säga varför den kedjan dessutom fungerar som en praktisk men ofullständig studsfiltrering,
+    och vad en riktig sådan skulle tillföra.
+  \item Ge en modul en \code{generic}, åsidosätta den med en \code{generic map}, skriva en ports
+    bredd i termer av den, och bedöma när en generic gör rätt för sig i stället för att läggas till
+    av princip.
+\end{itemize}
+
+\needspace{6\baselineskip}
+\subsection*{Frågor att testa dig själv med}
+\begin{enumerate}
+  \item Vad händer exakt när en asynkron ingång till en vippa ändras för nära en aktiv klockflank?
+  \item Hur hanterar dubbelvippsynkroniseraren det, och varför är det den \emph{andra} vippans
+    utgång som är säker att använda?
+  \item Varför beter sig kedjan som används här som en studsfiltrering i CircuitVerse men
+    studsfiltrerar inte en riktig knapp fullt ut vid \code{50 MHz}, och varför är det en egenskap
+    hos klockperioden snarare än hos kretsen? Vad skulle du lägga till för att åtgärda det?
+  \item \code{button_sync} har en generic och \code{reset_sync} har ingen. Vad är regeln, och vad
+    vore fel med att ge \code{reset_sync} en \code{WIDTH}-generic ”för symmetrins skull”?
+\end{enumerate}
+
+\needspace{6\baselineskip}
+\subsection*{Vidare läsning}
+Erik Pihls videogenomgång av metastabilitet och dubbelvippsynkroniseraren finns på
+\url{https://www.youtube.com/watch?v=KrssJRgF13I} som ytterligare, frivillig visning.
+\url{https://nandland.com/lesson-13-metastability/} och
+\url{https://vhdlwhiz.com/terminology/metastability/} täcker samma begrepp från en något annan
+vinkel, användbart om det här kapitlet inte sitter vid första läsningen.
+
+\needspace{6\baselineskip}
+\subsection*{Blicken framåt}
+\Chapref{c5:ch} går vidare med:
+\begin{itemize}
+  \item \code{variable}: den enda konstruktion du ännu inte mött, och den skarpa skillnaden mellan
+    hur den uppdateras och hur en \code{signal} gör det.
+  \item Varför samma ackumulering skriven med en \code{signal} och med en \code{variable} ger två
+    olika svar, och vilket av de två som är felet.
+  \item Vad verktygskedjan faktiskt bygger: LUT:ar och vippor, vad som begränsar en klockas
+    hastighet, och låset du råkar beskriva av misstag.
+\end{itemize}

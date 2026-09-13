@@ -1,0 +1,40 @@
+% Section 16.8, from lectures/L16/README.md.
+
+\section{Summary}
+\label{c16:sec:review}
+
+\needspace{6\baselineskip}
+\subsection*{What you should be able to do now}
+\begin{itemize}
+  \item Draw the CAN frame's state diagram and say which field every state corresponds to.
+  \item Explain why every field needs a \code{LOAD} state before its shift state.
+  \item Implement the transmit path: load the shift register, shift out, and move on at the right
+    pulse.
+  \item Drive the open-drain bus correctly: \code{bus_en} controls, \code{tx_bus} decides what.
+  \item Gate the CRC engine correctly, and say why the wrong gating gives a CRC that looks plausible
+    and is wrong.
+\end{itemize}
+
+\needspace{6\baselineskip}
+\subsection*{Questions to test yourself with}
+\begin{enumerate}
+  \item Why does every field need a \code{LOAD} state of its own?
+  \item A transmitting node releases the bus during the ACK slot. Why, and what does it expect to see
+    there?
+  \item \code{bus_en} and \code{tx_bus} are two separate signals. What would have been lost with just
+    one?
+  \item Why is \code{crc15} gated on \code{bit_valid and not stuff} and not on \code{bit_done}?
+  \item Which fields does the CRC cover, and where exactly does the coverage end?
+  \item Why is the state machine a Moore machine here?
+\end{enumerate}
+
+\needspace{6\baselineskip}
+\subsection*{Target}
+The transmit path should be in place when \chapref{c17:ch} begins, since the receive path is built
+into the same machine. If you do not get all the way: finish the transmission through the CRC field,
+and leave ACK and EOF to the next session.
+
+\needspace{6\baselineskip}
+\subsection*{Looking ahead}
+\Chapref{c17:ch} completes \code{can_controller} with reception and arbitration, and runs the system
+testbench all the way through.

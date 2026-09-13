@@ -1,0 +1,164 @@
+% Sections 13.1-13.6, from lectures/L13/appendix/a_crc15.md.
+
+\section{Interface}
+\label{c13:sec:iface}
+
+\modulefig[0.62]{lectures/L13/appendix/images/crc15.png}
+
+\begin{booktable}{@{}p{5.6em}p{3.4em}p{5.2em}L@{}}
+  \thead{Port} & \thead{Dir.} & \thead{Type} & \thead{Meaning} \\
+  \midrule
+  \code{clock} & in & \code{std_logic} & 50 MHz system clock. \\
+  \code{reset_s2_n} & in & \code{std_logic} & Active-low, synchronised reset. \\
+  \code{clear} & in & \code{std_logic} & Returns the register to all zeros at this edge, without a
+    reset. \\
+  \code{enable} & in & \code{std_logic} & Integrate \code{data} into the register at this edge when
+    \code{'1'}. \\
+  \code{data} & in & \code{std_logic} & The current bit, the bit being sent (TX) or just sampled from
+    the bus (RX). \\
+  \code{crc} & out & \code{crc_t} & The register's current 15-bit CRC value. \\
+  \code{valid} & out & \code{std_logic} & \code{'1'} whenever the register currently reads all
+    zeros. \\
+\end{booktable}
+
+No generics. \code{crc15_tb} binds its ports \textbf{positionally}, so the order and the types above
+are what has to match; the names are yours. \code{crc_t} (a 15-bit vector), its width
+\code{CRC_WIDTH} and the polynomial \code{CRC_POLY} come from \code{can_def} (\chapref{c10:ch}).
+
+% ------------------------------------------------------------------------------------------
+\section{The recursion}
+\label{c13:sec:recursion}
+
+Keep a 15-bit register (\code{crc_t}), cleared to all zeros by \code{reset_s2_n}. At every clock edge
+where \code{enable = '1'}, integrate one bit:
+
+\begin{textdrawing}
+feedback = crc(CRC_WIDTH-1) xor data      -- Incoming bit XOR the register's top bit.
+shifted  = crc shifted one step left, new lowest bit '0'
+crc      = shifted xor CRC_POLY           -- if feedback = '1'
+         = shifted                        -- otherwise
+\end{textdrawing}
+
+That is the whole engine, fifteen flip-flops and a shift XOR-gated by the polynomial's taps. When
+\code{enable} is \code{'0'}, hold the register unchanged. Drive \code{crc} continuously from the
+register, and \code{valid} as ``the register is all zeros''.
+
+\begin{warning}
+\code{clear} does to the register what \code{reset_s2_n} does, but it is a \textbf{synchronous
+command, not a reset}: it belongs inside the clocked branch, tested before \code{enable} so that it
+wins when both are high at the same edge. Do not fold it into the asynchronous reset condition; that
+would make \code{clear} asynchronous and level-sensitive, a different design that happens to pass the
+testbench (which always holds \code{clear} for a whole clock cycle). The interface table says ``at
+this edge'' and means it.
+\end{warning}
+
+\code{clear} exists because the engine is reused for every frame and holds no per-frame state of its
+own: \code{can_controller} pulses it once at the start of every frame (\chapref{c16:ch}). A frame
+allowed to run to the end returns the register to zero by itself, through the
+generate-then-check property below, so on the happy path \code{clear} changes nothing. A frame that
+is \emph{aborted} halfway does not, and that is the case it exists for.
+
+% ------------------------------------------------------------------------------------------
+\section{One engine, two jobs}
+\label{c13:sec:twojobs}
+
+\begin{itemize}
+  \item \textbf{Generate:} enable the engine over SOF through the end of the data field. Then read
+    \code{crc}; that is the value to send as the frame's CRC field.
+  \item \textbf{Check:} enable it over SOF through the data field \emph{and then carry on}, feeding
+    in the \emph{received} CRC field's own bits as well. If the frame arrived intact, that drives the
+    register back to exactly zero, a property of the arithmetic, not something the engine was told to
+    expect. \code{valid} reports precisely that. \code{can_controller} (\chapref{c17:ch}) checks
+    \code{valid} only at that point; it needs no second, separate checking circuit.
+\end{itemize}
+
+Both jobs consume \textbf{real bits only}. Stuff bits (\chapref{c14:ch}) never enter the CRC on
+either side of the link; the caller's gating of \code{enable} is what keeps them out
+(\chapref{c16:ch} and \ref{c17:ch} build exactly that), and the engine itself never knows they exist.
+That is why \code{crc15} needs no knowledge of frame fields or stuffing: whoever drives \code{enable}
+has already taken those decisions.
+
+Both jobs assume the register starts a frame at zero, which is exactly what \code{clear} guarantees.
+Note how much rests on that: a node abandoning a frame halfway (it loses arbitration, or sees a
+stuffing violation, or fails the CRC check, all things \chapref{c17:ch} does) stops feeding the
+engine with a \emph{partial} value in it. Without a per-frame clear, the next frame gets that residue
+as its starting value, so the node computes a CRC nobody else agrees with and computes a wrong check
+on everything it receives, for every frame from then until reset. A single aborted frame would take
+the node off the bus permanently.
+
+\code{valid} reads \code{'1'} at reset as well, before any data at all; meaningless there, meaningful
+only at the check point above.
+
+% ------------------------------------------------------------------------------------------
+\section{A worked example, by hand}
+\label{c13:sec:worked}
+
+Start with the simplest case. Feed a single \code{1} into a just-reset engine: \code{feedback} is
+\code{0 xor 1 = 1}, \code{shifted} is still all zeros, so \code{crc} becomes \code{0 xor CRC_POLY},
+the polynomial itself. That is the first thing the testbench checks, and a good sanity check on your
+own code.
+
+Now four bits, \code{1001}, MSB first. \code{top} is the register's bit 14 \emph{before} the edge,
+and \code{CRC_POLY} is \code{100010110011001}:
+
+\begin{textdrawing}
+         top  data  fb   shifted          xor poly   crc
+reset      -     -   -   -                       -   000000000000000
+bit 1      0     1   1   000000000000000       yes   100010110011001
+bit 2      1     0   1   000101100110010       yes   100111010101011
+bit 3      1     0   1   001110101010110       yes   101100011001111
+bit 4      1     1   0   011000110011110        no   011000110011110
+\end{textdrawing}
+
+Read one row at a time and the engine stops looking like arithmetic. Every edge does the same three
+things: XOR the incoming bit with the bit falling off the top, shift left, and XOR the polynomial
+back in only if that result was \code{1}.
+
+Two rows are worth stopping at. \textbf{Bit 2} feeds in a \code{0} and triggers the XOR all the same,
+because the \code{1} leaving the top is what sets \code{feedback}; the incoming bit is only half the
+decision. \textbf{Bit 4} feeds in a \code{1} and does \emph{not} trigger it, because the top bit is
+also \code{1} and the two cancel. That is why a CRC responds to \emph{where} a bit sits and not just
+to how many ones there are, and it is the property Exercise~\ref{c13:ex:missed} uses to catch a
+corruption a simple sum cannot see.
+
+Note as well that every row's \code{shifted} column is the previous row's \code{crc} shifted one step
+left, with a \code{0} coming in from below. Nothing is ever added at the low end; the register's
+contents come entirely from the polynomial being XORed in over and over at different offsets.
+
+% ------------------------------------------------------------------------------------------
+\section{What the testbench pins down}
+\label{c13:sec:tb}
+
+\begin{itemize}
+  \item Just after reset, \code{crc} is all zeros and \code{valid = '1'}.
+  \item A single \code{'1'} bit gives \code{crc = CRC_POLY}.
+  \item \code{clear} returns a loaded register to all zeros without \code{reset_s2_n} being touched.
+  \item A 19-bit sequence of SOF, ID, RTR and control field gives a CRC matching a value computed
+    independently in Python (not derived from this VHDL).
+  \item Feeding the just-computed CRC's own bits straight back in returns the register to all zeros
+    (\code{valid = '1'}), the generate-then-check property.
+\end{itemize}
+
+% ------------------------------------------------------------------------------------------
+\section{Putting it into \code{can_controller}}
+\label{c13:sec:wire}
+
+The same two-part change as \chapref{c12:ch}'s, one block further in. In
+\file{controller/can_controller.vhd}, add the signals under the \code{bit_timer} group:
+
+\begin{vhdlcode}
+    -- crc15.
+    signal crc_clear, crc_enable, crc_data_in, crc_valid : std_logic;
+    signal crc_value                                     : crc_t;
+\end{vhdlcode}
+
+and the instance under \code{bit_timer1}:
+
+\begin{vhdlcode}
+    crc1: entity work.crc15
+        port map(clock, reset_s2_n, crc_clear, crc_enable, crc_data_in, crc_value, crc_valid);
+\end{vhdlcode}
+
+Note that \code{crc15} connects to nothing but the clock, the reset and its own signals: it takes its
+bits from whichever shift register is active, and both of those registers are as yet unwritten. The
+connection joining them is \chapref{c16:ch}'s, and it is a single expression rather than a port map.

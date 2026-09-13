@@ -1,0 +1,630 @@
+% Bilaga C, satt ur project/README.md och info/examination.md.
+
+\chapter{Grupprojektet}
+\label{app:project}
+
+Det här är projektets specifikation, samlad på ett ställe: arbetsformen, strukturen, modulernas
+gränssnitt, testplanen och bedömningen. \Chapref{c10:ch} till \ref{c19:ch} är genomgången; det här är
+kontraktet, och där de två skiljer sig gäller det som står här.
+
+Uppgiften är att konstruera, simulera och köra en förenklad CAN-kontroller i VHDL, och göra den
+nåbar från en mikrokontroller över SPI. Parallellklassen skriver C++-drivrutinen mot samma register,
+så det som byggs är ena halvan av ett riktigt hårdvaru- och mjukvarusystem, inte en övning som slutar
+i simulatorn.
+
+När projektet är klart har gruppen implementerat en \textbf{bittimer} som producerar sampel- och
+bitslutspulser, en \textbf{CRC-15-motor} som både beräknar och verifierar checksumman, ett
+\textbf{sändningsskiftregister} som serialiserar och sätter in stoppbitar, ett
+\textbf{mottagningsskiftregister} som deserialiserar och tar bort dem, en \textbf{CAN-kontroller}
+vars tillståndsmaskin sekvenserar ramens fält och hanterar arbitrering, en \textbf{registerbank} som
+översätter kontrollerns pulser till pollbara register, en \textbf{SPI-brygga} som gör registren
+nåbara utifrån, och en \textbf{toppnivå} som binder ihop alltihop till en nod en mikrokontroller kan
+prata med.
+
+% ------------------------------------------------------------------------------------------
+\section{Arbetsform}
+\label{app:project:work}
+
+Projektet genomförs i grupper om \textbf{4--5 studenter}. Gruppen ansvarar gemensamt för hela
+projektet, och arbetssättet följer industriell praxis.
+
+\subsection{Git och GitHub}
+\begin{itemize}
+  \item Skapa ett privat repository och bjud in alla gruppmedlemmar samt handledaren som
+    collaborator.
+  \item Arbeta i feature-branchar. En branch per modul är en rimlig utgångspunkt.
+  \item Committa ofta, med meddelanden som säger vad ändringen gör och inte bara att den finns.
+  \item \textbf{Pusha aldrig direkt till \code{main}.} All kod når \code{main} genom en Pull
+    Request. Skydda branchen i GitHubs inställningar så att regeln inte beror på att alla kommer
+    ihåg den.
+\end{itemize}
+
+\subsection{Kodgranskning}
+\begin{itemize}
+  \item Varje PR granskas av \textbf{minst en annan gruppmedlem} innan den mergas.
+  \item Granskaren kontrollerar: att portordningen stämmer mot gränssnittstabellen, att modulens
+    testbänk passerar, att inga värden är hårdkodade förbi \code{can_def}, och att varje entitets
+    gränssnitt och varje viktig intern signal är kommenterad.
+  \item Lägg granskningskommentarer i GitHub, inte i chatt eller muntligt. En granskning som inte
+    finns skriftligt har inte hänt.
+  \item En granskning som bara säger ”ser bra ut” är ingen granskning. Ställ minst en riktig fråga,
+    även när koden är bra: \emph{varför} den gör som den gör är oftare intressant än \emph{att} den
+    gör det.
+\end{itemize}
+
+\subsection{Arbetsfördelning}
+Alla ska skriva VHDL och alla ska granska VHDL. Fördelningen får vara ojämn i mängd, inte i art.
+Dokumentera fördelningen löpande i \file{CONTRIBUTORS.md} i repots rot.
+
+% ------------------------------------------------------------------------------------------
+\section{Så här drivs projektet}
+\label{app:project:drive}
+
+Projektet har \textbf{inga milstolpar}. Varje kapitel från \chapref{c10:ch} och framåt anger ett
+\emph{riktvärde}, formulerat som ”ni bör vara ungefär här”. Riktvärdena är inte krav och betygsätts
+inte.
+
+Det är ett medvetet val och inte generositet. Efter \file{can_def.vhd} har de fyra lövmodulerna
+\code{bit_timer}, \code{crc15}, \code{tx_shift_reg} och \code{rx_shift_reg} \textbf{inga beroenden
+till varandra}, och var och en har sin egen utdelade testbänk. En grupp om 4--5 kan därför bygga dem
+parallellt, i vilken ordning som helst. Att låsa fast en ordning skulle bara hindra det.
+
+Men beroendegrafen är inte platt, och det är värt att planera efter:
+
+\begin{textdrawing}
+             meta_prev                                    (läser inget paket alls)
+can_def  ──> bit_timer, crc15, tx_shift_reg, rx_shift_reg (de fyra löven, parallella)
+                                    └──> can_controller   (kap 16 sändning, kap 17 mottagning)
+can_def  ──> register_bank                                (oberoende, byggbar från kap 10)
+spi_def  ──> spi_reg_bridge                               (oberoende, byggbar från kap 10)
+spi_slave                                                 (utdelad, skrivs inte av gruppen)
+    can_controller + register_bank + spi_reg_bridge + spi_slave ──> can_spi_node   (kap 19)
+\end{textdrawing}
+
+Två saker följer av den:
+
+\begin{itemize}
+  \item \textbf{\code{can_controller} är den kritiska vägen.} Den har ingen intern parallellitet,
+    den sträcker sig över två pass, och dess testbänk är en systemtestbänk som antingen går igenom
+    eller inte \textemdash{} ingen delvis grön. Den som ska äga den bör börja läsa \chapref{c16:ch}
+    tidigt, och gruppen bör räkna med att den tar mest tid av allt.
+  \item \textbf{\code{register_bank} och \code{spi_reg_bridge} är två fullvärdiga arbetsspår som kan
+    starta direkt.} Den ena behöver bara \code{can_def}, den andra bara \code{spi_def}, och båda har
+    utdelade testbänkar. Ingen behöver vänta på kontrollern för att ha något att göra, och en grupp
+    som skjuter dem till \chapref{c18:ch} och \ref{c19:ch} har lagt sitt tightaste arbete sist.
+\end{itemize}
+
+Två hållpunkter är obligatoriska:
+
+\begin{booktable}{lL}
+  \thead{När} & \thead{Vad} \\
+  \midrule
+  \Chapref{c15:ch} & \textbf{Kodgranskningsseminarium.} Varje grupp visar en mergad PR och en
+    granskning gruppen skrivit, och berättar om en sak i arbetssättet som inte fungerat. \\
+  \Chapref{c19:ch} & \textbf{Slutredovisning och inlämning.} Gröna testbänkar, genomgång av
+    \code{can_spi_node}, bring-up på hårdvara så långt gruppen kommit, och repots historik. \\
+\end{booktable}
+
+Det som bedöms är slutresultatet och arbetssättet: designen, Git-historiken, PR:erna och
+granskningarna. \textbf{Inte takten.} En grupp som ligger efter halvvägs igenom projektet och lämnar
+in en komplett, välgranskad nod har gjort projektet rätt.
+
+% ------------------------------------------------------------------------------------------
+\section{Projektstruktur}
+\label{app:project:layout}
+
+Två platta kataloger, med modulerna bredvid de testbänkar som kontrollerar dem:
+
+\begin{textdrawing}
+controller/   can_def.vhd, meta_prev.vhd, bit_timer.vhd, crc15.vhd,
+              tx_shift_reg.vhd, rx_shift_reg.vhd, can_controller.vhd
+              + de sex utdelade *_tb.vhd
+bridge/       register_bank.vhd, spi_reg_bridge.vhd, can_spi_node.vhd
+              + utdelade spi_slave.vhd, spi_def.vhd,
+                register_bank_tb.vhd, spi_reg_bridge_tb.vhd
+ci/           build_project.sh, kopierad från kursrepot
+Makefile      med målet build-project
+CONTRIBUTORS.md
+.gitignore
+\end{textdrawing}
+
+Gränsen mellan de två katalogerna går vid protokollet: allt i \file{controller/} känner till CAN och
+ingenting om SPI, och \textbf{ingen modul i någondera katalogen känner till båda}.
+\code{register_bank} är mitten: den känner varken CAN-ramformatet eller SPI utan bara
+registersemantik, och läser \code{can_def} enbart för porttyperna.
+
+De utdelade filerna hämtas från kursrepot och läggs in oförändrade. \file{spi_slave.vhd} skriver
+gruppen inte: den är transport, inte kursens ämne, och den läses i \chapref{c18:ch} i stället.
+
+% ------------------------------------------------------------------------------------------
+\section{Namnkonventioner och kodstil}
+\label{app:project:style}
+
+All kod och alla kommentarer i koden skrivs på \textbf{engelska}. Instruktionerna är på svenska.
+
+\begin{itemize}
+  \item Modul- och signalnamn i \code{snake_case}, till exempel \code{timer_enable}.
+  \item Konstanter i versaler, till exempel \code{TICKS_PER_BIT}.
+  \item \code{std_logic} och \code{std_logic_vector} för allt som är ledningar; \code{natural} för
+    räknare.
+  \item Inga hårdkodade värden. Allt som är protokoll ligger i \code{can_def}.
+  \item Kommentera varje entitets gränssnitt och varje viktig intern signal.
+  \item Håll gränssnitten stabila. Testbänkarna är utdelade och binder positionellt.
+\end{itemize}
+
+\begin{warning}
+\textbf{Positionell portbindning.} Varje utdelad testbänk binder till sin modul \textbf{positionellt},
+och det gör varje instansiering inuti \code{can_controller} också. Kontraktet är alltså
+\textbf{ordningen och typerna} på portarna, exakt som tabellerna i \secref{app:project:controller}
+och \ref{app:project:bridge} listar dem. Portarnas \emph{namn} är gruppens egna.
+
+Byt plats på två portar av samma typ och ingenting klagar vid analys; konstruktionen beter sig bara
+fel i simuleringen. Det är priset för att gränssnittstabellen får vara enda sanningskälla.
+\end{warning}
+
+% ------------------------------------------------------------------------------------------
+\section{Det delade paketet \code{can_def}}
+\label{app:project:candef}
+
+Skrivs i \chapref{c10:ch}, i \file{controller/can_def.vhd}, och läses av allt annat.
+
+\textbf{Konstanter:} \code{CLOCK_FREQ_HZ}, \code{BIT_RATE_HZ}, \code{TICKS_PER_BIT},
+\code{SAMPLE_TICK}, \code{ID_WIDTH}, \code{DLC_WIDTH}, \code{DLC_MAX}, \code{CRC_WIDTH},
+\code{DATA_WIDTH}, \code{MAX_RUN}, \code{CRC_POLY}.
+
+\textbf{Subtyper:} \code{byte_t}, \code{id_t}, \code{crc_t}, \code{dlc_t}, \code{data_t}.
+
+Riktvärden för ett DE0-CV med 50 MHz systemklocka och CAN på 1 Mbit/s:
+
+\begin{booktable}{llL}
+  \thead{Konstant} & \thead{Värde} & \thead{Kommentar} \\
+  \midrule
+  \code{CLOCK_FREQ_HZ} & \code{50_000_000} & Systemklockan. \\
+  \code{BIT_RATE_HZ} & \code{1_000_000} & 1 Mbit/s. \\
+  \code{TICKS_PER_BIT} & \code{CLOCK_FREQ_HZ / BIT_RATE_HZ} & 50 klockcykler per CAN-bit. Räkna ut
+    den, skriv den inte. \\
+  \code{SAMPLE_TICK} & \code{TICKS_PER_BIT * 7 / 10} & Sampelpunkten, ungefär 70 \% in i
+    bitperioden. \\
+  \code{ID_WIDTH} & \code{11} & Standardidentifierare. \\
+  \code{DLC_WIDTH} & \code{4} & DLC är fyra bitar. \\
+  \code{DLC_MAX} & \code{8} & Högst åtta databytes. \\
+  \code{DATA_WIDTH} & \code{DLC_MAX * 8} & 64 bitar nyttolast. \\
+  \code{CRC_WIDTH} & \code{15} & CAN:s CRC-15. \\
+  \code{MAX_RUN} & \code{5} & Femregeln för bitstoppning. \\
+  \code{CRC_POLY} & \code{"100010110011001"} & Motsvarar $x^{15} + x^{14} + x^{10} + x^{8} + x^{7} +
+    x^{4} + x^{3} + 1$. \\
+\end{booktable}
+
+Att \code{TICKS_PER_BIT} och \code{SAMPLE_TICK} är \emph{uträknade} och inte inskrivna spelar roll:
+byter någon bithastighet ska allt följa med.
+
+% ------------------------------------------------------------------------------------------
+\section{Modulerna i \code{controller/}}
+\label{app:project:controller}
+
+Kapitlen beskriver modulerna i detalj; det här är portordningen samlad, eftersom det är den som är
+kontraktet.
+
+\subsection*{\code{meta_prev} (\chapref{c12:ch})}
+En generic, \code{WIDTH} (\code{natural := 1}), och tre portar: \code{clock} (in), \code{async_in}
+(in, \code{std_logic_vector(WIDTH-1 downto 0)}), \code{sync_out} (out, samma typ).
+Dubbelvippsynkroniseraren från \chapref{c4:ch}, skriven en gång med en breddgeneric. Den behöver
+ingen reset: efter två klockcykler är innehållet ändå ersatt. Instansieras två gånger inuti
+\code{can_controller}, för \code{reset_n} och för \code{rx_bus}.
+
+\subsection*{\code{bit_timer} (\chapref{c12:ch})}
+\begin{longbooktable}{cll>{\raggedright\arraybackslash}p{0.24\linewidth}>{\raggedright\arraybackslash}p{0.30\linewidth}}{\thead{\#} & \thead{Port} & \thead{Riktning} & \thead{Typ} &
+  \thead{Betydelse}}
+  1 & \code{clock} & in & \code{std_logic} & Systemklocka. \\
+  2 & \code{reset_s2_n} & in & \code{std_logic} & Synkroniserad, aktiv låg reset. \\
+  3 & \code{enable} & in & \code{std_logic} & Räknar medan \code{'1'}, håller medan \code{'0'}. \\
+  4 & \code{resync} & in & \code{std_logic} & Tvingar tillbaka räknaren till tick 0. \\
+  5 & \code{sample} & out & \code{std_logic} & Puls vid sampelpunkten. \\
+  6 & \code{bit_done} & out & \code{std_logic} & Puls vid bitperiodens slut. \\
+\end{longbooktable}
+
+En räknare från \code{0} till \code{TICKS_PER_BIT-1} som pulsar \code{sample} vid \code{SAMPLE_TICK}
+och \code{bit_done} vid periodens slut. \code{resync} används en gång per ram, vid SOF; däremellan
+löper timern fritt.
+
+\subsection*{\code{crc15} (\chapref{c13:ch})}
+\begin{longbooktable}{cll>{\raggedright\arraybackslash}p{0.24\linewidth}>{\raggedright\arraybackslash}p{0.30\linewidth}}{\thead{\#} & \thead{Port} & \thead{Riktning} & \thead{Typ} &
+  \thead{Betydelse}}
+  1 & \code{clock} & in & \code{std_logic} & Systemklocka. \\
+  2 & \code{reset_s2_n} & in & \code{std_logic} & Synkroniserad, aktiv låg reset. \\
+  3 & \code{clear} & in & \code{std_logic} & Nollställer registret utan reset. \\
+  4 & \code{enable} & in & \code{std_logic} & Integrerar \code{data} denna flank. \\
+  5 & \code{data} & in & \code{std_logic} & Aktuell bit. \\
+  6 & \code{crc} & out & \code{crc_t} & Registrets nuvarande värde. \\
+  7 & \code{valid} & out & \code{std_logic} & \code{'1'} när registret är idel nollor. \\
+\end{longbooktable}
+
+Ett 15-bitars register med återkoppling. Samma motor både genererar och kontrollerar: sändaren matar
+in sina bitar och läser ut \code{crc}; mottagaren matar in samma bitar \emph{plus} den mottagna
+CRC:n, och \code{valid} går hög om allt stämmer. Ingen lägesomkoppling behövs. \code{clear} behövs
+ändå: en avbruten ram lämnar skräp i registret.
+
+\subsection*{\code{tx_shift_reg} (\chapref{c14:ch})}
+\begin{longbooktable}{cll>{\raggedright\arraybackslash}p{0.24\linewidth}>{\raggedright\arraybackslash}p{0.30\linewidth}}{\thead{\#} & \thead{Port} & \thead{Riktning} & \thead{Typ} &
+  \thead{Betydelse}}
+  1 & \code{clock} & in & \code{std_logic} & Systemklocka. \\
+  2 & \code{reset_s2_n} & in & \code{std_logic} & Synkroniserad, aktiv låg reset. \\
+  3 & \code{load} & in & \code{std_logic} & Laddar \code{data}/\code{bit_count} \textbf{och} lägger
+    ut första biten samma cykel. \\
+  4 & \code{data} & in & \code{byte_t} & Gruppen, med sina giltiga bitar högst. \\
+  5 & \code{bit_count} & in & \code{std_logic_vector(3 downto 0)} & Antal giltiga bitar, 1--8. \\
+  6 & \code{shift} & in & \code{std_logic} & En puls per CAN-bit, från \code{bit_timer.bit_done}. \\
+  7 & \code{tx_bit} & out & \code{std_logic} & Biten som ska drivas nästa bitperiod. \\
+  8 & \code{stuff} & out & \code{std_logic} & \code{'1'} på just den skiftning som lägger ut en
+    stoppbit. \\
+  9 & \code{done} & out & \code{std_logic} & Pulsar när gruppen är helt utsänd. \\
+  10 & \code{bit_valid} & out & \code{std_logic} & \code{'1'} den cykel en ny bit lades ut. \\
+\end{longbooktable}
+
+Skiftar ut MSB först, räknar lika bitar i rad, och sätter in en stoppbit med motsatt värde efter
+\code{MAX_RUN} lika. \textbf{Stoppningstillståndet lever kvar över omladdningar}: regeln gäller
+bitströmmen, inte den enskilda gruppen. \code{stuff} och \code{bit_valid} finns för
+\code{can_controller}s skull: CRC:n matas på \code{bit_valid and not stuff}, eftersom en stoppbit
+inte ingår i checksumman.
+
+\subsection*{\code{rx_shift_reg} (\chapref{c15:ch})}
+\begin{longbooktable}{cll>{\raggedright\arraybackslash}p{0.24\linewidth}>{\raggedright\arraybackslash}p{0.30\linewidth}}{\thead{\#} & \thead{Port} & \thead{Riktning} & \thead{Typ} &
+  \thead{Betydelse}}
+  1 & \code{clock} & in & \code{std_logic} & Systemklocka. \\
+  2 & \code{reset_s2_n} & in & \code{std_logic} & Synkroniserad, aktiv låg reset. \\
+  3 & \code{sample} & in & \code{std_logic} & En puls per CAN-bit, från \code{bit_timer.sample}. \\
+  4 & \code{rx_bus} & in & \code{std_logic} & Bussnivån, giltig vid sampelpunkten. \\
+  5 & \code{bit_count} & in & \code{std_logic_vector(3 downto 0)} & Antal \emph{riktiga} bitar att
+    samla in, 1--8. \\
+  6 & \code{enable} & in & \code{std_logic} & Avgör om \code{sample}-pulser behandlas. \\
+  7 & \code{data} & out & \code{byte_t} & Den insamlade gruppen, högerjusterad. \\
+  8 & \code{valid} & out & \code{std_logic} & Pulsar när \code{bit_count} riktiga bitar samlats
+    in. \\
+  9 & \code{stuff_error} & out & \code{std_logic} & Pulsar om en väntad stoppbit inte inverterar. \\
+  10 & \code{real_bit} & out & \code{std_logic} & Den avstoppade bit som accepterades. \\
+  11 & \code{real_bit_valid} & out & \code{std_logic} & \code{'1'} när en riktig bit accepterades,
+    \code{'0'} för en kastad stoppbit. \\
+\end{longbooktable}
+
+Sändarens spegelbild. Efter \code{MAX_RUN} lika bitar i rad \emph{måste} nästa bit vara den motsatta;
+är den det kastas den och räkningen börjar om, är den det inte är det ett \code{stuff_error}.
+
+\subsection*{\code{can_controller} (\chapref{c11:ch}, \ref{c16:ch}, \ref{c17:ch})}
+Toppnivån för CAN-halvan, och det enda block som känner till ramformatet. Femton portar, i exakt den
+här ordningen, alla ingångar först:
+
+\begin{textdrawing}
+ 1 clock     4 tx_id    7 rx_bus    10 bus_en   13 rx_data
+ 2 reset_n   5 tx_dlc   8 tx_done   11 rx_id    14 rx_valid
+ 3 tx_req    6 tx_data  9 tx_bus    12 rx_dlc   15 error
+\end{textdrawing}
+
+\textbf{Ramsekvensen} en sändning går igenom: SOF (1 bit), arbitreringsfältet (11 bitars
+identifierare + RTR), kontrollfältet (IDE, r0, DLC = 6 bitar), datafältet (0--64 bitar enligt DLC),
+CRC (15 bitar + avgränsare), ACK (lucka + avgränsare) och EOF (7 bitar). Varje fält får ett eget
+laddningstillstånd före sitt skifttillstånd.
+
+\textbf{Bussen} modelleras som öppen dränering: \code{bus_en} avgör om noden driver alls,
+\code{tx_bus} vad den driver. Bussvärdet är \code{'1'} bara om ingen nod drar ned det. Under
+ACK-luckan släpper den sändande noden bussen, och en mottagare med godkänd CRC drar ned den.
+\textbf{Sändaren läser aldrig tillbaka ACK-luckan}; en ram som ingen kvitterar fullbordas precis som
+en kvitterad, och \code{tx_done} pulsar ändå.
+
+\textbf{Arbitrering:} under arbitreringsfältet jämförs varje sänd bit med det som faktiskt ligger på
+bussen. Skickar noden en recessiv bit och läser tillbaka en dominant har den förlorat: den sätter
+\code{error}, pulsar \code{tx_done}, lämnar sändarrollen och går till tomgång. Den \textbf{tar inte}
+emot ramen som vann.
+
+Att \code{tx_done} pulsar även här är avsiktligt: pulsen betyder ”sändningsförsöket är över och
+porten är din igen”, inte ”ramen kom fram”. \code{error} säger vilketdera. Utan den pulsen har en
+anropare ingen flank att vänta på, och registerbanken får aldrig tillbaka sin TX-klar-bit.
+
+\textbf{\code{error}} går hög av fyra orsaker: förlorad arbitrering, \code{stuff_error}, misslyckad
+CRC-kontroll, och en mottagen fjärrram. Den ligger kvar tills nästa sändning eller mottagning
+startar. \textbf{\code{tx_done}} och \textbf{\code{rx_valid}} är pulser på exakt en klockcykel, vilket
+är precis det som gör registerbanken nödvändig.
+
+\subsection{Kända begränsningar som drivrutinen märker av}
+\label{app:project:limits}
+
+Förenklingarna mot riktig CAN listas i sin helhet i \secref{c19:sec:gaps}, och från protokollhållet i
+\canref{7}. Tre av dem syns ända ut i registerkartan och måste därför stå här också, eftersom
+parallellklassen skriver kod mot dem \textemdash{} det är samma tre som \canbook{} lyfter fram, och
+den boken läser båda klasserna:
+
+\begin{itemize}
+  \item \textbf{En förlorad arbitrering går inte att skilja från en lyckad sändning på STATUS
+    bit 0.} Båda ger tillbaka biten, eftersom kontrollern pulsar \code{tx_done} också när den
+    avbryter. Det är avsiktligt: biten betyder ”porten är fri”, inte ”ramen kom fram”. En drivrutin
+    som vill veta utfallet läser \code{ERROR_FLAGS} efter att bit 0 kommit tillbaka.
+
+    Det här var en gång en riktig bugg, och det är värt att veta varför den inte är det längre.
+    Sattes bit 0 enbart av \code{tx_done}, och pulsade \code{tx_done} bara vid EOF, blev biten
+    liggande låg efter varje förlorad arbitrering och noden kunde inte sända igen förrän den
+    nollställdes på resetknappen \textemdash{} på en tvånodsbuss alltså i normal drift. Tre saker gör
+    att den inte kan uppstå igen, och de är medvetet överlappande: kontrollern pulsar \code{tx_done}
+    även vid avbrott (\chapref{c17:ch}), banken sätter bit 0 också på en stigande flank av
+    \code{error} medan biten är låg (\chapref{c18:ch}), och \code{TX_ABORT} finns som nödutgång.
+    \code{can_controller_tb} fall 2 och \code{register_bank_tb} fall 10--11 kontrollerar de tre.
+  \item \textbf{\code{error} är en bit för fyra orsaker.} Drivrutinen kan se \emph{att} något gick
+    fel, aldrig \emph{vad}. Omsändningslogik som skiljer på förlorad arbitrering och trasig CRC går
+    inte att skriva mot det här gränssnittet.
+  \item \textbf{Ingen buffring på mottagarsidan.} Kontrollern håller en ram. Kommer nästa innan den
+    förra lästs ut skrivs den över. Registerbanken vidarebefordrar begränsningen i stället för att
+    dölja den; se bilaga~\ref{app:protocol}.
+\end{itemize}
+
+% ------------------------------------------------------------------------------------------
+\section{Modulerna i \code{bridge/}}
+\label{app:project:bridge}
+
+\subsection*{\code{register_bank} (\chapref{c18:ch})}
+Sexton portar, i den här ordningen:
+
+\begin{textdrawing}
+ 1 clock        5 reg_wdata    9 rx_data     13 tx_id
+ 2 reset_s2_n   6 tx_done     10 rx_valid    14 tx_dlc
+ 3 reg_index    7 rx_id       11 error       15 tx_data
+ 4 reg_write    8 rx_dlc      12 reg_rdata   16 tx_req
+\end{textdrawing}
+
+Översätter kontrollerns encykelspulser till klibbiga, pollbara nivåer, och registerskrivningar till
+händelser. Semantiken i sin helhet står i bilaga~\ref{app:protocol}; den är kontraktet mot
+parallellklassen och får inte ändras ensidigt. \code{reg_rdata} är \textbf{kombinatorisk}: att låsa
+ett läst värde är bryggans ansvar, inte bankens.
+
+\subsection*{\code{spi_reg_bridge} (\chapref{c19:ch})}
+Tio portar, i den här ordningen: \code{clock}, \code{reset_s2_n}, \code{ss_active}, \code{rx_data},
+\code{rx_valid}, \code{reg_rdata}, \code{tx_data}, \code{reg_addr}, \code{reg_wdata},
+\code{reg_write}.
+
+Implementerar transaktionen ur bilaga~\ref{app:protocol}: en kommandobyte plus fyra databytes, alltid
+exakt fem. Vid läsning \textbf{låses registervärdet en gång} i slutet av kommandobyten; vid skrivning
+verkställs ingenting förrän femte byten är hel. Går \code{ss_active} låg dessförinnan avbryts
+transaktionen helt, utan sidoeffekter. \code{reg_addr} \textbf{håller} det avkodade indexet tills
+nästa kommandobyte avkodar ett nytt.
+
+\subsection*{\code{can_spi_node} (\chapref{c19:ch})}
+Nio portar, i den här ordningen:
+
+\begin{textdrawing}
+ 1 clock      4 mosi     7 rx_bus
+ 2 reset_n    5 ss       8 tx_bus
+ 3 sclk       6 miso     9 bus_en
+\end{textdrawing}
+
+Rent strukturell toppnivå. Instansierar \code{spi_slave}, \code{spi_reg_bridge},
+\code{register_bank} och \code{can_controller}, plus en \code{meta_prev} för reset. Ingen funktionell
+logik här.
+
+Ordningen är SPI:s fyra ledningar som en grupp, \code{sclk}/\code{mosi}/\code{ss}/\code{miso}, och
+därefter CAN-bussens tre. \code{miso} ligger alltså bland SPI-portarna och inte hos de andra
+utgångarna, så att de fyra pinnarna står i samma ordning som i kopplingstabellen. Det spelar roll:
+\code{can_spi_node_tb} binder positionellt som allt annat, och \code{miso} och \code{rx_bus} har
+samma typ, så en förväxling av dem passerar analysen utan ett ord och ger en nod som aldrig svarar.
+
+% ------------------------------------------------------------------------------------------
+\section{Testplan}
+\label{app:project:tests}
+
+Gruppen skriver inga testbänkar i det här projektet. Nio är utdelade, och de är kontraktet: sju
+modultestbänkar och två systemtestbänkar.
+
+\begin{booktable}{lL}
+  \thead{Testbänk} & \thead{Kontrollerar} \\
+  \midrule
+  \code{meta_prev_tb} & Två vippors fördröjning, för både en bit och en vektor. \\
+  \code{bit_timer_tb} & \code{sample} och \code{bit_done} vid rätt tick; \code{resync};
+    \code{enable}. \\
+  \code{crc15_tb} & CRC-värden för kända sekvenser; \code{valid}; \code{clear}. \\
+  \code{tx_shift_reg_tb} & MSB-först skiftning, stoppning efter fem lika, \code{done}-tajmingen. \\
+  \code{rx_shift_reg_tb} & Deserialisering, avstoppning, \code{stuff_error}, \code{real_bit}. \\
+  \code{register_bank_tb} & Elva fall, från resettillståndet till \code{TX_ABORT} och de två vägarna
+    tillbaka till TX klar. \\
+  \code{spi_reg_bridge_tb} & Fyra fall: en skrivning, en läsning byte för byte, ett avbrott på
+    \code{ss_active}, och en kommandobyte med reserverad bit satt. \\
+\end{booktable}
+
+\code{can_controller_tb} sätter två noder på en gemensam wired-AND-buss och kontrollerar att den ena
+tar emot den andras ram, och att arbitrering löses upp rätt när båda sänder samtidigt. Den hoppas
+över av bygget tills kontrollern har en mottagarväg (bilaga~\ref{app:sim}).
+
+\code{can_spi_node_tb} gör samma sak ett lager ut: två kompletta noder på samma buss, men varje nod
+driven av en modellerad SPI-master på sina fyra pinnar. Den spelar upp protokollspecifikationens
+genomarbetade exempel genom hela kedjan och följer en ram från en SPI-skrivning på den ena noden till
+en SPI-läsning på den andra. Sju fall: resettillståndet, det genomarbetade exemplet, ogiltiga
+kommandobytes och reserverade index, \code{TX_ABORT}, avbrottsregeln, extra bytes under samma
+\code{SS}, och till sist sändningen och mottagningen.
+
+Det är den \textbf{enda} testbänk i kursen som driver \code{sclk}, \code{mosi} och \code{ss} som
+riktiga vågformer. \code{spi_reg_bridge_tb} matar bryggan färdiga bytes och rör aldrig en pinne, så
+allt mellan ledningen och byten \textemdash{} synkroniserarna, flankdetekteringen på SCK,
+\code{ss_active}-ramningen \textemdash{} provas här eller ingenstans.
+
+\subsection{Egen verifiering}
+\label{app:project:ownverify}
+
+\code{can_spi_node_tb} är snäll mot tidskraven med flit: den håller 200 ns tyst kring varje
+\code{SS}-flank, där protokollet kräver minst 60 ns. Det är rätt för en testbänk som ska skilja
+logikfel från tidsfel, men det betyder också att \textbf{ingen} utdelad testbänk pressar
+specifikationens tidsminima.
+
+Det är den verifiering projektet ber gruppen göra själv: kopiera \code{can_spi_node_tb}, krymp den
+tysta perioden ner mot 60 ns, och ta reda på vid vilket värde noden slutar svara och varför. Svaret
+ligger i \code{spi_slave}s synkroniserare, och det är det enda stället där kursen låter dig
+\emph{mäta} en marginal i stället för att läsa den. Övning~\ref{c19:ex:node}(b) ställer frågan i sin
+helhet.
+
+\subsection{Checklista före inlämning}
+\label{app:project:checklist}
+
+\begin{itemize}
+  \item Alla nio utdelade testbänkar passerar, \code{can_controller_tb} och \code{can_spi_node_tb}
+    inräknade. \textbf{Kontrollera att de verkligen \emph{kördes} och inte hoppades över}, se rutan
+    nedan.
+  \item \code{make build-project} går grönt från ett rent utcheckat repo.
+  \item Portordningen stämmer mot tabellerna i \secref{app:project:controller} och
+    \ref{app:project:bridge}.
+  \item Inga värden hårdkodade förbi \code{can_def}.
+  \item Varje entitets gränssnitt är kommenterat.
+  \item \file{CONTRIBUTORS.md} är aktuell.
+  \item \code{main} innehåller inga commits som inte gått via en granskad PR.
+\end{itemize}
+
+\begin{warning}
+\textbf{Överhoppad är inte godkänd.} \code{can_controller_tb} grindas på om
+\file{can_controller.vhd} innehåller \chapref{c17:ch}:s CRC-grindning, letad upp med en textsökning
+på de interna signalnamn kapitlet använder. Skriver ni en korrekt mottagarväg med andra namn
+rapporteras testbänken som \emph{skipped}, och eftersom överhoppad aldrig är underkänd ser
+checklistan uppfylld ut medan kursens pass/fail-testbänk aldrig kördes. Kör därför
+
+\begin{shell}
+CI_BUILD_ALL=1 make build-project
+\end{shell}
+
+minst en gång före inlämning, och lämna in det utfallet.
+\end{warning}
+
+% ------------------------------------------------------------------------------------------
+\section{Examination och betyg}
+\label{app:project:grading}
+
+Kursen examineras genom \textbf{ett grupprojekt} och \textbf{två praktiska tentamina}. Totalt 100
+poäng.
+
+\begin{booktable}{lllr}
+  \thead{Moment} & \thead{Var} & \thead{Form} & \thead{Poäng} \\
+  \midrule
+  Praktisk tentamen 1, sekvensnät & \chapref{c9:ch} & Individuell, 3 h & 25 \\
+  Grupprojekt, en CAN-nod i VHDL & \chapref{c10:ch}--\ref{c19:ch} & Grupp om 4--5 & 50 \\
+  Praktisk tentamen 2, CAN-moduler & \chapref{c20:ch} & Individuell, 3 h & 25 \\
+\end{booktable}
+
+\begin{booktable}{lL}
+  \thead{Betyg} & \thead{Krav} \\
+  \midrule
+  \textbf{IG} & Under 50 poäng, eller ett underkänt projekt. \\
+  \textbf{G} & Minst 50 poäng totalt \textbf{och} godkänt projekt. \\
+  \textbf{VG} & Minst 80 poäng totalt \textbf{och} väl godkänt projekt. \\
+\end{booktable}
+
+Projektet är alltså en spärr i båda riktningarna. Det står för halva kursen, det är där det mesta av
+arbetet ligger, och ett underkänt projekt går inte att kompensera med två starka tentor.
+
+\subsection{Projektets 50 poäng}
+\label{app:project:points}
+
+\begin{booktable}{LrL}
+  \thead{Del} & \thead{Poäng} & \thead{Vad som bedöms} \\
+  \midrule
+  Designen & 30 & Modulerna fungerar enligt specifikation och testbänkarna passerar. \\
+  Arbetssättet & 12 & Git-historik, PR:er, granskningarnas kvalitet, seminariet,
+    \file{CONTRIBUTORS.md}. \\
+  Redovisningen & 8 & Slutredovisningen: att gruppen kan förklara vad den byggt och varför. \\
+\end{booktable}
+
+Betyget sätts på gruppen. Är insatsen påtagligt ojämn kan enskilda betyg justeras; det är den enda
+anledningen till att \file{CONTRIBUTORS.md} ska hållas aktuell löpande och inte skrivas kvällen före.
+
+\textbf{Godkänt projekt} kräver en \textbf{komplett nod}: alla nio utdelade testbänkar ska passera,
+alltså \code{CI_BUILD_ALL=1 make build-project} grönt rakt igenom. Kontrollern ensam räcker inte, och
+skälet ligger efter kursen: noden följer med till CAN-labben i nästa kurs i inbyggda system, där en
+drivrutin ska nå den över SPI. En kontroller utan registerbank och brygga går inte att nå från någon
+drivrutin alls, och en nod vars delar fungerar var för sig men inte ihop går inte heller att nå.
+
+\textbf{Väl godkänt} kräver dessutom den egna verifieringen i \secref{app:project:ownverify}, att
+koden är genomgående dokumenterad och stilistiskt konsekvent, och att granskningskulturen syns i
+repots historik.
+
+Bring-up på riktig hårdvara bedöms \textbf{inte}. Ett trasigt kit eller en trasig koppling får inte
+kosta poäng. Allt som bedöms går att köra i GHDL på en vanlig laptop.
+
+\subsection{De praktiska tentorna}
+\label{app:project:exams}
+
+Båda är individuella, tre timmar, vid datorn med GHDL. Formen är densamma i båda: fristående
+uppgifter, oberoende av varandra och ordnade ungefär efter stigande svårighet.
+
+De flesta uppgifterna är \textbf{skrivuppgifter}: en utdelad, självkontrollerande testbänk och en
+beskrivning av modulen den driver, med portordning och beteende. \Chapref{c20:ch} har därutöver
+\textbf{läsuppgifter}: ett tidsdiagram eller en SPI-transaktion att tolka på papper. De har ingen
+testbänk, av precis det skäl som gör dem värda att ställa \textemdash{} att läsa en vågform är en
+färdighet i sig, och den examineras inte av att skriva VHDL. De rättas mot ett facit, och delvis rätt
+svar ger delpoäng på samma sätt som delvis korrekt logik gör.
+
+Delvis korrekt logik ger delpoäng: lämna aldrig in en tom fil för att modulen inte blev klar, och
+samma sak gäller ett halvt uttolkat tidsdiagram. Rättningen läser koden, inte bara testbänkens
+utfall; en modul som passerar genom att göra något annat än det som efterfrågades ger inte full poäng.
+
+\Chapref{c9:ch} omfattar \chapref{c1:ch} till \ref{c8:ch}, med tyngdpunkt på sekvensnät: register,
+räknare, skiftregister, timers, synkroniserare och enkla Mooremaskiner. Ett övningsprov delas ut i
+förväg. \Chapref{c20:ch} omfattar projektets moduler: bittajming, CRC, bitstoppning åt båda hållen,
+ramsekvensering, registersemantik och SPI-transaktionen.
+
+\subsection{Hjälpmedel}
+\label{app:project:aids}
+
+Det här avsnittet är den \textbf{auktoritativa} listan. Står något annat någon annanstans gäller det
+som står här.
+
+\textbf{Tillåtet vid båda tentorna:}
+\begin{itemize}
+  \item Allt kursmaterial: den här boken, föreläsningarnas README och samtliga appendix. Vid
+    \chapref{c20:ch} hör registerkartan och protokollspecifikationen (bilaga~\ref{app:protocol})
+    förstås dit; vid \chapref{c9:ch} finns de också tillgängliga, men examineras inte.
+  \item All VHDL du själv skrivit under kursen, och vid \chapref{c20:ch} även gruppens projektkod.
+  \item Egen dator med GHDL, och CircuitVerse. Båda tentorna: att rita en krets innan man skriver
+    den är ofta snabbare.
+\end{itemize}
+
+\textbf{Inte tillåtet:}
+\begin{itemize}
+  \item \textbf{Kommunikation med andra}, i någon form.
+  \item \textbf{Verktyg som genererar eller förklarar VHDL åt dig}: språkmodeller, kodassistenter och
+    liknande, oavsett om de skriver koden eller bara resonerar om den. Gränsen går inte vid vem som
+    trycker på tangenterna utan vid vems förståelse som prövas.
+  \item \textbf{Sökning på nätet efter lösningar.} CircuitVerse körs i en webbläsare, så datorn är
+    uppkopplad, och det förutsätter att du håller dig till kursmaterialet av egen kraft. Att slå upp
+    GHDL:s eller VHDL:s dokumentation är tillåtet; att söka efter en färdig modul är det inte.
+\end{itemize}
+
+Är du osäker på om något är tillåtet: fråga före tentan, inte under.
+
+Att gruppens projektkod är tillåten vid \chapref{c20:ch} är ett medvetet val. Ni byggde den.
+Uppgifterna är i stället skrivna som varianter och reparationer, så att de skiljer sig från
+projektets moduler på just den punkt som kräver att man förstått dem.
+
+\subsection{Omexamination och frånvaro}
+\label{app:project:reexam}
+
+Båda tentorna går att skriva om. Projektet lämnas in en gång, med möjlighet till komplettering efter
+besked från handledaren: en komplettering rättas mot godkänt, inte mot väl godkänt.
+
+Kodgranskningsseminariet i \chapref{c15:ch} och slutredovisningen i \chapref{c19:ch} är projektets två
+obligatoriska hållpunkter. Missad närvaro tas igen efter överenskommelse med handledaren. Övriga pass
+har ingen närvaroplikt; grupprojektet har däremot en gruppdynamik som inte tål att någon uteblir,
+vilket är ett annat och starkare skäl att komma.
+
+% ------------------------------------------------------------------------------------------
+\section{Praktiska tips}
+\label{app:project:tips}
+
+\begin{itemize}
+  \item Rita tidsdiagrammet innan ni skriver skiftregistren. De flesta fel där är tajmingfel på en
+    cykel, inte logikfel, och de syns på papper innan de syns i simulatorn.
+  \item Börja med \code{bit_timer} och \code{crc15} om ni är osäkra på var ni ska börja. De är de
+    enklaste, de beror inte på något, och de går att bli helt klar med.
+  \item Läs de utdelade testbänkarna. De säger mer exakt vad varje modul lovar än någon prosa gör,
+    och de är skrivna för att läsas.
+  \item Testa stoppningen noggrant, åt båda hållen. Det är projektets vanligaste felkälla.
+  \item Håll \code{can_spi_node} strukturell. Så fort det smyger sig in logik i toppnivån blir den
+    omöjlig att testa isolerat.
+  \item Prata med parallellklassen tidigt, och gör det om registerkartan snarare än om er kod.
+\end{itemize}
+
+\begin{aside}
+\textbf{Gemensam dokumentation.} Två dokument delas med mjukvarugruppen och är kontraktet mellan
+klasserna: registerkartan (vad registren betyder) och protokollspecifikationen (hur de nås), båda
+återgivna i bilaga~\ref{app:protocol}. Ändras något i dem måste båda klasserna veta om det innan
+ändringen mergas. Dokumenten uppdateras \emph{före} koden, aldrig efter.
+\end{aside}

@@ -1,0 +1,39 @@
+% Chapter 14, typeset from lectures/L14: Appendix A becomes sections 14.1-14.6, Appendix B the
+% exercises.
+
+\chapter{Transmit shift register and bit stuffing}
+\label{c14:ch}
+
+{\large\itshape Serialising out onto the bus, with the same bit stuffing rule as in
+\chapref{c10:ch}, now in VHDL.\par}
+
+\begin{chapterbox}{In this chapter}
+\begin{itemize}
+  \item \code{tx_shift_reg}: serialisation most significant bit first, and insertion of stuff bits.
+  \item Why a loaded group's first bit has to be presented immediately on reload, and why \code{done}
+    waits one extra shift.
+  \item Why the stuffing state survives across reloads.
+  \item \code{stuff} and \code{bit_valid}, and why the CRC engine is gated on them.
+  \item Instantiating \code{tx_shift_reg} inside \code{can_controller}.
+\end{itemize}
+\end{chapterbox}
+
+\code{tx_shift_reg} serialises a group of up to 8 bits MSB first onto the bus and \textbf{inserts} a
+stuff bit after five identical transmitted bits in a row. Its mirror image, \code{rx_shift_reg}
+(which \emph{discards} those stuff bits), is \chapref{c15:ch}.
+
+The bit stuffing rule itself is unchanged from \secref{c10:sec:stuffing} and \canref{3}, where you
+applied it on paper to a whole bit sequence at a time, able to look back over the bits you had
+already written down. Here it runs continuously, one bit per clock, with no sequence to look back
+over and no ``end of buffer'' to stop at: whatever the rule needs to remember has to live in a
+register. \code{can_controller} (\chapref{c16:ch}--\ref{c17:ch}) reuses \textbf{one single}
+\code{tx_shift_reg} for every stuffed field, reloading it and changing its bit count group by group.
+The unstuffed tail (CRC delimiter, ACK slot and ACK delimiter, EOF) is fixed bits that
+\code{can_controller} drives directly, past this register.
+
+This is the first module where drawing the timing diagram before you write the code pays off. Take
+the time; most failures here are one-cycle timing errors, not logic errors.
+
+\input{chapters/14/txshiftreg}
+\input{chapters/14/summary}
+\input{chapters/14/exercises}

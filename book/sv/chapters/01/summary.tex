@@ -1,0 +1,42 @@
+% Avsnitt 1.7, ur lectures/L01/README.md: målen, kontrollfrågorna och blicken framåt.
+
+\section{Sammanfattning}
+\label{c1:sec:review}
+
+\needspace{6\baselineskip}
+\subsection*{Det här ska du kunna nu}
+\begin{itemize}
+  \item Härleda en summa-av-produkter ur en sanningstabell, och sedan bygga och simulera nätet i
+    CircuitVerse.
+  \item Tillämpa De Morgan för att flytta en inversion genom en grind, och använda det för att
+    realisera en funktion i en grinduppsättning som saknar operatorn du utgick från.
+  \item Läsa och skriva en kombinatorisk VHDL-modul, en \code{entity} med
+    \code{std_logic}-portar och en \code{architecture} som driver dess utgång, och säga varför
+    VHDL skiljer de två åt.
+  \item Förklara varför en konkurrent tilldelning beskriver en ledning snarare än en sats som körs
+    en gång, och varför en signal som ligger kvar på \code{'U'} eller \code{'X'} är ett fel och
+    inte ett värde.
+  \item Köra en utdelad testbänk och avgöra om din modul klarade den.
+\end{itemize}
+
+\needspace{6\baselineskip}
+\subsection*{Frågor att testa dig själv med}
+\begin{enumerate}
+  \item Vad är skillnaden mellan en \code{entity} och en \code{architecture}, och varför skiljer
+    VHDL på dem?
+  \item Varför är \code{x <= a or b;} inte ”en sats som körs en gång”? Vad beskriver den i
+    stället?
+  \item I bromsassistenten läggs förarens pedal in med OR sist, i stället för att gå genom
+    felhanteringslogiken. Vad går sönder om du kopplar den tvärtom?
+\end{enumerate}
+
+\needspace{6\baselineskip}
+\subsection*{Blicken framåt}
+\Chapref{c2:ch} går vidare med:
+\begin{itemize}
+  \item Karnaughdiagram: att hitta det \emph{minsta} grindnätet, inte bara ett korrekt.
+  \item \code{std_logic_vector}, \code{process} och \code{case}.
+  \item Submoduler, demonstrerade på en tvåsiffrig hexadecimal display driven av åtta
+    strömbrytare.
+  \item Självkontrollerande testbänkar: att verifiera din egen VHDL utan kort.
+\end{itemize}

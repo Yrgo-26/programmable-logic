@@ -1,0 +1,399 @@
+% Avsnitt 19.3-19.8, ur lectures/L19/appendix/b_fpga_bringup_and_review.md och lectures/L19/README.md.
+
+\section{Att konstruera \code{can_spi_node}}
+\label{c19:sec:node}
+
+\code{can_controller} är \textbf{inte} den entitet som ska upp på kortet, och det är värt att vara
+precis med. Dess gränssnitt ligger på registernivå: \code{tx_id} är 11 bitar, \code{tx_dlc} 4,
+\code{tx_data} 64, plus \code{tx_req} och fem statusutgångar. Ingenting på ett DE0-CV erbjuder ett så
+brett gränssnitt, och i det färdiga systemet kommer de ingångarna från drivrutinens register snarare
+än från en mänsklig hand.
+
+\Chapref{c18:ch} byggde lagret som gör dem nåbara, och \secref{c19:sec:bridge} transporten framför
+det. Den sista modul boken skriver är alltså \file{can_spi_node.vhd}: toppnivån som binder ihop
+\code{spi_slave}, \code{spi_reg_bridge}, \code{register_bank} och \code{can_controller} till en nod,
+och exponerar exakt två saker mot omvärlden, SPI och CAN-bussen.
+
+Till skillnad från varje annan modul i projektet kommer den utan egen testbänk på modulnivå, och det
+är avsiktligt: varje block inuti den har redan en, och det som återstår \textemdash{} pinnar,
+kopplingar och spänningsnivåer \textemdash{} är precis det en simulering inte kan modellera. Kortet
+är dess testbänk, och bring-up-stegen i \secref{c19:sec:bringup} är hur man läser den. (Det finns en
+utdelad systemtestbänk, \code{can_spi_node_tb}, som driver två kompletta noder från modellerade
+SPI-mastrar; den är den enda i boken som driver \code{sclk}, \code{mosi} och \code{ss} som riktiga
+vågformer.)
+
+\subsection*{Gränssnitt}
+
+\begin{booktable}{@{}p{4.6em}p{3.4em}p{5.2em}L@{}}
+  \thead{Port} & \thead{Riktn.} & \thead{Typ} & \thead{Betydelse} \\
+  \midrule
+  \code{clock} & in & \code{std_logic} & 50 MHz-oscillatorn på kortet. Konstruktionens enda klocka. \\
+  \code{reset_n} & in & \code{std_logic} & Rå, aktiv låg reset, direkt från en pinne. Asynkron; den
+    här nivån synkroniserar den. \\
+  \code{sclk} & in & \code{std_logic} & SPI-klockan från mastern. Används aldrig som klocka. \\
+  \code{mosi} & in & \code{std_logic} & Ut från mastern, in i slaven. \\
+  \code{ss} & in & \code{std_logic} & Chip select, aktiv låg. Ramar in transaktionen. \\
+  \code{miso} & out & \code{std_logic} & Ut från slaven, in i mastern. \\
+  \code{rx_bus} & in & \code{std_logic} & CAN-bussens nivå, direkt från pinnen och asynkron.
+    \code{can_controller} synkroniserar den själv. \\
+  \code{tx_bus} & out & \code{std_logic} & Biten den här noden vill driva. \\
+  \code{bus_en} & out & \code{std_logic} & Om den driver över huvud taget. \\
+\end{booktable}
+
+De tre bussportarna är det gränssnitt på digitalsidan som en riktig CAN-transceiver presenterar
+(\chapref{c10:ch}), och det är därför de lämnar konstruktionen som tre separata signaler i stället
+för en ledning. Att göra en enda fysisk ledning av dem är ett jobb på kortnivå, och
+\secref{c19:sec:wire} handlar om det.
+
+Ordningen är SPI:s fyra ledningar som en grupp, \code{sclk}/\code{mosi}/\code{ss}/\code{miso}, och
+därefter CAN-bussens tre. \code{miso} ligger alltså bland SPI-portarna och inte hos de andra
+utgångarna, så att de fyra pinnarna står i samma ordning som i kopplingstabellen i
+\secref{c19:sec:bringup}. Det spelar roll: \code{can_spi_node_tb} binder positionellt som allt annat,
+och \code{miso} och \code{rx_bus} har samma typ, så en förväxling av dem passerar analysen utan ett
+ord och ger en nod som aldrig svarar.
+
+Det finns inga generics. Allt konstruktionen behöver som en pinne inte kan leverera är antingen en
+konstant i \code{can_def} eller ett register som drivrutinen skriver.
+
+\subsection*{Beteende: strukturellt, och det är poängen}
+\code{can_spi_node} har ingen tillståndsmaskin, ingen protokollkunskap och nästan ingen logik alls.
+Den har exakt tre uppgifter:
+\begin{itemize}
+  \item \textbf{Instansiera de fyra blocken och koppla dem på rad.} \code{spi_slave} gör om
+    SCK/MOSI/SS till bytes; \code{spi_reg_bridge} gör om bytes till registeråtkomster;
+    \code{register_bank} gör om registeråtkomster till signaler på kontrollernivå;
+    \code{can_controller} gör om dem till en ram. Varje gräns är ett av de kontrakt som redan
+    verifierats av en utdelad testbänk, så om kedjan beter sig illa sitter felet i en koppling här,
+    inte i ett block.
+  \item \textbf{Synkronisera reseten.} En enda \code{meta_prev}-instans tar den råa \code{reset_n}
+    och producerar den \code{reset_s2_n} som varje delblock tar. \code{can_controller} är undantaget
+    som bekräftar regeln: den äger sin resetsynkroniserare internt, vid sidan av den för
+    \code{rx_bus}, så den här nivån matar den med den råa \code{reset_n} och synkroniserar bara åt
+    blocken på SPI-sidan. Det ger tre \code{meta_prev}-instanser i hela konstruktionen \textemdash{}
+    två inuti \code{can_controller}, en här.
+  \item \textbf{Låt portarna mot kontrollern gå rakt över.} \code{register_bank}s \code{tx_id},
+    \code{tx_dlc}, \code{tx_data} och \code{tx_req} till \code{can_controller}, och dess
+    \code{tx_done}, \code{rx_id}, \code{rx_dlc}, \code{rx_data}, \code{rx_valid} och \code{error}
+    tillbaka. Port till port, ingenting emellan. \Chapref{c18:ch} konstruerade de två gränssnitten så
+    att de speglar varandra just för att det ska stämma.
+\end{itemize}
+
+Om en regel i den här filen någonsin behöver nämna ett CAN-fält eller en SPI-byte hör den hemma i en
+annan fil. Det är testet att tillämpa medan du skriver den.
+
+% ------------------------------------------------------------------------------------------
+\section{Att få ut bussen på en ledning}
+\label{c19:sec:wire}
+
+\code{tx_bus} och \code{bus_en} är ett \emph{par}, inte en signal: konstruktionen säger ”driv
+dominant”, ”släpp”, aldrig ”driv recessivt”. Två noders push-pull-utgångar knutna till en ledning
+skulle slåss med varandra i samma ögonblick som den ena drev låg och den andra hög. Två sätt att få
+den delade ledningen att uppföra sig:
+
+\paragraph{Med en transceiver}
+Vilket är vad en riktig nod använder: \code{tx_bus} går till dess TXD, dess RXD kommer tillbaka som
+\code{rx_bus}, och transceivern sköter arbetet med öppen dränering analogt.
+
+\paragraph{Utan en}
+Med två DE0-CV kopplade direkt ihop för tvånodsdemot gör FPGA:ns egen I/O jobbet. Välj en GPIO-pinne
+och driv den med öppen dränering:
+
+\begin{vhdlcode}
+GPIO_0(2) <= '0' when ((bus_en = '1') and (tx_bus = '0')) else 'Z';
+rx_bus    <= GPIO_0(2);
+\end{vhdlcode}
+
+med en pull-up som återställer \code{'1'} medan varje nod släppt ledningen \textemdash{} FPGA:ns
+svaga pull-up aktiverad på den pinnen i Pin Planner, eller ett externt motstånd. Det är
+\secref{c10:sec:can}:s wired-AND-regel gjord fysisk, i en enda konkurrent tilldelning.
+\code{GPIO_0(0)} och \code{GPIO_0(1)} är värda att driva med \code{tx_bus} och \code{bus_en}
+oregistrerade också, enbart för att en logikanalysator ska kunna se vad noden \emph{avsåg} vid sidan
+av vad ledningen faktiskt gjorde; varje oanvänt index drivs \code{'Z'}.
+
+Ingenting här synkroniseras, av samma skäl som \code{reset_n} inte synkroniseras innan den når
+\code{can_controller}: kontrollern äger sina egna asynkrona ingångar, så pinnen dras rakt till porten
+\code{rx_bus}.
+
+Pinnindexen är en bekvämlighet i Pin Planner, inte ett krav. Vilka tre pinnar som helst på listen
+fungerar, så länge två ihopkopplade kort är överens; se bilaga~\ref{app:quartus}.
+
+% ------------------------------------------------------------------------------------------
+\section{Valfritt: en wrapper på kortnivå för felsökning}
+\label{c19:sec:wrapper}
+
+Allt ovanstående går bara att nå över SPI, vilket betyder att när länken inte fungerar har du ingen
+möjlighet att se in i den. En liten wrapper med knappar och lysdioder, som står bredvid
+\code{can_spi_node} i stället för att ersätta den, är värd en timme om bring-upen kör fast
+\textemdash{} och de tre beslut den tvingar fram är värda att förstå oavsett om du bygger den eller
+inte.
+
+Wrappern driver \code{register_bank}s portar direkt från knappar och omkopplare och låser dess
+statusutgångar på lysdioder:
+
+\lecfig[0.86]{lectures/L19/appendix/images/can_demo.png}{En wrapper på kortnivå: knappar och
+omkopplare in i registerbanken, statusbitarna ut på lysdioder.}{c19:fig:demo}
+
+\begin{itemize}
+  \item \textbf{En hållen knapp måste bli en encykelspuls}, och inte bara för snygghetens skull. En
+    knapp som hålls i några millisekunder är hundratusentals klockcykler vid 50~MHz. Mata in det rakt
+    i \code{tx_req} så startar kontrollern en ny ram i samma ögonblick som den förra tar slut, om och
+    om igen \textemdash{} och varje passage genom starttillståndet suddar \code{error} innan något
+    hunnit läsa det. Alltså: \textbf{synkronisera} den råa pinnen med en \code{meta_prev},
+    \textbf{studsfiltrera} den synkroniserade nivån med en räknare som accepterar ett nytt värde
+    först när det legat kvar i ungefär 10~ms, och \textbf{därefter} flankdetektera den. Alla tre, i
+    den ordningen: att flankdetektera före studsfiltreringen ger en puls per studs, och att
+    studsfiltrera före synkroniseringen matar räknaren med en signal som aldrig samplats säkert. Det
+    här är samma konvertering som \code{register_bank} utför för \code{TX_SEND} (\chapref{c18:ch}),
+    och det är därför banken gör wrappern valfri snarare än nödvändig.
+  \item \textbf{En omkopplarbank är bedömningsfrågan.} Tio omkopplare som korsar in i klockdomänen
+    synkroniseras bit för bit, vilket tar bort metastabiliteten men inte \emph{skevheten}: två
+    omkopplare som slås om samtidigt kan landa en klocka isär, så \code{tx_id} skulle kortvarigt
+    kunna läsa ett värde som aldrig stod på omkopplarna. Det är acceptabelt bara därför att en
+    människa ställer in dem och sedan låter dem vara. Koppla samma tio bitar till något som ändras
+    varje cykel och en bit-för-bit-synkroniserare är helt fel verktyg \textemdash{} då krävs en
+    handskakning, eller en kodning där bara en bit ändras i taget. Värt att säga rakt ut, eftersom
+    ”bredda bara synkroniseraren” är en vana som förr eller senare biter ifrån.
+  \item \textbf{Statuslysdioder behöver låsas}, eftersom \code{tx_done} och \code{rx_valid} är pulser
+    på 20~ns. Det är samma problem som \code{register_bank} löser åt drivrutinen, och att lösa det
+    två gånger på två ställen är precis så de två kopiorna glider isär \textemdash{} så driv
+    lysdioderna från bankens STATUS-bitar i stället för från kontrollerns pulser, så förblir wrappern
+    en wrapper.
+\end{itemize}
+
+% ------------------------------------------------------------------------------------------
+\section{Bring-up}
+\label{c19:sec:bringup}
+
+Bring-upen har två halvor: CAN-sidan mellan två kort, och SPI-sidan mellan en mikrokontrollerhatt och
+kortet. Ta dem i den ordningen. CAN-halvan behöver ingen mikrokontroller alls, så den går att köra
+medan hatten fortfarande ligger på lödbordet, och den utesluter en hel felklass innan någon
+SPI-ledning finns att misstänka.
+
+När konstruktionen passerar simuleringen fullt ut, syntetisera och programmera \code{can_spi_node}:
+New Project Wizard, enheten \code{5CEBA4F23C7N}, Pin Planner, Compile, Programmer. Stegen står i
+bilaga~\ref{app:quartus}, som är den auktoritativa referensen för det flödet, ända ner till tillägget
+för Cyclone V-enheter och till att få USB-Blastern synlig för Programmer. Notera att \code{CLOCK_50}
+är den enda pinne du inte får välja fritt.
+
+\subsection*{CAN-halvan: två kort på en buss}
+Två kort, deras busslinjer på \code{GPIO_0(2)} knutna ihop till \textbf{en} ledning med gemensam
+jord, och drivningen med öppen dränering ur \secref{c19:sec:wire} gör den delade ledningen till ett
+wired-AND.
+
+\begin{enumerate}
+  \item \textbf{Ett ensamt kort.} Busslinjen bär ingenting annat än pull-upen, så noden läser
+    tillbaka exakt den nivå den driver: en loopback. \code{tx_bus} och \code{bus_en} ska växla fält
+    för fält på en logikanalysator via \code{GPIO_0(0)}/\code{GPIO_0(1)}, \code{tx_done} pulsa vid
+    slutet av EOF, och \code{error} aldrig gå hög.
+  \item \textbf{Två kort, en ledning.} Tryck på en knapp på det ena kortet och en lysdiod ska tändas
+    på det andra. Det är första gången konstruktionen möter två \emph{oberoende} oscillatorer; i
+    \code{can_controller_tb} delade noderna en \code{clock}.
+  \item \textbf{Arbitrering på riktigt.} Låt båda korten sända samtidigt och se att den med lägst
+    identifierare vinner, och att förloraren backar.
+\end{enumerate}
+
+En loopback är också där \secref{c10:sec:bittiming}:s sampelpunkt på 70~\% i tysthet gör rätt för
+sig. Nodens egen signal tar nu en riktig rundtur, ut genom en pad, längs ledningen, in igen, och genom
+\code{rx_bus}-synkroniserarens två vippor, till en kostnad av en handfull klockcykler. Med
+\code{TICKS_PER_BIT = 50} och \code{SAMPLE_TICK = 35} läser noden bussen 35 tick in i en bit den
+började driva vid tick 0, så dess eget eko har sedan länge stabiliserat sig och
+arbitreringsövervakningen läser aldrig fel på det. Att sampla vid bitperiodens \emph{början} skulle i
+stället läsa ekot av biten före, och arbitreringsövervakningen (sänd recessivt, läs dominant,
+\chapref{c17:ch}) skulle rapportera en falsk förlust vid den första recessiva bit som följer på en
+dominant.
+
+En loopback kan medvetet inte visa noden \emph{ta emot} den ramen. \code{can_controller} låser
+\code{role = '1'} för hela ramen och \code{rx_shift_reg} går bara medan \code{role = '0'}
+(\chapref{c17:ch}), så en sändare avkodar aldrig sin egen trafik; det är precis därför
+systemtestbänken behöver två noder.
+
+\textbf{Det andra kortet sluter den lucka \secref{c19:sub:gaps-tb} kallar den största.} Testbänkens
+två noder delar en \code{clock}: \code{resync} fasriktar dem fortfarande vid varje SOF, men deras
+timrar kan aldrig \emph{driva isär} mitt i ramen. Två kort har två kristaller, som går på 50~MHz bara
+inom den tolerans komponenterna är specificerade till, så deras bitperioder skiljer sig verkligen åt,
+och mottagaren frikör på sin egen timer resten av ramen efter sin enda \code{resync} vid SOF. Ärlig
+aritmetik håller förväntningarna i schack: vid typiska kristalltoleranser på några tiotals ppm är
+driften över en ram en liten bråkdel av en tick, så det demot synligt bevisar är att hela kedjan
+fungerar över genuint oberoende klockor från en godtycklig startfas; hur mycket drift konstruktionen
+skulle tåla innan sampelpunkten vandrar av biten är beräkningen i Övning~\ref{c12:ex:drift}.
+
+\subsection*{SPI-halvan: en mikrokontrollerhatt mot kortet}
+Kopplingen, per nod. Den är inte din att välja: den står i bilaga~\ref{app:protocol}, eftersom
+parallellklassen skriver sin drivrutin mot samma tabell.
+
+\begin{booktable}{@{}p{6em}p{6em}L@{}}
+  \thead{Signal} & \thead{AVR32DB28} & \thead{DE0-CV} \\
+  \midrule
+  \code{SCK} & \code{PC2} & \code{sclk} \\
+  \code{MOSI} & \code{PC0} & \code{mosi} \\
+  \code{MISO} & \code{PC1} & \code{miso} \\
+  \code{SS} & \code{PC3} & \code{ss} \\
+  I/O-matning & \code{VDDIO2} & 3,3 V \\
+  Kärnmatning & \code{VDD} & (hattens egen 5 V) \\
+  GND & \code{GND} & GND \\
+\end{booktable}
+
+Ingen nivåomvandlare behövs, och det är ett val och inte en förenkling: AVR32DB28:ans \code{PORTC} är
+en egen spänningsdomän, matad från \code{VDDIO2} i stället för \code{VDD}, så den läggs på DE0-CV:ns
+3,3~V medan kärnan går kvar på 5~V. Varje nivå FPGA:n ser är då en nivå den är specificerad för, och
+de 3,3~V FPGA:n driver tillbaka läses mot en 3,3 V-tröskel i stället för en 5 V-tröskel. SPI0 flyttas
+dit med \code{PORTMUX.SPIROUTEA = ALT1}.
+
+\begin{warning}
+\textbf{Tre krav på hatten, och de måste vara på plats innan den etsas.}
+\begin{itemize}
+  \item \textbf{\code{PC0}--\code{PC3} är reserverade.} De är SPI0:s ALT1-mux och får inte bära någon
+    annan kringutrustning. Ingen lysdiod, ingen knapp, och framför allt ingen avkopplingskondensator
+    på \code{SS} \textemdash{} en knapp med 100~nF på pinnen gör \code{SS}-flanken obrukbar vid
+    1~MHz.
+  \item \textbf{Ingenting annat på \code{PORTC}.} Hela porten ligger i \code{VDDIO2}-domänen på
+    3,3~V, så en 5 V-kringutrustning där skulle både sluta fungera och mata 5~V in i en 3,3 V-domän.
+  \item \textbf{\code{VDDIO2} är en egen bana.} Den får inte knytas till \code{VDD} på kortet, utan
+    ska ut till en pinne där DE0-CV:ns 3,3~V kopplas in, med 100~nF nära chippet.
+\end{itemize}
+
+Att domänen över huvud taget är separat styrs dessutom av \code{MVSYSCFG} i \code{FUSE.SYSCFG1}: i
+enkelmatningsläge knyts \code{VDDIO2} internt till \code{VDD}, \code{PORTC} blir en 5 V-port, och
+kopplingen ovan lägger då 5~V rakt in i ingångar som inte är 5 V-toleranta \textemdash{} på en hatt
+som ser precis likadan ut som en rätt byggd. Kontrollera fusen före första inkopplingen. Det är det
+enda felet i det här kapitlet som kan kosta ett kort.
+\end{warning}
+
+Stegen tas i den här ordningen, och inte i någon annan. Varje steg utesluter en felkälla, så att det
+som fortfarande inte fungerar efter steg $n$ med säkerhet ligger i steg $n+1$:
+
+\begin{enumerate}
+  \setcounter{enumi}{3}
+  \item \textbf{SPI-loopback på enbart hatten}, med \code{PC1} kopplad till \code{PC0} och FPGA:n
+    urkopplad. Bevisar att mastern fungerar, och på köpet att \code{PORTMUX} och \code{VDDIO2} är
+    rätt satta.
+  \item \textbf{Registereko}: skriv \code{TX_ID}, läs tillbaka det. Bevisar att hela
+    transaktionskedjan bär.
+  \item \textbf{\code{STATUS}-pollning}: läs \code{STATUS} och se att bit 0 är satt efter reset.
+  \item \textbf{En nod sänder på kommando}: skriv en ram och utlös \code{TX_SEND}, och se
+    \code{STATUS} bit 0 gå låg och tillbaka \textemdash{} nu utlöst över SPI i stället för av en
+    knapp.
+  \item \textbf{Två noder, hela kedjan}: den ena sänder på SPI-kommando, den andra tar emot och
+    kvitterar med \code{RX_ACK}. Det är systemet.
+\end{enumerate}
+
+\paragraph{Vad som återstår}
+När passet är slut har båda halvorna gått på riktig hårdvara. Det som återstår är inte kopplingen
+utan \textbf{motparten}: din nod har svarat på ett testprogram som är skrivet för att lyckas, inte på
+en drivrutin skriven av någon annan mot enbart specifikationen. Det är därför
+protokollspecifikationens tidskrav \textemdash{} de 60~ns kring \code{SS}, regeln om vad \code{MISO}
+bär under kommandobyten, och avbrottsregeln \textemdash{} är skrivna som krav och inte som råd: ett
+testprogram som aldrig gör något oväntat bekräftar dem aldrig, och en drivrutin som gör det fäller dig
+på dem.
+
+% ------------------------------------------------------------------------------------------
+\section{Hur produktionsklara CAN-kontrollrar går längre}
+\label{c19:sec:gaps}
+
+Den här bokens kontroller är medvetet förenklad: en undervisningskonstruktion snarare än en
+certifierbar. Listan nedan är den här bokens version av den; \canref{7} ställer samma lista från
+protokollhållet, tillsammans med blocköversikten och de tre begränsningar som når ända upp i
+drivrutinens kod, och \canref{6} beskriver den felhantering \textemdash{} felramar, felräknare,
+error-passive och bus-off \textemdash{} som den här konstruktionen helt saknar.
+
+Anmärkningsvärda luckor, värda att namnge uttryckligen:
+\begin{itemize}
+  \item \textbf{Bara standardramar med data:} ledningsformatet är en bit-exakt standard-CAN-dataram,
+    RTR inräknad, men det finns inga 29-bitars utökade identifierare (mottagaren kontrollerar inte
+    ens IDE, så en utökad ram skulle tolkas fel tills dess CRC-kontroll misslyckas), och en fjärram
+    (en recessiv RTR) avvisas med \code{error} i stället för att besvaras med de begärda data.
+  \item \textbf{Inga felramar och ingen återhämtning från bus-off:} en riktig CAN-nod räknar
+    sändnings- och mottagningsfel och går in i alltmer begränsade tillstånd (error-passive, bus-off)
+    för att skydda en frisk buss från en trasig nod; den här bokens \code{can_controller} avbryter
+    bara den pågående ramen lokalt.
+  \item \textbf{Ingen detektering av bit- eller formfel:} den här sändaren jämför vad den sände mot
+    vad bussen läste bara under arbitreringen (\chapref{c17:ch}). En riktig kontroller övervakar
+    varje bit den sänder, flaggar för ett bitfel i samma ögonblick som bussen säger emot utanför
+    arbitreringsfältet och ACK-luckan, och kontrollerar vid mottagning att svansens fasta fält har
+    sina föreskrivna värden.
+  \item \textbf{Ingen omsändning vid uteblivet kvitto:} en riktig kontroller försöker om automatiskt.
+    Den här konstruktionen märker inte ens saken, eftersom sändaren aldrig läser tillbaka ACK-luckan.
+  \item \textbf{Ingen acceptansfiltrering och ingen mottagningsbuffring:} varje ram på bussen landar
+    i samma enda uppsättning \code{rx_*}-portar, och en andra ram som anländer innan drivrutinen läst
+    den första skriver helt enkelt över den. Produktionsklara kontrollrar erbjuder identifierarfilter
+    i hårdvara och en mottagnings-FIFO eller en uppsättning brevlådor. Det här är den lucka
+    parallellklassens drivrutin känner mest direkt, och \chapref{c18:ch} visar exakt var den blir
+    synlig på registernivå.
+  \item \textbf{En fast modell för bittajmingen:} den här boken samplar vid en fast punkt på 70~\%;
+    produktionsklara kontrollrar exponerar konfigurerbara propagerings- och fassegment och en
+    synchronization jump width, avstämda efter busslängd och antal noder.
+  \item \textbf{En avbruten mottagning (efter förlorad arbitrering) kastas helt enkelt}, i stället för
+    att sömlöst fortsätta ta emot den ram som vann; en riktig nod fortsätter ta emot oavsett vem som
+    vann bussen. Den här konstruktionens nod väntar ut resten av ramen i \code{STATE_IDLE}
+    (\secref{c16:sec:roles}) och tar vid från nästa.
+  \item \textbf{En förenklad regel om ledig buss:} den här konstruktionen kräver elva recessiva
+    bitperioder, samma antal som riktig CAN begär av en nod som ansluter sig till busstrafiken, innan
+    någon nod får lämna \code{STATE_IDLE}. Riktig CAN är mer finkornig: en nod som just deltagit i en
+    ram får sända igen redan efter den 3-bitars intermission som följer på EOF, och en nod som varit
+    bus-off väntar in 128 förekomster av elva recessiva bitar innan den får ansluta sig igen.
+\end{itemize}
+
+% ------------------------------------------------------------------------------------------
+\section{Konstruktionen, sedd i backspegeln}
+\label{c19:sec:review-design}
+
+Varje kapitel från \chapref{c10:ch} och framåt lade till exakt ett ansvar, aldrig duplicerat någon
+annanstans:
+
+\begin{booktable}{@{}p{9.6em}Lp{5.4em}@{}}
+  \thead{Block} & \thead{Äger} & \thead{Byggt i} \\
+  \midrule
+  \code{can_def} & Delade konstanter och subtyper som varje annat block är överens om &
+    \chapref{c10:ch} \\
+  \code{meta_prev} & Att få en asynkron signal säkert in i den här klockdomänen, utan någon aning om
+    vad signalen betyder & \chapref{c12:ch} \\
+  \code{bit_timer} & \emph{När} det ska samplas eller skiftas, utan någon aning om vad som sänds &
+    \chapref{c12:ch} \\
+  \code{crc15} & Beräkningen av CRC-15, en bit i taget, utan någon aning om vad en ”ram” är &
+    \chapref{c13:ch} \\
+  \code{tx_shift_reg} / \code{rx_shift_reg} & Bitstoppning och avstoppning, utan någon aning om vad
+    ett ID eller en databyte är & \chapref{c14:ch}--\ref{c15:ch} \\
+  \code{can_controller} & Det enda block som känner till det faktiska CAN-ramformatet, arbitreringen
+    inräknad & \chapref{c11:ch} (portar), \chapref{c16:ch}--\ref{c17:ch} (beteende) \\
+  \code{register_bank} & Pulser till pollbara nivåer, och registerkartans semantik; ingen aning om
+    vad SPI eller CAN är & \chapref{c18:ch} \\
+  \code{spi_slave} & Bytes av en seriell ledning, säkert in i 50 MHz-domänen; ingen aning om vad ett
+    register är & utdelad, läses i \chapref{c18:ch} \\
+  \code{spi_reg_bridge} & Fembytestransaktionen; ingen aning om vad något enskilt register betyder &
+    \chapref{c19:ch} \\
+  \code{can_spi_node} & Kopplingarna, och pinnarna bussen bor på. Ingen egen logik &
+    \chapref{c19:ch} \\
+\end{booktable}
+
+Det är hela noden: fyra små block med ett ansvar var och ett delat paket komponerade inuti
+\code{can_controller}, och sedan tre lager till framför den, där vart och ett bara känner till det
+under sig. \code{can_spi_node} står utanför dem alla, eftersom att anpassa sig till ett visst kort är
+en annan sak än att tala CAN, eller SPI, eller register.
+
+Läs tabellen uppifrån och ned så är den också en lista över vad som skulle behöva ändras för att nå
+ett annat system. Byt ut \code{spi_slave} och \code{spi_reg_bridge} mot ett I2C-par så är allt under
+dem orört. Byt ut \code{can_controller} mot en annan protokollmotor så flyttar registerkartan men inte
+transporten. Det är vad gränserna köpte.
+
+\paragraph{Registerkartan i sammanfattning}
+Varje port på registersidan av \code{can_controller} motsvarar ett register som parallellklassens
+C++-drivrutin läser eller skriver; de återstående fem (\code{clock}, \code{reset_n} och de tre
+bussignalerna) är fysiska och ingen drivrutin ser dem någonsin. Motsvarigheten är inte längre en plan,
+som den var när \secref{c11:sec:regmap} först ritade den här tabellen \textemdash{}
+\code{register_bank} är modulen som förverkligar den, så läs högerkolumnen som ”registret banken
+presenterar vid det indexet”:
+
+\begin{booktable}{@{}p{14em}L@{}}
+  \thead{\code{can_controller}-port} & \thead{Register i kartan} \\
+  \midrule
+  \code{tx_id}, \code{tx_dlc}, \code{tx_data} & \code{TX_ID}, \code{TX_DLC},
+    \code{TX_DATA_LO}/\code{HI} \\
+  \code{tx_req}, \code{tx_done} & \code{TX_SEND}, en bit i \code{STATUS} \\
+  \code{rx_id}, \code{rx_dlc}, \code{rx_data} & \code{RX_ID}, \code{RX_DLC},
+    \code{RX_DATA_LO}/\code{HI} \\
+  \code{rx_valid} & en bit i \code{STATUS}, nollställd via \code{RX_ACK} \\
+  \code{error} & \code{ERROR_FLAGS} \\
+\end{booktable}
+
+Den motsvarigheten är där drivrutinsarbetet börjar: allt parallellklassen skriver mot står i
+bilaga~\ref{app:protocol}, och ingenting i den här konstruktionens VHDL.

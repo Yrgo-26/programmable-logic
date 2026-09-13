@@ -1,0 +1,32 @@
+% Chapter 12, typeset from lectures/L12: Appendix A becomes section 12.1, Appendix B section 12.2,
+% and Appendix C the exercises.
+
+\chapter{Synchronisation and the bit timer}
+\label{c12:ch}
+
+{\large\itshape The first two building blocks going into the empty architecture: the one that knows
+nothing at all, and the first that knows something about CAN.\par}
+
+\begin{chapterbox}{In this chapter}
+\begin{itemize}
+  \item \code{meta_prev}: the two-flip-flop synchroniser, written once with a width generic, and
+    instantiated twice inside \code{can_controller}, for \code{reset_n} and \code{rx_bus}.
+  \item \code{bit_timer}: a free-running counter producing the pulses \code{sample} and
+    \code{bit_done}.
+  \item Running a testbench handed out against each module and reading its report. This is the
+    chapter where the GHDL flow gets its third step.
+  \item Instantiating both inside \code{can_controller}.
+\end{itemize}
+\end{chapterbox}
+
+Two modules instead of one, since both are small and they are the design's only blocks holding no
+protocol state: \code{meta_prev} knows nothing at all, and \code{bit_timer} knows only \emph{when}.
+
+Design each module from the contract and the behaviour below, and then verify against the testbench
+handed out, without reaching for any reference. Appendix~\ref{app:sim} is the project's GHDL
+reference.
+
+\input{chapters/12/metaprev}
+\input{chapters/12/bittimer}
+\input{chapters/12/summary}
+\input{chapters/12/exercises}

@@ -1,0 +1,120 @@
+% Section 19.1, from lectures/L19/appendix/a_system_verification.md.
+
+\section{Verifying the whole system}
+\label{c19:sec:verify}
+
+Before any part of the transport can be trusted, the controller has to be shown working as a
+\emph{system}. That does not mean one module against a stub, but two independent nodes on one wire
+fighting over it the way real nodes do.
+
+\subsection*{Modelling the bus}
+Nothing in the design models the shared bus, and that is deliberate. \code{can_controller} drives a
+pair \code{(tx_bus, bus_en)} and reads \code{rx_bus}, which is exactly what a real CAN transceiver
+presents on its digital side (\chapref{c10:ch}). The wired-AND lives in the testbench, and on hardware
+it lives in the transceiver.
+
+\file{can_controller_tb.vhd} instantiates two nodes on one wire and combines them directly. Every
+node's effective output is its driven value when \code{bus_en = '1'}, otherwise released
+(\code{'1'}), and the bus is their AND, so it reads dominant the moment \emph{any} of the nodes pulls
+low:
+
+\begin{vhdlcode}
+bus_line <= (a_tx_bus or not a_bus_en) and (b_tx_bus or not b_bus_en);
+\end{vhdlcode}
+
+That single line is the whole of \secref{c10:sec:can}'s ``any dominant beats all recessives'', and it
+is what makes arbitration testable in simulation.
+
+Worth working through rather than reading. Every node contributes \code{tx_bus or not bus_en}, which
+is \code{1} as soon as it has released the bus, and the wire is the two contributions ANDed:
+
+\begin{narrowtable}{llccccl}
+  \thead{Node A} & \thead{Node B} & \thead{\code{a_tx_bus}} & \thead{\code{a_bus_en}} &
+    \thead{\code{b_tx_bus}} & \thead{\code{b_bus_en}} & \thead{\code{bus_line}} \\
+  \midrule
+  released & released & \code{-} & \code{0} & \code{-} & \code{0} & \code{1} recessive \\
+  driving dominant & released & \code{0} & \code{1} & \code{-} & \code{0} & \code{0} dominant \\
+  released & driving dominant & \code{-} & \code{0} & \code{0} & \code{1} & \code{0} dominant \\
+  driving dominant & driving dominant & \code{0} & \code{1} & \code{0} & \code{1} & \code{0}
+    dominant \\
+\end{narrowtable}
+
+A released node's \code{tx_bus} is \code{-} because it genuinely does not matter: \code{not bus_en}
+alone makes its contribution \code{1}, so a node that has let go cannot affect the wire whatever its
+output happens to sit at. Across all sixteen input combinations the wire reads dominant exactly when
+at least one node has \code{bus_en = '1'} with \code{tx_bus = '0'}, which is the rule expressed as
+hardware.
+
+Two rows carry the arbitration argument. \textbf{Row two is the contest itself:} A drives dominant, B
+sends recessive and has therefore released, and the wire reads dominant. B, monitoring while it
+transmits, sees that it sent recessive and that the bus reads dominant, and that is exactly the loss
+condition \chapref{c17:ch} checks. Meanwhile A reads back precisely the bit it sent and notices
+nothing.
+
+\textbf{Row one is why the loser can leave.} Once B has stopped driving it contributes \code{1}
+forever, so the wire is A's alone. The loser's retreat is invisible to the winner, and that is what
+makes a collision a non-event rather than something both nodes have to recover from.
+
+Row four is worth a look too: when both nodes drive dominant the wire is dominant and each reads back
+what it sent, so neither can tell the other exists. That is the normal state for every dominant bit of
+the identifier before the two IDs differ.
+
+\subsection*{The two scenarios}
+\begin{enumerate}
+  \item \textbf{Reception.} Node A sends a 5-byte frame (ID \code{0x123}, data
+    \code{11 22 F8 44 55}) while node B receives it. \code{0xF8} forces a stuff bit inside the data
+    field, so both sides' CRC engines have to skip it. The testbench checks A's \code{tx_done} and
+    B's \code{rx_valid}, that B reconstructed the ID, the DLC and \textbf{every} data byte at its
+    fixed position, and that neither node raised \code{error}.
+  \item \textbf{Arbitration.} Nodes A (ID \code{0x000}) and B (ID \code{0x001}) both request during
+    the same cycle, differing only in the identifier's last bit. A has to win and complete normally,
+    unaware that any contest took place; B has to detect the loss at that bit, raise \code{error} and
+    stop driving. The check runs after A's frame has completed, so it also confirms that B's
+    \code{error} is still readable then, rather than having been wiped by a re-entry into
+    \code{STATE_START}.
+\end{enumerate}
+
+A transmitting node never receives its own frame (\code{rx_shift_reg} runs only while
+\code{role = '0'}), so both scenarios genuinely need two nodes; neither could be tested with one node
+alone.
+
+The two one-cycle pulses the first scenario waits for, A's \code{tx_done} and B's \code{rx_valid}, are
+\textbf{latched} in the testbench, since two independent state machines need not pulse at the same
+edge, and a plain \code{wait until (a = '1' or b = '1')} would resume on the first and miss the
+second.
+
+\subsection*{What the testbench does not cover}
+\label{c19:sub:gaps-tb}
+
+Two passing scenarios are not the same thing as a proved design, and knowing where a testbench ends is
+part of reading it. Five gaps are worth naming, since each is a place where this design is either
+deliberately simplified or simply untested:
+\begin{itemize}
+  \item \textbf{Both nodes share one \code{clock} and one \code{reset_n}.} Real nodes run on
+    independent oscillators and drift apart. Be precise about what that leaves untested, because it is
+    not \code{resync} itself: both nodes pulse \code{resync} at every frame's start (\chapref{c16:ch}),
+    and that pulse is what phases B's sample points against the arbitrary moment A began transmitting,
+    so case 1 fails without it. What a shared clock can never exercise is \textbf{drift}, two timers
+    starting in phase and wandering apart mid-frame, the case
+    Exercise~\ref{c12:ex:drift} quantifies and the reason real CAN resynchronises at every
+    recessive-to-dominant edge instead of once per frame. This is the largest gap, and closing it in
+    simulation takes a second clock generator with a deliberate frequency deviation.
+    \Secref{c19:sec:bringup} gets a frame across \textbf{two boards} with two separate crystals,
+    finally genuinely independent clocks, with an honest caveat noted there.
+  \item \textbf{No frame is ever corrupted.} Nothing injects a stuffing error, flips a bit on the wire
+    or damages a CRC, so the receive side's \code{error} paths are exercised only at module level by
+    \code{rx_shift_reg_tb} and \code{crc15_tb}, never end to end.
+  \item \textbf{The ACK slot is driven but never read back.} A receiver with a valid CRC pulls it
+    dominant (\chapref{c17:ch}), but the transmitter never checks it, so a frame nobody acknowledged
+    completes exactly like one that was. That is a deliberate simplification
+    (\secref{c19:sec:gaps}), and the testbench inherits it instead of catching it.
+  \item \textbf{Arbitration is always two-way, and always lost at the same bit.} \code{0x000} against
+    \code{0x001} differ in the identifier's last bit, so the loss is detected in the same state every
+    run. Exercise~\ref{c19:ex:thirdnode} adds a third node and moves the losing bit earlier.
+  \item \textbf{No node ever transmits again after an abort.} Node B loses arbitration in case 2 and
+    is never asked to send another frame, so nothing here checks that a node recovers from an abort at
+    all. That matters more than it sounds: \code{can_controller} clears \code{crc15} in
+    \code{STATE_START} (\chapref{c16:ch}) precisely so that an abandoned frame cannot leave its residue
+    behind, and this testbench would pass just as happily with that clear removed.
+    Exercise~\ref{c19:ex:afterabort} is where you find out what it did.
+\end{itemize}

@@ -1,0 +1,129 @@
+% Bilaga E: vidare läsning. Protokollreferensen först, sedan standarderna, verktygen och fyra
+% riktningar vidare i ämnet.
+
+\chapter{Vidare läsning}
+\label{app:reading}
+
+Den här boken slutar med en CAN-nod som en mikrokontroller kan prata med, och den slutar där med
+flit: konstruktionen är förenklad på flera medvetna punkter (\secref{c19:sec:gaps}), och drivrutinen
+på andra sidan SPI-länken skrivs av någon annan. Den här bilagan säger var protokollet självt står
+beskrivet, vilka standarder konstruktionen förhåller sig till, och vart man går härnäst.
+
+% ------------------------------------------------------------------------------------------
+\section{Protokollreferensen}
+\label{app:reading:protocol}
+
+\canbook{} är den bok den här boken lutar sig mot varje gång CAN som \emph{protokoll} kommer på tal.
+Den är kort, på svenska, och skriven för båda halvorna av ett CAN-system: den som bygger kontrollern
+i hårdvara och den som skriver drivrutinen i mjukvara. Den nämner därför varken kurs eller klass, och
+den är avsiktligt oberoende av vilken av de två kurserna som läser den.
+
+Sju kapitel plus ett appendix, och kapitelindelningen är den här bokens del~\ref{part:can} sedd från
+protokollhållet:
+
+\begin{booktable}{@{}c>{\raggedright\arraybackslash}p{0.44\linewidth}L@{}}
+  \thead{Kap.} & \thead{Ämne} & \thead{Här i boken} \\
+  \midrule
+  1 & Bussen: topologi, dominant och recessiv, wired-AND, terminering & \secref{c10:sec:can} \\
+  2 & Framen: fälten, identifieraren, RTR, DLC, kvittensen & \secref{c10:sec:frameformat} \\
+  3 & Bitstoppning och CRC-15 & \secref{c10:sec:stuffing}, \chapref{c13:ch}, \ref{c14:ch} och
+    \ref{c15:ch} \\
+  4 & Arbitrering, bit för bit & \secref{c10:sec:arbitration}, \secref{c17:sec:arbitration} \\
+  5 & Bittajming och synkronisering & \secref{c10:sec:bittiming}, \secref{c12:sec:bittimer} \\
+  6 & Felhantering: felramar, felräknare, bus-off & \secref{c19:sec:gaps}, som lucka \\
+  7 & Den förenklade kontrollern, och de tre begränsningar som når ända upp &
+    \secref{c19:sec:gaps}, \secref{app:project:limits}, bilaga~\ref{app:protocol} \\
+  A & Svar på samtliga övningar & \textemdash{} \\
+\end{booktable}
+
+Tre saker gör den värd att ha uppslagen bredvid den här boken snarare än läst en gång:
+
+\begin{itemize}
+  \item \textbf{Kapitel 1--6 är kravspecifikationen, bit för bit,} för den kontroller
+    del~\ref{part:can} bygger. Där den här boken säger ”regeln är fem lika bitar i rad”, säger den
+    boken varför regeln finns och vad som går sönder utan den.
+  \item \textbf{Kapitel 7 beskriver exakt den här konstruktionen}, utifrån: blocken, vad den
+    implementerar av standarden, vad den medvetet låter bli, varför ett registerlager behövs, och de
+    tre begränsningar som når ända upp i drivrutinens kod. Den som vill ha helheten på fem sidor
+    innan \chapref{c11:ch}:s arkitektur läser det kapitlet först.
+  \item \textbf{Fyra övningar per kapitel, alla med papper och penna, alla besvarade i appendix A.}
+    De prövar protokollförståelsen utan att en rad VHDL är inblandad, vilket gör dem till den bästa
+    förberedelsen som finns inför \chapref{c20:ch}:s läsuppgifter.
+\end{itemize}
+
+Böckerna delar författare och sätts på samma sätt, så en referens ser likadan ut i båda. De numrerar
+däremot sina kapitel oberoende av varandra: ”kapitel~3” utan vidare bestämning betyder alltid ett
+kapitel i \emph{den här} boken, och en hänvisning till den andra skrivs alltid ut i sin helhet.
+
+% ------------------------------------------------------------------------------------------
+\section{Standarder och specifikationer}
+\label{app:reading:specs}
+
+Boken förhåller sig hela tiden till riktig CAN utan att vara den, och \canbook{} är mellansteget:
+den beskriver standarden på svenska och i den detaljnivå en konstruktör behöver. Vill du därefter se
+vad som faktiskt står i originalet:
+
+\begin{itemize}
+  \item \textbf{Bosch CAN Specification 2.0} (del A och B) är grunddokumentet: ramformaten,
+    bitstoppningen, CRC-polynomet och arbitreringen. Del A är standardramen med 11-bitars
+    identifierare, alltså den här bokens ram; del B lägger till den utökade 29-bitars formen.
+  \item \textbf{ISO 11898-1} är standardiseringen av samma sak, med datalänklagret och det fysiska
+    signalgränssnittet. ISO 11898-2 är höghastighetstransceivern, alltså den krets som skulle sitta
+    mellan \code{tx_bus}/\code{bus_en} och en verklig differentiell buss.
+  \item \textbf{IEEE 1076-1993} är VHDL-93, språkstandarden \code{--std=93} väljer. Den är läsvärd
+    som uppslagsverk snarare än pärm till pärm; paketen \code{ieee.std_logic_1164} och
+    \code{ieee.numeric_std} är de två delar du använt genom hela boken.
+\end{itemize}
+
+De fyra punkter där bokens kontroller medvetet avviker från standarden är samlade i
+\secref{c19:sec:gaps}, och \secref{app:project:limits} säger vilka tre av dem som syns ända ut i
+registerkartan.
+
+% ------------------------------------------------------------------------------------------
+\section{Verktygen}
+\label{app:reading:tools}
+
+\begin{itemize}
+  \item \textbf{GHDL:s dokumentation} täcker betydligt mer än de tre kommandon bilaga~\ref{app:sim}
+    behöver: vågformsutmatning till VCD eller GHW, kodtäckning, och de andra
+    språkstandardsflaggorna. \textbf{GTKWave} är den vanliga vågformsvisaren att para ihop den med,
+    och första gången du felsöker en tajmingbugg genom att \emph{titta} på signalerna i stället för
+    att läsa \code{report}-rader är den värd sin installationstid.
+  \item \textbf{Quartus Prime Lites egen dokumentation}, i synnerhet tidsanalysen: bilaga
+    \ref{app:quartus} nöjer sig med ett \code{create_clock}, medan en riktig konstruktion också
+    behöver ingångs- och utgångskrav och undantag för korsande klockdomäner.
+  \item \textbf{DE0-CV:s användarmanual} från korttillverkaren har den fullständiga pinntabellen,
+    kringkretsarna och kopplingsschemat. Den är facit när \file{DE0_CV.qsf} inte täcker något du vill
+    använda.
+  \item \textbf{CircuitVerse} är gratis och körs i webbläsaren. Det är fortfarande det snabbaste
+    sättet att pröva en liten kombinatorisk idé, och \chapref{c9:ch} och \ref{c20:ch} tillåter det
+    av just det skälet.
+\end{itemize}
+
+% ------------------------------------------------------------------------------------------
+\section{Vidare i digital konstruktion}
+\label{app:reading:design}
+
+Det här är en bok om ett system, inte om hela ämnet. Fyra riktningar som ligger nära och som
+material i övrigt inte saknas för:
+
+\begin{itemize}
+  \item \textbf{Tidsanalys och klockdomäner på allvar.} \Chapref{c4:ch} ger dubbelvippsynkroniseraren
+    och \secref{c5:sec:fmax} en första Fmax. Nästa steg är setup- och holdanalys, FIFO:er mellan
+    klockdomäner, och gray-kodade pekare \textemdash{} det vill säga vad man gör när en hel buss, och
+    inte en ensam bit, ska passera mellan två klockor.
+  \item \textbf{Verifiering bortom en handskriven testbänk:} självkontrollerande modeller,
+    slumpstimuli och täckningsmått. VHDL:s OSVVM och UVVM är de två vanliga ramverken, och steget
+    därifrån till SystemVerilog och UVM är det industrin tar.
+  \item \textbf{Andra gränssnitt, med samma metod.} Boken bygger CAN; UART, SPI, I\textsuperscript{2}C
+    och Modbus har alla samma form \textemdash{} en bittimer, ett skiftregister, en sekvenserare
+    \textemdash{} och att bygga en till av dem med bokens mönster är den snabbaste vägen att märka
+    hur mycket av \chapref{c11:ch}:s uppdelning som var allmängods.
+  \item \textbf{Processorkonstruktion.} En liten RISC-kärna är nästa naturliga steg för den som tyckt
+    att tillståndsmaskinen i \chapref{c16:ch} var det intressantaste: samma byggstenar, en
+    instruktionsavkodare i stället för en ramavkodare, och ett registerfilsgränssnitt i stället för
+    en buss.
+\end{itemize}
+
+Gemensamt för alla fyra är att de vilar på samma fem mönster \chapref{c20:ch} räknar upp. Det är den
+egentliga behållningen av den här boken: inte CAN, utan att du kan bygga nästa protokoll också.

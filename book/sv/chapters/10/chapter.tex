@@ -1,0 +1,53 @@
+% Kapitel 10, satt ur lectures/L10: ramningsintroduktionen blir avsnitt 10.1, Appendix A blir
+% 10.2-10.6, Appendix B blir 10.7, och Appendix C plus ramningsövningarna blir övningarna.
+
+\chapter{Projektstart: CAN-bussen, ramen och \code{can_def}}
+\label{c10:ch}
+
+{\large\itshape Varför protokoll behöver ramar, vad CAN faktiskt är, och projektets första
+VHDL.\par}
+
+\begin{chapterbox}{I det här kapitlet}
+\begin{itemize}
+  \item Varför protokoll behöver ramar alls: nyttolast, längdfält, checksumma, och varför
+    avsändare, mottagare och sekvensnummer uppstår så snart en länk delas av fler än två noder.
+  \item CAN:s differentiella buss och multimasterdesign.
+  \item Dominanta och recessiva bitar, och varför arbitrering ersätter en bussmästare.
+  \item Broadcast plus ID-filtrering i stället för adresser.
+  \item CAN-ramen fält för fält: SOF, identifierare, RTR, kontrollfält, DLC, data, CRC-15, ACK,
+    EOF.
+  \item Bitstoppning: femregeln, och varför den finns.
+  \item Wired-AND-arbitrering, genomräknad för hand.
+  \item Bittajming och sampelpunkten, på begreppsnivå.
+  \item \code{can_def}: det delade paketet som håller varje konstant kapitlet definierar.
+\end{itemize}
+\end{chapterbox}
+
+Det här är första kapitlet i grupprojektet. Läs projektspecifikationen i bilaga~\ref{app:project}
+innan du börjar: den beskriver arbetsformen, modulerna och vad som bedöms. Grupperna sätts samman i
+det här passet.
+
+\Secref{c10:sec:framing} bygger upp ett eget litet ramformat från ingenting och motiverar varje fält
+CAN sedan har. Det är bokens enda C++-material, och det finns för att göra resten av kapitlet till
+en jämförelse snarare än en uppräkning: CAN besvarar samma fyra frågor, men besvarar en av dem helt
+annorlunda.
+
+\begin{aside}
+\textbf{Protokollreferensen.} Den här boken handlar om att \emph{bygga} en CAN-nod, inte om CAN som
+standard. Protokollet självt beskrivs i \canbook, en kort bok skriven för båda halvorna av ett
+CAN-system \textemdash{} den som bygger kontrollern i hårdvara och den som skriver drivrutinen i
+mjukvara \textemdash{} och den är protokollreferensen genom hela del~\ref{part:can}.
+
+Det här kapitlet ger den arbetsförståelse som behövs för att skriva \code{can_def} och komma igång;
+går du vilse i ett fält, en regel eller ett tidsförhållande är det där du slår upp det. För den som
+bygger kontrollern är dess \textbf{kapitel 1--6 kravspecifikationen, bit för bit}, och dess
+kapitel~7 beskriver precis den förenklade kontroller del~\ref{part:can} bygger: vad den
+implementerar av standarden och vad den medvetet låter bli. Bilaga~\ref{app:reading} har den
+fullständiga kapitelkartan mellan de två böckerna.
+\end{aside}
+
+\input{chapters/10/framing}
+\input{chapters/10/can}
+\input{chapters/10/candef}
+\input{chapters/10/summary}
+\input{chapters/10/exercises}

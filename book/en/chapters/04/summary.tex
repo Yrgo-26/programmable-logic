@@ -1,0 +1,51 @@
+% Section 4.10, from lectures/L04/README.md.
+
+\section{Summary}
+\label{c4:sec:review}
+
+\needspace{6\baselineskip}
+\subsection*{What you should be able to do now}
+\begin{itemize}
+  \item Explain what metastability is, why an asynchronous input can cause it, and why two
+    flip-flops make it unlikely rather than impossible.
+  \item Apply the two-flip-flop synchroniser to any asynchronous input, including the ``assert
+    asynchronously, release synchronously'' pattern used for reset.
+  \item Say why that chain also works as a practical but incomplete debounce, and what a real one
+    would add.
+  \item Give a module a \code{generic}, override it with a \code{generic map}, write a port's width
+    in terms of it, and judge when a generic earns its place instead of being added on principle.
+\end{itemize}
+
+\needspace{6\baselineskip}
+\subsection*{Questions to test yourself with}
+\begin{enumerate}
+  \item What exactly happens when an asynchronous input to a flip-flop changes too close to an
+    active clock edge?
+  \item How does the two-flip-flop synchroniser handle that, and why is it the \emph{second}
+    flip-flop's output that is safe to use?
+  \item Why does the chain used here behave as a debounce in CircuitVerse but not fully debounce a
+    real button at \code{50 MHz}, and why is that a property of the clock period rather than of the
+    circuit? What would you add to fix it?
+  \item \code{button_sync} has a generic and \code{reset_sync} has none. What is the rule, and what
+    would be wrong with giving \code{reset_sync} a \code{WIDTH} generic ``for symmetry''?
+\end{enumerate}
+
+\needspace{6\baselineskip}
+\subsection*{Further reading}
+Erik Pihl's video walkthrough of metastability and the two-flip-flop synchroniser is at
+\url{https://www.youtube.com/watch?v=KrssJRgF13I} as additional, optional viewing.
+\url{https://nandland.com/lesson-13-metastability/} and
+\url{https://vhdlwhiz.com/terminology/metastability/} cover the same concepts from a slightly
+different angle, useful if this chapter does not land on the first reading.
+
+\needspace{6\baselineskip}
+\subsection*{Looking ahead}
+\Chapref{c5:ch} goes on with:
+\begin{itemize}
+  \item \code{variable}: the one construct you have not yet met, and the sharp difference between
+    how it updates and how a \code{signal} does.
+  \item Why the same accumulation written with a \code{signal} and with a \code{variable} gives two
+    different answers, and which of the two is the bug.
+  \item What the toolchain actually builds: LUTs and flip-flops, what limits a clock's speed, and
+    the latch you describe by accident.
+\end{itemize}

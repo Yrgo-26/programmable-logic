@@ -1,0 +1,49 @@
+% Kapitel 19, satt ur lectures/L19: Appendix A blir avsnitt 19.1, bryggans specifikation 19.2,
+% Appendix B blir 19.3-19.8, och Appendix C övningarna.
+
+\chapter{SPI-bryggan, \code{can_spi_node} och bring-up}
+\label{c19:ch}
+
+{\large\itshape Projektets sista pass, och dess capstone: transaktionslagret, toppnivån som binder
+ihop allt, och hela kedjan verifierad först i simulering och sedan på riktig hårdvara.\par}
+
+\begin{chapterbox}{I det här kapitlet}
+\begin{itemize}
+  \item Systemverifiering: två noder på en wired-AND-buss, och vad den testbänken inte täcker.
+  \item Transaktions-FSM:en: kommandobyte, fyra databytes, låsning en gång vid läsning,
+    verkställande på femte byten, och avbrott när SS går hög för tidigt.
+  \item \code{can_spi_node}: att komponera \code{spi_slave}, \code{spi_reg_bridge},
+    \code{register_bank} och \code{can_controller} till en nod.
+  \item Bring-up i två halvor: två kort på en delad busslinje, sedan en mikrokontroller som
+    SPI-master mot dem, i åtta steg.
+  \item Vad riktiga CAN-kontrollrar gör som den här designen inte gör.
+\end{itemize}
+\end{chapterbox}
+
+\code{can_controller} är färdig från och med \chapref{c17:ch}: sändning, mottagning och arbitrering.
+Den instansierar \code{bit_timer}, \code{crc15} och båda skiftregistren inuti sig själv, så utifrån
+sett är hela kontrollern en enda komponent med det 15-portars gränssnitt på registernivå som
+\chapref{c11:ch} förhandsvisade.
+
+Sedan går två lager framför den: \code{register_bank} (\chapref{c18:ch}) gör om det gränssnittet till
+registerkartan, och \code{spi_reg_bridge} plus den utdelade \code{spi_slave} gör om registerkartan
+till en fembytes SPI-transaktion. Det parallellklassen skriver sin drivrutin mot är den bortre änden
+av den kedjan \textemdash{} registerkartan och protokollspecifikationen i bilaga~\ref{app:protocol},
+aldrig \code{can_controller}s portar.
+
+\begin{warning}
+Det här är bokens tightaste kapitel, och det är värt att säga rakt ut: två moduler skrivs, hela
+kedjan ska simuleras, hårdvaran ska upp, och varje grupp redovisar.
+
+\textbf{Ligg därför före.} \code{register_bank} och \code{spi_reg_bridge} beror inte på
+\code{can_controller} alls \textemdash{} den förra behöver bara \code{can_def}, den senare bara
+\code{spi_def} \textemdash{} så båda går att skriva parallellt med kontrollern, från
+\chapref{c10:ch} och framåt. En grupp som kommer hit med registerbanken klar och transaktionsformatet
+läst har passet till att koppla ihop och felsöka. En grupp som börjar här hinner inte allt.
+\end{warning}
+
+\input{chapters/19/verification}
+\input{chapters/19/bridge}
+\input{chapters/19/bringup}
+\input{chapters/19/summary}
+\input{chapters/19/exercises}
