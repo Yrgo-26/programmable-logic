@@ -86,16 +86,12 @@ drivrutinskursen. Övningarna följer med; lösningarna gör det inte, utan ligg
 repot. De byggs från källorna i [`book/`](./book/README.md), där det också står hur du bygger dem
 själv (`make -C book` bygger båda) och hur de hålls i takt med kursmaterialet.
 
-<<<<<<< Updated upstream
-Boken nämner varken kurs eller klass, så samma upplaga fungerar över flera år.
-=======
 ### Referenslitteratur
 CAN som protokoll ligger i en egen bok, också den i två språkupplagor:
 * Svenska: [CAN - bussen, framen och
   kontrollern](https://github.com/Yrgo-26/can-book/blob/main/sv/can-sv.pdf).
 * Engelska: [CAN - the bus, the frame and the
   controller](https://github.com/Yrgo-26/can-book/blob/main/en/can-en.pdf).
->>>>>>> Stashed changes
 
 CAN som protokoll beskrivs inte där, utan i
 [CAN - bussen, framen och kontrollern](https://github.com/Yrgo-26/can-book), som är gemensam med

@@ -37,5 +37,7 @@ Där står också konventionerna för hur innehållet redigeras och hålls i tak
 ---
 
 ## Licens
-Böckerna är satta ur kursens eget material. Koden i dem, och all kod i kursrepot, får användas under
-repots [MIT-licens](../LICENSE), och det gäller också byggfilerna i `sv/` och `en/`.
+Böckerna är satta ur kursens eget material, och texten i dem är licensierad under
+[CC BY 4.0](../LICENSE) precis som resten av kursmaterialet. Koden i dem, och all kod i kursrepot,
+får användas under [MIT-licensen](../LICENSE-CODE), och det gäller också byggfilerna i `sv/` och
+`en/`.

@@ -1,22 +1,57 @@
-% Bilaga E: vidare läsning. Protokollreferensen först, sedan standarderna, verktygen och fyra
-% riktningar vidare i ämnet.
+% Bilaga E: vidare läsning. Grunderna först, sedan protokollreferensen, standarderna, verktygen och
+% fyra riktningar vidare i ämnet.
 
 \chapter{Vidare läsning}
 \label{app:reading}
 
 Den här boken slutar med en CAN-nod som en mikrokontroller kan prata med, och den slutar där med
 flit: konstruktionen är förenklad på flera medvetna punkter (\secref{c19:sec:gaps}), och drivrutinen
-på andra sidan SPI-länken skrivs av någon annan. Den här bilagan säger var protokollet självt står
-beskrivet, vilka standarder konstruktionen förhåller sig till, och vart man går härnäst.
+på andra sidan SPI-länken skrivs av någon annan. Den här bilagan säger var grunderna boken
+förutsätter kan repeteras, var protokollet självt står beskrivet, vilka standarder konstruktionen
+förhåller sig till, och vart man går härnäst.
+
+% ------------------------------------------------------------------------------------------
+\section{Grunderna}
+\label{app:reading:basics}
+
+Boken förutsätter digitalteknikens grunder och repeterar dem bara där språket kräver det. \debook{}
+(\url{https://github.com/qrtech-academy/digital-electronics}) är boken att gå till när de behöver
+fräschas upp. Den är på engelska, fritt tillgänglig, och slutar ungefär där den här boken börjar:
+med en tillståndsmaskin byggd av grindar och vippor, simulerad i samma CircuitVerse.
+
+Sex kapitel plus bilagor, och varje kapitel motsvarar något den här boken tar för givet:
+
+\begin{booktable}{@{}c>{\raggedright\arraybackslash}p{0.44\linewidth}L@{}}
+  \thead{Kap.} & \thead{Ämne} & \thead{Här i boken} \\
+  \midrule
+  1 & Logiska grindar, och transistorerna och fördröjningen i dem & \secref{c1:sec:gates},
+    \secref{c5:sec:fmax} \\
+  2 & Boolesk algebra, De Morgan, talsystem och koder & \secref{c1:sec:boolean} \\
+  3 & Karnaughdiagram och minimering & \secref{c2:sec:kmap}, \secref{c8:sec:byhand} \\
+  4 & Kombinatoriska byggblock: multiplexer, avkodare, komparator, adderare & \secref{c2:sec:mux} \\
+  5 & Vippor, register, metastabilitet och synkronisering & \chapref{c3:ch} och \ref{c4:ch} \\
+  6 & Räknare, timers och tillståndsmaskiner & \chapref{c6:ch}, \ref{c7:ch} och \ref{c8:ch} \\
+  A & Svar på övningarna & \textemdash{} \\
+  B & CircuitVerse & \secref{c1:sec:cv} \\
+\end{booktable}
+
+Bilagorna efter B är två skrivningar med lösningsförslag. De är det snabbaste sättet att pröva om
+förkunskaperna sitter innan \chapref{c1:ch}, och att skriva en av dem på tid visar tydligare än en
+genomläsning vilka av kapitlen ovan som är värda en repetition.
 
 % ------------------------------------------------------------------------------------------
 \section{Protokollreferensen}
 \label{app:reading:protocol}
 
 \canbook{} är den bok den här boken lutar sig mot varje gång CAN som \emph{protokoll} kommer på tal.
-Den är kort, på svenska, och skriven för båda halvorna av ett CAN-system: den som bygger kontrollern
-i hårdvara och den som skriver drivrutinen i mjukvara. Den nämner därför varken kurs eller klass, och
-den är avsiktligt oberoende av vilken av de två kurserna som läser den.
+Den är kort och skriven för båda halvorna av ett CAN-system: den som bygger kontrollern i hårdvara
+och den som skriver drivrutinen i mjukvara. Den nämner därför varken kurs eller klass, och den är
+avsiktligt oberoende av vilken av de två kurserna som läser den.
+
+Den finns i två utgåvor med samma kapitel- och avsnittsnumrering, så varje hänvisning i den här
+boken gäller båda: på svenska på \url{https://github.com/Yrgo-26/can-book/blob/main/sv/can-sv.pdf},
+och på engelska, som \textenglish{\emph{CAN: the bus, the frame and the controller}}, på
+\url{https://github.com/Yrgo-26/can-book/blob/main/en/can-en.pdf}.
 
 Sju kapitel plus ett appendix, och kapitelindelningen är den här bokens del~\ref{part:can} sedd från
 protokollhållet:
@@ -60,8 +95,8 @@ kapitel i \emph{den här} boken, och en hänvisning till den andra skrivs alltid
 \label{app:reading:specs}
 
 Boken förhåller sig hela tiden till riktig CAN utan att vara den, och \canbook{} är mellansteget:
-den beskriver standarden på svenska och i den detaljnivå en konstruktör behöver. Vill du därefter se
-vad som faktiskt står i originalet:
+den beskriver standarden i den detaljnivå en konstruktör behöver. Vill du därefter se vad som
+faktiskt står i originalet:
 
 \begin{itemize}
   \item \textbf{Bosch CAN Specification 2.0} (del A och B) är grunddokumentet: ramformaten,

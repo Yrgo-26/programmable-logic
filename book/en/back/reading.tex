@@ -1,23 +1,58 @@
-% Appendix E: further reading. The protocol reference first, then the standards, the tools and four
-% directions further into the subject.
+% Appendix E: further reading. The basics first, then the protocol reference, the standards, the
+% tools and four directions further into the subject.
 
 \chapter{Further reading}
 \label{app:reading}
 
 This book ends with a CAN node a microcontroller can talk to, and it ends there deliberately: the
-design is simplified at several deliberate points (\secref{c19:sec:gaps}), and the driver on the other
-side of the SPI link is written by somebody else. This appendix says where the protocol itself is
-described, which standards the design relates to, and where to go next.
+design is simplified at several deliberate points (\secref{c19:sec:gaps}), and the driver on the
+other side of the SPI link is written by somebody else. This appendix says where the basics the book
+assumes can be revised, where the protocol itself is described, which standards the design relates
+to, and where to go next.
+
+% ------------------------------------------------------------------------------------------
+\section{The basics}
+\label{app:reading:basics}
+
+The book assumes the basics of digital electronics and revises them only where the language calls
+for it. \debook{} (\url{https://github.com/qrtech-academy/digital-electronics}) is the book to turn
+to when they need brushing up. It is freely available, and it ends roughly where this book begins:
+with a state machine built from gates and flip-flops, simulated in the same CircuitVerse.
+
+Six chapters plus appendices, and each chapter corresponds to something this book takes for granted:
+
+\begin{booktable}{@{}c>{\raggedright\arraybackslash}p{0.44\linewidth}L@{}}
+  \thead{Ch.} & \thead{Subject} & \thead{Here in this book} \\
+  \midrule
+  1 & Logic gates, and the transistors and the delay inside them & \secref{c1:sec:gates},
+    \secref{c5:sec:fmax} \\
+  2 & Boolean algebra, De Morgan, number systems and codes & \secref{c1:sec:boolean} \\
+  3 & Karnaugh maps and minimisation & \secref{c2:sec:kmap}, \secref{c8:sec:byhand} \\
+  4 & Combinational building blocks: multiplexer, decoder, comparator, adder & \secref{c2:sec:mux} \\
+  5 & Flip-flops, registers, metastability and synchronisation & chapters~\ref{c3:ch} and~\ref{c4:ch} \\
+  6 & Counters, timers and state machines & chapters~\ref{c6:ch}, \ref{c7:ch} and~\ref{c8:ch} \\
+  A & Answers to the exercises & \textemdash{} \\
+  B & CircuitVerse & \secref{c1:sec:cv} \\
+\end{booktable}
+
+The appendices after B are two written papers with model answers. They are the quickest way to test
+whether the prerequisites are in place before \chapref{c1:ch}, and sitting one of them against the
+clock shows more clearly than a read-through which of the chapters above are worth revising.
 
 % ------------------------------------------------------------------------------------------
 \section{The protocol reference}
 \label{app:reading:protocol}
 
-\canbook{} (``CAN: the bus, the frame and the controller'') is the book this one leans on every time
-CAN as a \emph{protocol} comes up. It is short, in Swedish, and written for both halves of a CAN
-system: the one building the controller in hardware and the one writing the driver in software. It
-therefore mentions neither course nor class, and it is deliberately independent of which of the two
-courses is reading it.
+\canbook{} is the book this one leans on every time CAN as a \emph{protocol} comes up. It is short
+and written for both halves of a CAN system: the one building the controller in hardware and the one
+writing the driver in software. It therefore mentions neither course nor class, and it is
+deliberately independent of which of the two courses is reading it.
+
+It exists in two editions with the same chapter and section numbering, so every reference in this
+book holds for both: in English at
+\url{https://github.com/Yrgo-26/can-book/blob/main/en/can-en.pdf}, and in Swedish, as
+\textswedish{\emph{CAN: bussen, framen och kontrollern}}, at
+\url{https://github.com/Yrgo-26/can-book/blob/main/sv/can-sv.pdf}.
 
 Seven chapters plus an appendix, and the chapter division is this book's part~\ref{part:can} seen from
 the protocol side:
@@ -62,9 +97,9 @@ written out in full.
 \section{Standards and specifications}
 \label{app:reading:specs}
 
-The book relates to real CAN throughout without being it, and \canbook{} is the intermediate step: it
-describes the standard in Swedish and at the level of detail a designer needs. If you then want to see
-what the original actually says:
+The book relates to real CAN throughout without being it, and \canbook{} is the intermediate step:
+it describes the standard at the level of detail a designer needs. If you then want to see what the
+original actually says:
 
 \begin{itemize}
   \item \textbf{Bosch CAN Specification 2.0} (parts A and B) is the base document: the frame formats,

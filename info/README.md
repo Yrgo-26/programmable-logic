@@ -15,6 +15,13 @@ Deltagarna förutsätts komma med följande på plats:
 * Register, D-vippor, och vad en klockflank gör.
 * Tillståndsmaskiner som begrepp: tillstånd, övergångar, och skillnaden mellan Moore och Mealy.
 
+Behöver något av det fräschas upp står allt i [Digital
+Electronics](https://github.com/qrtech-academy/digital-electronics/blob/main/book/digital-electronics.pdf),
+en fritt tillgänglig bok på engelska som går från en enda grind till en tillståndsmaskin: grindar
+och boolesk algebra i kapitel 1 och 2, Karnaughdiagram i kapitel 3, vippor och register i kapitel 5
+och tillståndsmaskiner i kapitel 6. Dess två övningsskrivningar med lösningsförslag är ett snabbt
+sätt att pröva om förkunskaperna sitter.
+
 Ingenting av det lärs ut från grunden. Det repeteras där språket kräver det, kort och i
 appendixen snarare än i föreläsningarna: [L01](../lectures/L01/README.md) återger grind- och
 boolesk notation så att kursen har en konvention, [L02](../lectures/L02/README.md) arbetar ett

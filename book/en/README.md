@@ -28,7 +28,7 @@ undefined. A clean build writes nothing after the two `lualatex` lines except a 
 underfull lines.
 
 `texlive-lang-european` is not optional even here: `polyglossia` is loaded with Swedish as a second
-language, for the companion volume's title, which stays in Swedish.
+language, for the title of the companion volume's Swedish edition, which stays in Swedish.
 
 ---
 
@@ -89,6 +89,7 @@ The solutions to the exercises are not in the book. They stay in the course repo
 ---
 
 ## Licence
-The book is typeset from the course's own material. The code in the book, and all the code in the
-course repository, may be used under the repository's [MIT licence](../../LICENSE), and that applies
-to this directory's build files too (`vhdlbook.sty`, `vhdlbook.lua`, `Makefile`).
+The book is typeset from the course's own material, and its text is licensed under
+[CC BY 4.0](../../LICENSE) like the rest of the course material. The code in the book, and all the
+code in the course repository, may be used under the [MIT licence](../../LICENSE-CODE), and that
+applies to this directory's build files too (`vhdlbook.sty`, `vhdlbook.lua`, `Makefile`).

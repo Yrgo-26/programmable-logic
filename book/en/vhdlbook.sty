@@ -36,7 +36,7 @@
 % Language. English throughout, which is what names the headings "Chapter", "Appendix" and
 % "Contents", and what gives the text English hyphenation patterns. This is the English edition
 % of a book written in Swedish; Swedish is kept as a second language for the few words that stay
-% in it, the companion volume's title among them.
+% in it, the title of the companion volume's Swedish edition among them.
 % ------------------------------------------------------------------------------------------
 \RequirePackage{polyglossia}
 \setmainlanguage{english}
@@ -192,12 +192,20 @@
 \newcommand{\note}[1][Note]{\textbf{#1:}\ }
 
 % The protocol reference this book leans on for CAN itself, written once so every mention of it
-% reads the same. \canbook is the title, which is Swedish and stays that way, since that is the
-% title the book is found under; \canref{5} names one of its chapters, which are numbered
-% independently of this book's, so the word is spelled out rather than left to \chapref.
-\newcommand{\canbook}{\textswedish{\emph{CAN: bussen, framen och kontrollern}}}
+% reads the same. \canbook is the title, linked to the English edition; the Swedish edition has the
+% same chapter and section numbering, so every \canref holds for both. \canref{5} names one of its
+% chapters, which are numbered independently of this book's, so the word is spelled out rather than
+% left to \chapref.
+\newcommand{\canbook}{\href{https://github.com/Yrgo-26/can-book/blob/main/en/can-en.pdf}%
+  {\emph{CAN: the bus, the frame and the controller}}}
 \newcommand{\canref}[1]{chapter~#1 of \canbook}
 \newcommand{\Canref}[1]{Chapter~#1 of \canbook}
+
+% The digital-electronics book the prerequisites can be revised from. The chapters point into it
+% wherever they revise the basics; its chapters and sections are numbered independently of this
+% book's, so references to them are always written out in full.
+\newcommand{\debook}{\href{https://github.com/qrtech-academy/digital-electronics}%
+  {\emph{Digital Electronics}}}
 
 % ------------------------------------------------------------------------------------------
 % Tables. Rules only where they separate; never a vertical one.

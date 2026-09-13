@@ -83,6 +83,7 @@ Lösningarna till övningarna står inte i boken. De ligger kvar i kursrepot.
 ---
 
 ## Licens
-Boken är satt ur kursens eget material. Koden i boken, och all kod i kursrepot, får användas under
-repots [MIT-licens](../../LICENSE), och det gäller också den här katalogens byggfiler
-(`vhdlbook.sty`, `vhdlbook.lua`, `Makefile`).
+Boken är satt ur kursens eget material, och dess text är licensierad under
+[CC BY 4.0](../../LICENSE) precis som resten av kursmaterialet. Koden i boken, och all kod i
+kursrepot, får användas under [MIT-licensen](../../LICENSE-CODE), och det gäller också den här
+katalogens byggfiler (`vhdlbook.sty`, `vhdlbook.lua`, `Makefile`).

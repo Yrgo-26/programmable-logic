@@ -30,6 +30,13 @@ the language and the toolchain.
     Mealy.
 \end{itemize}
 
+If any of it needs brushing up, all of it is in \debook{}
+(\url{https://github.com/qrtech-academy/digital-electronics}), a freely available book that goes
+from a single gate to a state machine: gates and Boolean algebra in chapters~1 and~2, Karnaugh maps
+in chapter~3, flip-flops and registers in chapter~5 and state machines in chapter~6. The chapters of
+this book point there wherever they revise the basics, and \secref{app:reading:basics} has the whole
+map.
+
 No programming language beyond general software experience is assumed. Familiarity with C or
 something like it helps, since several explanations set VHDL's semantics against it, and the one
 section that actually contains C++ (\secref{c10:sec:framing}) is a short introduction to framing
@@ -99,14 +106,14 @@ Chapters~\ref{c9:ch} and \ref{c20:ch} are the two examinations. They contain no 
 say what the exam measures, what shape the tasks take and how to prepare, and they are worth
 reading in advance rather than the day before.
 
-\textbf{One more book belongs to part~\ref{part:can}.} This book describes how to \emph{build} a
-CAN node; the protocol itself is described in \canbook{} (``CAN: the bus, the frame and the
-controller''), a short Swedish book written for both halves of a CAN system. It is the protocol
-reference throughout the second half: its chapters 1--6 are the requirement specification for what
-is built here, bit by bit, and its chapter~7 describes exactly the simplified controller
-part~\ref{part:can} arrives at. Every chapter that adds a protocol rule says where in that book the
-rule is stated, and \secref{app:reading:protocol} has the full chapter map between the two. Its
-chapters 1 and 2 are worth reading before \chapref{c10:ch}; the rest works best as a reference.
+\textbf{One more book belongs to part~\ref{part:can}.} This book describes how to \emph{build} a CAN
+node; the protocol itself is described in \canbook{}, a short book written for both halves of a CAN
+system, in English and in Swedish with the same chapter numbering. It is the protocol reference
+throughout the second half: its chapters 1--6 are the requirement specification for what is built
+here, bit by bit, and its chapter~7 describes exactly the simplified controller part~\ref{part:can}
+arrives at. Every chapter that adds a protocol rule says where in that book the rule is stated, and
+\secref{app:reading:protocol} has the full chapter map between the two. Its chapters 1 and 2 are
+worth reading before \chapref{c10:ch}; the rest works best as a reference.
 
 \section*{Three layers of verification}
 The course checks its work at three levels, and keeping them apart is a point in itself:
