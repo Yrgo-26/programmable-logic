@@ -35,6 +35,10 @@ Efter den här föreläsningen ska ni kunna:
 ## Genomförande
 
 ### Förberedelse
+> **Hellre boken?** Den här föreläsningen är också kapitel 17 i kursboken, på
+> [svenska](../../book/sv/programmerbar-logik.pdf) och
+> [engelska](../../book/en/programmable-logic.pdf). Appendix A är avsnitt 17.1-17.8, och övningarna i Appendix B är avsnitt 17.10. Läs antingen appendixen eller kapitlet; innehållet är detsamma.
+
 * Läs [Appendix A](./appendix/a_can_controller_receive.md).
 
 ### Under föreläsningen

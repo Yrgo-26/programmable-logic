@@ -42,6 +42,12 @@ Efter den här föreläsningen ska ni kunna:
 ## Genomförande
 
 ### Förberedelse
+> **Hellre boken?** Den här föreläsningen är också kapitel 11 i kursboken, på
+> [svenska](../../book/sv/programmerbar-logik.pdf) och
+> [engelska](../../book/en/programmable-logic.pdf). Appendix A är avsnitt 11.1-11.6, och övningarna
+> i Appendix B är avsnitt 11.8. Simuleringsflödet är bokens bilaga A. Läs antingen appendixen eller
+> kapitlet; innehållet är detsamma.
+
 * Läs [Appendix A](./appendix/a_architecture_and_register_map.md), som är föreläsningens
   kärnmaterial: arkitekturen, portlistan och registerkartan.
 * Läs [simuleringsflödet](../../info/simulation_workflow.md), projektets permanenta GHDL-referens.

@@ -46,6 +46,12 @@ Efter den här föreläsningen ska ni kunna:
 ## Genomförande
 
 ### Förberedelse
+> **Hellre boken?** Den här föreläsningen är också kapitel 10 i kursboken, på
+> [svenska](../../book/sv/programmerbar-logik.pdf) och
+> [engelska](../../book/en/programmable-logic.pdf). Introduktionen om ramar är avsnitt 10.1,
+> Appendix A är avsnitt 10.2-10.7, Appendix B är avsnitt 10.8, och övningarna, både Appendix C och ramningsintroduktionens, är avsnitt 10.10. Projektspecifikationen är bokens bilaga C. Läs antingen
+> appendixen eller kapitlet; innehållet är detsamma.
+
 * Läs [projektspecifikationen](../../project/README.md) i sin helhet.
 * Läs [introduktionen om ramar](./appendix/intro_framing.md), åtminstone fram till avsnittet om
   serialisering. Den bygger upp ett eget litet ramformat och motiverar varje fält CAN sedan har.

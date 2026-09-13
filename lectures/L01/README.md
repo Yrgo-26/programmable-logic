@@ -35,6 +35,16 @@ Allt annat är läsning eller övningar, däribland [`or_gate`](./or_gate/or_gat
 ---
 
 ## Före föreläsningen
+> **Hellre boken?** Den här föreläsningen är också kapitel 1 i kursboken, på
+> [svenska](../../book/sv/programmerbar-logik.pdf) och
+> [engelska](../../book/en/programmable-logic.pdf). Appendix A är avsnitt 1.1-1.6, och övningarna i
+> Appendix B är avsnitt 1.8. Läs antingen appendixen eller kapitlet; innehållet är detsamma.
+
+> **Repetera grunderna?** Grindar, sanningstabeller och boolesk algebra står i avsnitt 1.1-1.4 och
+> 2.1-2.7 i [Digital
+> Electronics](https://github.com/qrtech-academy/digital-electronics/blob/main/book/digital-electronics.pdf),
+> och CircuitVerse i dess bilaga B.
+
 Läs [Appendix A](./appendix/a_combinational_logic.md). Inget behöver installeras för själva
 föreläsningen; till övningarna behöver du GHDL, enligt
 [L02 Appendix C](../L02/appendix/c_testbenches.md).

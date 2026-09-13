@@ -35,6 +35,11 @@ Efter den här föreläsningen ska ni kunna:
 ## Genomförande
 
 ### Förberedelse
+> **Hellre boken?** Den här föreläsningen är också kapitel 14 i kursboken, på
+> [svenska](../../book/sv/programmerbar-logik.pdf) och
+> [engelska](../../book/en/programmable-logic.pdf). Appendix A är avsnitt 14.1-14.6, och övningarna
+> i Appendix B är avsnitt 14.8. Läs antingen appendixen eller kapitlet; innehållet är detsamma.
+
 * Läs [Appendix A](./appendix/a_tx_shift_reg.md). Den är lång, och gränssnittstabellen plus
   avsnittet om vad testbänken låser fast är de delar som lönar sig mest före passet.
 

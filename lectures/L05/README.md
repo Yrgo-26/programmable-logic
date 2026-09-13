@@ -27,6 +27,16 @@ och enda sättet att se varför är att spåra den snarare än att läsa den.
 ---
 
 ## Före föreläsningen
+> **Hellre boken?** Den här föreläsningen är också kapitel 5 i kursboken, på
+> [svenska](../../book/sv/programmerbar-logik.pdf) och
+> [engelska](../../book/en/programmable-logic.pdf). Appendix A är avsnitt 5.1-5.5, och övningarna i
+> Appendix B är avsnitt 5.7. Läs antingen appendixen eller kapitlet; innehållet är detsamma.
+
+> **Repetera grunderna?** Fortplantningsfördröjningen bakom klockans hastighetsgräns förklaras på
+> transistornivå i avsnitt 1.12 i [Digital
+> Electronics](https://github.com/qrtech-academy/digital-electronics/blob/main/book/digital-electronics.pdf),
+> och D-låset du kan få av misstag står i avsnitt 5.3 i samma bok.
+
 * Läs [Appendix A](./appendix/a_variables_and_hardware.md).
 * Inget nytt förutsätts utöver L01-L04. Varje konstruktion utom `variable` har redan dykt upp i
   en design du själv skrivit.

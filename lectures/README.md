@@ -4,6 +4,12 @@ Kursen består av tjugo pass om tre timmar. De åtta första bygger upp VHDL fr�
 nionde är den första praktiska tentamen, de tio därpå är grupprojektet, och det tjugonde är den
 andra praktiska tentamen.
 
+Varje föreläsning finns också som ett kapitel i kursboken, på
+[svenska](../book/sv/programmerbar-logik.pdf) och [engelska](../book/en/programmable-logic.pdf):
+föreläsning L01 är kapitel 1, L02 är kapitel 2, och så vidare till L20. Varje föreläsnings README
+säger vilka avsnitt i kapitlet som motsvarar vilket appendix, så att du kan läsa det ena eller det
+andra. Innehållet är detsamma, och avsnittsnumren är desamma i båda upplagorna.
+
 ---
 
 ## Del 1 - Digital konstruktion i VHDL

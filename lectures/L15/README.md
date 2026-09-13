@@ -37,6 +37,11 @@ Efter den här föreläsningen ska ni kunna:
 ## Genomförande
 
 ### Förberedelse
+> **Hellre boken?** Den här föreläsningen är också kapitel 15 i kursboken, på
+> [svenska](../../book/sv/programmerbar-logik.pdf) och
+> [engelska](../../book/en/programmable-logic.pdf). Appendix A är avsnitt 15.1-15.6, och övningarna
+> i Appendix B är avsnitt 15.8. Läs antingen appendixen eller kapitlet; innehållet är detsamma.
+
 * Läs [Appendix A](./appendix/a_rx_shift_reg.md).
 * Välj ut, i gruppen, **en mergad Pull Request** och **en granskning någon i gruppen skrivit**,
   att visa på seminariet. Det behöver inte vara den finaste; en PR som fick befogad kritik är

@@ -54,6 +54,11 @@ Den fullständiga och auktoritativa hjälpmedelslistan står i
 ---
 
 ## Före tentamen
+> **Hellre boken?** Den här sidan är också kapitel 20 i kursboken, på
+> [svenska](../../book/sv/programmerbar-logik.pdf) och
+> [engelska](../../book/en/programmable-logic.pdf). Kontrollfrågorna finns i sammanfattningen sist i
+> kapitel 12 till 19.
+
 * Gå igenom de moduler i projektet som *någon annan* i gruppen skrev. Det är där luckorna finns.
 * Kontrollfrågorna sist i [L12](../L12/README.md) till [L19](../L19/README.md) är avsiktligt
   skrivna som repetitionsmaterial. Kan du svara på alla utan att slå upp något är du klar.

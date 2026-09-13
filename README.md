@@ -78,8 +78,9 @@ Du ska kunna:
 
 ## Boken
 Hela kursen finns också som en bok, i två upplagor med samma innehåll:
-[Programmerbar logik](./book/sv/programmerbar-logik.pdf) på svenska och
-[Programmable Logic](./book/en/programmable-logic.pdf) på engelska.
+* Svenska: [Programmerbar logik](./book/sv/programmerbar-logik.pdf).
+* Engelska: [Programmable Logic](./book/en/programmable-logic.pdf).
+
 Varje föreläsning är ett kapitel, med samma avsnitt som passets appendix, och bilagorna håller
 verktygsreferenserna för GHDL och Quartus, projektspecifikationen och det delade kontraktet mot
 drivrutinskursen. Övningarna följer med; lösningarna gör det inte, utan ligger kvar i det här

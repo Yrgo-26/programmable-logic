@@ -39,6 +39,15 @@ så de är inte valfria.
 ---
 
 ## Före föreläsningen
+> **Hellre boken?** Den här föreläsningen är också kapitel 4 i kursboken, på
+> [svenska](../../book/sv/programmerbar-logik.pdf) och
+> [engelska](../../book/en/programmable-logic.pdf). Appendix A är avsnitt 4.1-4.9, och övningarna i
+> Appendix B är avsnitt 4.11. Läs antingen appendixen eller kapitlet; innehållet är detsamma.
+
+> **Repetera grunderna?** Metastabilitet, dubbelvippsynkroniseraren och vad den inte löser står
+> också i avsnitt 5.7-5.9 i [Digital
+> Electronics](https://github.com/qrtech-academy/digital-electronics/blob/main/book/digital-electronics.pdf).
+
 * Läs [Appendix A](./appendix/a_metastability_and_synchronization.md).
 * Var bekväm med D-vippor, klockning och flankdetektering från [L03](../L03/README.md); den här
   föreläsningen förutsätter allt det.

@@ -43,6 +43,17 @@ köper, vilket är enda sättet för det standardvalet att bli ett val i ställe
 ---
 
 ## Före föreläsningen
+> **Hellre boken?** Den här föreläsningen är också kapitel 8 i kursboken, på
+> [svenska](../../book/sv/programmerbar-logik.pdf) och
+> [engelska](../../book/en/programmable-logic.pdf). Appendix A är avsnitt 8.1-8.6, och övningarna i
+> Appendix B, de två capstones inräknade, är avsnitt 8.8. Läs antingen appendixen eller kapitlet;
+> innehållet är detsamma.
+
+> **Repetera grunderna?** Konstruktionsgången för hand, från tillståndsdiagram via tillståndstabell
+> och Karnaughdiagram till grindnät, och skillnaden mellan Moore och Mealy står i avsnitt 6.4-6.7 i
+> [Digital
+> Electronics](https://github.com/qrtech-academy/digital-electronics/blob/main/book/digital-electronics.pdf).
+
 * Läs [Appendix A](./appendix/a_state_machines.md).
 * Föreläsningen förutsätter L02:s Karnaughdiagram och L03:s vippor, och återanvänder L07:s `timer`
   oförändrad tillsammans med L04:s synkroniserare breddad till två knappar.

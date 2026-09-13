@@ -30,6 +30,14 @@ oförändrade från L04 och en skriven i dag, komponerade till något du kan se 
 ---
 
 ## Före föreläsningen
+> **Hellre boken?** Den här föreläsningen är också kapitel 7 i kursboken, på
+> [svenska](../../book/sv/programmerbar-logik.pdf) och
+> [engelska](../../book/en/programmable-logic.pdf). Appendix A är avsnitt 7.1-7.5, och övningarna i
+> Appendix B är avsnitt 7.7. Läs antingen appendixen eller kapitlet; innehållet är detsamma.
+
+> **Repetera grunderna?** Timern som en räknare med en jämförelse står i avsnitt 6.3 i [Digital
+> Electronics](https://github.com/qrtech-academy/digital-electronics/blob/main/book/digital-electronics.pdf).
+
 * Läs [Appendix A](./appendix/a_timers.md).
 * Var bekväm med räknare från
   [L06 A.1](../L06/appendix/a_counters_and_shift_registers.md#a1-från-register-till-räknare). En

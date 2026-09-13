@@ -42,6 +42,10 @@ Den fullständiga och auktoritativa hjälpmedelslistan står i
 ---
 
 ## Före tentamen
+> **Hellre boken?** Den här sidan är också kapitel 9 i kursboken, på
+> [svenska](../../book/sv/programmerbar-logik.pdf) och
+> [engelska](../../book/en/programmable-logic.pdf). Kursens två capstones finns i avsnitt 8.8.
+
 * Gå igenom övningsprovet, under tidspress och utan att titta i lösningarna först.
 * Övning 6 och 7 i [L08 Appendix B](../L08/appendix/b_exercises.md), kursens två capstones, är den
   bästa förberedelsen som finns: de tvingar dig att konstruera ett tillståndsdiagram själv och

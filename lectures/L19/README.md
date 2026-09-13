@@ -46,6 +46,13 @@ Efter den här föreläsningen ska ni kunna:
 ## Genomförande
 
 ### Förberedelse
+> **Hellre boken?** Den här föreläsningen är också kapitel 19 i kursboken, på
+> [svenska](../../book/sv/programmerbar-logik.pdf) och
+> [engelska](../../book/en/programmable-logic.pdf). Appendix A är avsnitt 19.1, bryggans
+> specifikation är avsnitt 19.2, Appendix B är avsnitt 19.3-19.8, och övningarna i Appendix C är
+> avsnitt 19.10. Protokollspecifikationen är bokens bilaga D. Läs antingen appendixen eller
+> kapitlet; innehållet är detsamma.
+
 * Läs [protokollspecifikationen](../../project/spi_register_protocol.md) noga, särskilt
   kommandobytens format och regeln om avbrott.
 * Läs [Appendix A](./appendix/a_system_verification.md) om systemverifieringen med två noder.

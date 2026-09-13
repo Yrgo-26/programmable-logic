@@ -46,6 +46,13 @@ Efter den här föreläsningen ska ni kunna:
 ## Genomförande
 
 ### Förberedelse
+> **Hellre boken?** Den här föreläsningen är också kapitel 18 i kursboken, på
+> [svenska](../../book/sv/programmerbar-logik.pdf) och
+> [engelska](../../book/en/programmable-logic.pdf). Appendix A är avsnitt 18.1-18.8, SPI-genomgången
+> på den här sidan och `spi_slave.vhd` är avsnitt 18.9, och övningarna i Appendix B är avsnitt
+> 18.11. Registerkartan och protokollspecifikationen är bokens bilaga D. Läs antingen appendixen
+> eller kapitlet; innehållet är detsamma.
+
 * Läs [Appendix A](./appendix/a_register_bank.md), som är registerbankens fullständiga
   beskrivning: portlista, STATUS-tabell, maskningstabell och vad testbänken låser fast.
 * Läs [protokollspecifikationen](../../project/spi_register_protocol.md), åtminstone avsnitten om

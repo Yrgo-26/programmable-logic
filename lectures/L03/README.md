@@ -38,6 +38,15 @@ av växlingskretsen, vilket är samma modul men med något att göra.
 ---
 
 ## Före föreläsningen
+> **Hellre boken?** Den här föreläsningen är också kapitel 3 i kursboken, på
+> [svenska](../../book/sv/programmerbar-logik.pdf) och
+> [engelska](../../book/en/programmable-logic.pdf). Appendix A är avsnitt 3.1-3.9, och övningarna i
+> Appendix B är avsnitt 3.11. Läs antingen appendixen eller kapitlet; innehållet är detsamma.
+
+> **Repetera grunderna?** Låset, vippan, registret och flankdetekteringen står i avsnitt 5.1-5.6 i
+> [Digital
+> Electronics](https://github.com/qrtech-academy/digital-electronics/blob/main/book/digital-electronics.pdf).
+
 * Läs [Appendix A](./appendix/a_flip_flops_and_registers.md).
 
 ## Efter föreläsningen

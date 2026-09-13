@@ -37,6 +37,11 @@ Efter den här föreläsningen ska ni kunna:
 ## Genomförande
 
 ### Förberedelse
+> **Hellre boken?** Den här föreläsningen är också kapitel 13 i kursboken, på
+> [svenska](../../book/sv/programmerbar-logik.pdf) och
+> [engelska](../../book/en/programmable-logic.pdf). Appendix A är avsnitt 13.1-13.6, och övningarna
+> i Appendix B är avsnitt 13.8. Läs antingen appendixen eller kapitlet; innehållet är detsamma.
+
 * Läs [Appendix A](./appendix/a_crc15.md).
 
 ### Under föreläsningen

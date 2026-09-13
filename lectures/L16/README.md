@@ -35,6 +35,10 @@ Efter den här föreläsningen ska ni kunna:
 ## Genomförande
 
 ### Förberedelse
+> **Hellre boken?** Den här föreläsningen är också kapitel 16 i kursboken, på
+> [svenska](../../book/sv/programmerbar-logik.pdf) och
+> [engelska](../../book/en/programmable-logic.pdf). Appendix A är avsnitt 16.1-16.8, och övningarna i Appendix B är avsnitt 16.10. Läs antingen appendixen eller kapitlet; innehållet är detsamma.
+
 * Läs [Appendix A](./appendix/a_can_controller.md). Den är projektets längsta appendix; läs
   åtminstone tillståndsdiagrammet och tabellen över de sju fältgrupper en sändning delas upp i
   (databytegruppen upprepas en gång per byte, så en tvåbytesram blir åtta laddningar).

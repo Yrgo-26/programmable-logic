@@ -45,6 +45,12 @@ Efter den här föreläsningen ska ni kunna:
 ## Genomförande
 
 ### Förberedelse
+> **Hellre boken?** Den här föreläsningen är också kapitel 12 i kursboken, på
+> [svenska](../../book/sv/programmerbar-logik.pdf) och
+> [engelska](../../book/en/programmable-logic.pdf). Appendix A är avsnitt 12.1, Appendix B är
+> avsnitt 12.2, och övningarna i Appendix C är avsnitt 12.4. Simuleringsflödet är bokens bilaga A.
+> Läs antingen appendixen eller kapitlet; innehållet är detsamma.
+
 * Läs [Appendix A](./appendix/a_meta_prev.md) och [Appendix B](./appendix/b_bit_timer.md).
 * Läs [simuleringsflödet](../../info/simulation_workflow.md) om ni inte redan gjort det; det här
   passet använder alla tre stegen snarare än de två första.

@@ -38,6 +38,15 @@ den styrning som låter dig ta en bit i taget.
 ---
 
 ## Före föreläsningen
+> **Hellre boken?** Den här föreläsningen är också kapitel 6 i kursboken, på
+> [svenska](../../book/sv/programmerbar-logik.pdf) och
+> [engelska](../../book/en/programmable-logic.pdf). Appendix A är avsnitt 6.1-6.7, och övningarna i
+> Appendix B är avsnitt 6.9. Läs antingen appendixen eller kapitlet; innehållet är detsamma.
+
+> **Repetera grunderna?** Räknare och skiftregister byggda av vippor och grindar står i avsnitt
+> 6.1-6.2 i [Digital
+> Electronics](https://github.com/qrtech-academy/digital-electronics/blob/main/book/digital-electronics.pdf).
+
 * Läs [Appendix A](./appendix/a_counters_and_shift_registers.md).
 
 ## Efter föreläsningen

@@ -36,6 +36,16 @@ och sedan i VHDL, i stället för att kopiera den.
 ---
 
 ## Före föreläsningen
+> **Hellre boken?** Den här föreläsningen är också kapitel 2 i kursboken, på
+> [svenska](../../book/sv/programmerbar-logik.pdf) och
+> [engelska](../../book/en/programmable-logic.pdf). Appendix A är avsnitt 2.1-2.6, testbänksguiden i
+> Appendix C är avsnitt 2.7, och övningarna i Appendix B är avsnitt 2.9. Läs antingen appendixen
+> eller kapitlet; innehållet är detsamma.
+
+> **Repetera grunderna?** Karnaughdiagram har ett eget kapitel i [Digital
+> Electronics](https://github.com/qrtech-academy/digital-electronics/blob/main/book/digital-electronics.pdf),
+> kapitel 3, och multiplexern står i avsnitt 4.2 där.
+
 * Läs [Appendix A](./appendix/a_larger_networks.md).
 * Installera GHDL enligt [Appendix C](./appendix/c_testbenches.md), om du inte redan gjort det.
   L01:s övningar behövde det också, och varje övning härifrån och framåt gör det.
