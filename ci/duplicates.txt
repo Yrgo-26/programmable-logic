@@ -1,0 +1,18 @@
+# Groups of files that must stay byte-identical.
+#
+# There are none at the moment, and that is the point: no module is vendored into a second
+# directory any more. A design that reuses a module the reader wrote asks them to bring their
+# own copy, and every other module exists exactly once, in the lecture
+# that presents it.
+#
+# The file is still read, and ci/duplicates.sh still enforces the other half of the rule: if a
+# .vhd basename ever appears in two places again, it must be listed here as a group, so the
+# copies are checked against each other. That is what stops the meta_prev incident repeating,
+# where one module drifted into three incompatible versions across seven copies before anybody
+# noticed.
+#
+# Format: one group per line, whitespace-separated paths, relative to the repo root. The first
+# path is the reference the others are compared against. Blank lines and # comments ignored.
+#
+# When a module genuinely needs to differ between lectures, that is a fork, not a copy: give it
+# its own entity name rather than adding a group here.

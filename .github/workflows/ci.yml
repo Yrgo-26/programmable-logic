@@ -1,0 +1,105 @@
+# Set pipeline name.
+name: CI
+
+# Set pipeline triggers. The weekly run is a canary for rot in the environment rather than in
+# the repo: an action that stops resolving, or a package that disappears. Every job pins its
+# runner image rather than taking ubuntu-latest, because the image is a toolchain input like any
+# other: "latest" moving from 22.04 to 24.04 is what broke the GHDL job once already, and the
+# figure job below compares PNGs byte for byte, which a font or library change would defeat.
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  schedule:
+    - cron: '0 6 * * 1'
+  workflow_dispatch:
+
+# Read-only is all any job here needs.
+permissions:
+  contents: read
+
+# A new push to a branch makes the run already in flight redundant.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+# Fail on the first error in a multi-line run block, and on a failure inside a pipeline.
+defaults:
+  run:
+    shell: bash
+
+# Define pipeline jobs.
+jobs:
+  # Run the same scripts a contributor runs locally. CI deliberately does not reimplement the
+  # build: a second copy of the discovery loop is a second thing to keep in step, and the one
+  # that is not exercised locally is the one that rots.
+  #
+  # `make build` covers both halves of the repo: the L01-L08 lecture examples, and the group
+  # project in controller/ and bridge/. The project half reports every testbench as skipped here,
+  # because this repository ships only the provided testbenches and the modules are each group's
+  # to write. Skipped is the correct green state; see the header of ci/build_project.sh.
+  build:
+    name: GHDL build and simulate
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      # Installed the way README.md tells a participant to install it, so CI runs the toolchain
+      # they will actually have rather than a separately published binary. Ubuntu 24.04 ships
+      # GHDL 4.1.0 and an LTS holds its package version, so this is pinned in practice without
+      # pinning a download URL. It also replaces the release-inventory route, which publishes no
+      # 4.1.0 build for 24.04 at all.
+      - name: Install GHDL
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y ghdl
+          ghdl --version
+
+      - name: Analyze, elaborate, and simulate the lecture examples and the project
+        run: make build
+
+  # Cheap checks that need no toolchain, so they report independently of the build.
+  lint:
+    name: Duplicate modules, Markdown links, and VHDL whitespace
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      # One target, not the three it expands to. The Makefile's `lint` claims to mirror this
+      # job exactly; listing the steps here separately made that claim true only by hand, so
+      # adding a fourth prerequisite to `lint` would silently not run it in CI.
+      # See the comment on `lint:` in the Makefile.
+      - name: Run every non-simulation check
+        run: make lint
+
+  # The drawing pins are exact and style.py quantizes deterministically, so a rebuild is
+  # byte-identical. That makes drift detectable: edit a figure module without re-committing its
+  # PNG, or hand-edit a generated PNG, and this is where it surfaces.
+  diagrams:
+    name: Committed figures match diagrams/build.py
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          # Match the interpreter the committed figures were drawn with.
+          python-version: '3.12'
+          cache: pip
+          cache-dependency-path: diagrams/requirements.txt
+
+      - name: Install the pinned drawing dependencies
+        run: pip install -r diagrams/requirements.txt
+
+      - name: Redraw every figure and diff it against what is committed
+        run: |
+          python diagrams/build.py
+          git diff --exit-code -- 'lectures/*/appendix/images/*.png'

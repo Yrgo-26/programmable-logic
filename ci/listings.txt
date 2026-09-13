@@ -1,0 +1,23 @@
+# Appendix listings that ci/extract_vhdl.py may build against, one "<module> <path>" per line.
+#
+# The normal source of a module body is lectures/L0N/solutions/<module>.vhd, published after each
+# lecture and picked up automatically. This file covers the gap before that: a handful of modules
+# an appendix already prints in full, because the lecture builds them live and the text needs to
+# show what was built.
+#
+# Listing is deliberately explicit rather than a search. Several appendices print the same module
+# twice on purpose, once broken and once fixed, because the broken one is the lesson (L05 A.2 does
+# this with parity_gen). A search would eventually build a shipped testbench against the version
+# the course tells you not to write, and report it green. Naming the file here means somebody
+# decided this listing is the one to build against; ci/extract_vhdl.py additionally refuses any
+# file that offers two architectures for the same module.
+#
+# A module absent from here and from every lecture's solutions/ is simply not covered yet:
+# ci/build.sh falls back to analyzing its testbench against the generated stub entity.
+#
+# A published solution wins over anything listed here. When a module's solution lands, delete
+# its line below: leaving both means the appendix listing and the solution can drift apart with
+# nothing comparing them, and the line is doing no work either way.
+
+timer        lectures/L07/appendix/a_timers.md
+walking_led  lectures/L07/appendix/a_timers.md
