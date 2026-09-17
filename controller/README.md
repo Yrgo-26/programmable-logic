@@ -1,12 +1,13 @@
 # Kontrollern
 
-Här byggs CAN-kontrollern. I det här repot innehåller katalogen bara de **utdelade
-testbänkarna**; modulerna är gruppens att skriva, i gruppens eget repo. Kopiera in katalogen där,
-eller lägg modulerna bredvid testbänkarna här, så börjar varje testbänk köra så snart alla filer
-den namnger finns.
+Här byggs CAN-kontrollern. I det här repot innehåller katalogen bara de **utdelade filerna**:
+testbänkarna och paketet `can_def.vhd`. Modulerna är gruppens att skriva, i gruppens eget repo.
+Kopiera in katalogen där, eller lägg modulerna bredvid testbänkarna här, så börjar varje testbänk
+köra så snart alla filer den namnger finns.
 
 Allt ligger platt i en katalog: modulerna bredvid testbänkarna som kontrollerar dem. Ingenting
-kopieras mellan föreläsningskataloger, och `can_def.vhd` skrivs en gång och läses av allt.
+kopieras mellan föreläsningskataloger, och `can_def.vhd` finns en gång och läses av allt. Paketet
+läggs in oförändrat: sex av testbänkarna läser dess namn och typer, så det är en del av kontraktet.
 
 ---
 
@@ -14,7 +15,7 @@ kopieras mellan föreläsningskataloger, och `can_def.vhd` skrivs en gång och l
 
 | Fil | Skrivs i | Utdelad |
 |---|---|:---:|
-| `can_def.vhd` | L10 | |
+| `can_def.vhd` | | ja |
 | `meta_prev.vhd` | L12 | |
 | `meta_prev_tb.vhd` | | ja |
 | `bit_timer.vhd` | L12 | |
