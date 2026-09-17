@@ -4,9 +4,10 @@
 # register bridge in front of it.
 #
 # The project's VHDL lives in two flat directories. controller/ holds the CAN controller itself -
-# the modules the group writes, alongside the provided testbenches that check them - and bridge/
-# holds the SPI-facing half, plus the two files that are handed out rather than written
-# (spi_slave.vhd and spi_def.vhd). Nothing is copied between lecture directories.
+# the modules the group writes, alongside the provided testbenches that check them and the
+# provided can_def.vhd package they all read - and bridge/ holds the SPI-facing half, plus the two
+# files that are handed out rather than written (spi_slave.vhd and spi_def.vhd). Nothing is copied
+# between lecture directories.
 #
 # In this repository controller/ and bridge/ ship only the provided files, so a fresh clone
 # reports every testbench as skipped. That is the expected state: the modules are the group's
