@@ -49,20 +49,19 @@ passes locally will also pass in CI.
 The group project's VHDL lives in **two flat directories at the repository root**: the modules
 you write, alongside the provided testbenches (`*_tb.vhd`) that check them. There are no
 per-lecture source directories and nothing to copy between them; `can_def.vhd` in particular is
-written once, in L10, and every later controller module reads that one file.
+provided, exists once, and every controller module reads that one file.
 
 The split between the two directories is the protocol boundary: everything in `controller/`
 knows about CAN and nothing about SPI, and everything in `bridge/` the other way round.
 
 ```text
-controller/   can_def.vhd            L10, yours
-              can_controller.vhd     L11, yours (ports only at first, grown through L17)
+controller/   can_controller.vhd     L11, yours (ports only at first, grown through L17)
               meta_prev.vhd          L12, yours
               bit_timer.vhd          L12, yours
               crc15.vhd              L13, yours
               tx_shift_reg.vhd       L14, yours
               rx_shift_reg.vhd       L15, yours
-              + the six provided *_tb.vhd
+              + provided can_def.vhd and the six *_tb.vhd
 
 bridge/       register_bank.vhd      L18, yours
               spi_reg_bridge.vhd     L19, yours
@@ -71,8 +70,8 @@ bridge/       register_bank.vhd      L18, yours
                 register_bank_tb.vhd, spi_reg_bridge_tb.vhd
 ```
 
-The two directories start out holding only the provided files: eight testbenches, plus
-`spi_slave.vhd` and `spi_def.vhd`. Each lecture from L10 adds a module, except that
+The two directories start out holding only the provided files: nine testbenches, plus
+`can_def.vhd`, `spi_slave.vhd` and `spi_def.vhd`. Each lecture from L11 adds a module, except that
 `can_controller.vhd` is written early (L11) as an entity with an empty architecture and then
 *grown*: L16 fills in its transmit path and L17 its receive path, with no new file appearing for
 either. That is why `can_controller_tb`, the only testbench that exercises the whole controller,
@@ -178,7 +177,7 @@ controller/meta_prev_tb.vhd:114:9:@311ns:(report note): meta_prev: all checks pa
 ```
 
 That is what L12 looks like halfway through: `meta_prev.vhd` written and passing, `bit_timer.vhd`
-still to come. `can_def.vhd` is not named as missing because L10 already wrote it.
+still to come. `can_def.vhd` is never named as missing, because it is provided.
 
 Skipped is not failed, deliberately. The project runs over ten lectures and most of the tree is
 missing for most of them; a build that went red until the last module landed would say nothing

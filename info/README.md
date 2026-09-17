@@ -34,8 +34,8 @@ och variabler, processer, generics, subkomponenter, syntes i Quartus och simuler
 Inget programmeringsspråk utöver allmän mjukvaruvana förutsätts. Vana vid C eller liknande
 hjälper, eftersom flera förklaringar ställer VHDL:s semantik mot den.
 
-Till grupprojektet tillkommer **Git och GitHub** på grundnivå: klona, branch, commit, push och
-Pull Request.
+**Git och GitHub** förutsätts inte. Kursen går igenom dem från grunden i
+[L11](../lectures/L11/README.md), innan grupprojektets första Pull Request.
 
 ---
 
@@ -55,7 +55,7 @@ Tjugo pass om tre timmar.
 | L08 | Tillståndsmaskiner | Föreläsning |
 | **L09** | **Praktisk tentamen 1 - sekvensnät** | **Examination** |
 | L10 | Projektstart: CAN-bussen, ramen och `can_def` | Föreläsning + grupptid |
-| L11 | Arkitektur, toppnivån, registerkartan och simulering | Föreläsning + grupptid |
+| L11 | Arkitektur, toppnivån, registerkartan och simulering | Föreläsning + Git-introduktion + grupptid |
 | L12 | Synkronisering och bittimern | Föreläsning + grupptid |
 | L13 | CRC-15-motorn | Föreläsning + grupptid |
 | L14 | Sändningsskiftregister och bitstoppning | Föreläsning + grupptid |
@@ -66,10 +66,15 @@ Tjugo pass om tre timmar.
 | L19 | SPI-bryggan, `can_spi_node` och bring-up | Föreläsning + redovisning |
 | **L20** | **Praktisk tentamen 2 - CAN-moduler** | **Examination** |
 
-L10-L14 och L16-L18 följer samma upplägg: ungefär en timmes genomgång från katedern, oftast med
-live-kodning, och därefter ungefär två timmars handledd grupptid. L15 och L19 är undantagen:
-kodgranskningsseminariet tar ungefär en timme och slutredovisningarna en till en och en halv, så
-de passen har kortare grupptid.
+L10 och L12-L18 följer samma upplägg: ungefär en timmes genomgång vid tavlan, och därefter ungefär
+två timmars handledd grupptid. L11, L15 och L19 är undantagen: Git-introduktionen och
+kodgranskningsseminariet tar ungefär en timme var och slutredovisningarna en till en och en halv,
+så de passen har kortare grupptid.
+
+**Projektets moduler kodas inte från katedern.** Varje modul gås igenom på tavlan: den ritas som
+ett block med sina portar, och dess beteende beskrivs, med tidsdiagram där det behövs. Därefter
+implementerar grupperna den själva utifrån specifikationen i föreläsningens appendix, och
+verifierar den mot den utdelade testbänken.
 
 ---
 
@@ -182,11 +187,11 @@ sekvensnät. Se [examination.md](./examination.md).
 ---
 
 ### L10 - Projektstart: CAN-bussen, ramen och `can_def`
-Grupprojektet startar. Arbetsformen först, sedan CAN från bussen och uppåt, och till sist
-projektets första VHDL.
+Grupprojektet startar. Arbetsformen först, sedan CAN från bussen och uppåt, och till sist det
+delade paketet som resten av projektet läser.
 
 Innehåll:
-* Projektupplägg: grupper, Git, Pull Requests och kodgranskning
+* Projektupplägg: grupper, arbetsform och bedömning
 * Varför protokoll behöver ramar: nyttolast, längdfält, checksumma, DST/SRC/SEQ
 * CAN:s differentiella buss och multimasterdesign
 * Dominanta och recessiva bitar, och varför arbitrering ersätter en bussmästare
@@ -194,20 +199,23 @@ Innehåll:
 * Bitstoppning: femregeln och varför den finns
 * Wired-AND-arbitrering, med två- och trenodersexempel för hand
 * Bittajming och sampelpunkten, på begreppsnivå
-* Live-kodning av `can_def.vhd`
+* `can_def` på tavlan: konstanterna, subtyperna och CRC-polynomet
 
 ---
 
 ### L11 - Arkitektur, toppnivån, registerkartan och simulering
-Från protokoll till blockschema, och den toppnivå varje senare modul instansieras i.
+Från protokoll till blockschema, den toppnivå varje senare modul instansieras i, och Git-flödet
+gruppen arbetar i.
 
 Innehåll:
 * Att avbilda CAN-begrepp på hårdvarublock, och vem som äger vad
 * Registerkartan som parallellklassens drivrutin ska konsumera
-* Att skriva `can_controller.vhd`: dess femton portar och en tom arkitektur
+* `can_controller` på tavlan: dess femton portar och en tom arkitektur
 * Vilka portar som är asynkrona, och varför kontrollern synkroniserar dem själv
 * Projektets simuleringsflöde i GHDL: analysera, elaborera, simulera
 * Positionell portbindning: vad den köper och vad den ger upp
+* **Git-introduktion**, ungefär en timme: repo, commit och branch, det dagliga flödet mot GitHub,
+  Pull Requests och granskning, branchskydd, och mergekonflikter
 
 ---
 
@@ -216,8 +224,8 @@ De två första byggblocken, båda små: det som inte vet något alls, och det f
 CAN.
 
 Innehåll:
-* Live-kodning av `meta_prev.vhd`, med en breddgeneric, instansierad två gånger
-* Live-kodning av `bit_timer.vhd`, som producerar `sample` och `bit_done`
+* `meta_prev` på tavlan, med en breddgeneric, instansierad två gånger
+* `bit_timer` på tavlan, som producerar `sample` och `bit_done`
 * Att köra en utdelad testbänk och läsa dess rapport, för första gången i projektet
 * Att instansiera båda inuti `can_controller`
 
@@ -227,7 +235,7 @@ Innehåll:
 En motor, två jobb.
 
 Innehåll:
-* Live-kodning av `crc15.vhd`, en bitseriell CRC-15-motor
+* `crc15` på tavlan, en bitseriell CRC-15-motor
 * Varför samma motor både genererar och kontrollerar, utan lägesomkoppling
 * Varför den ändå behöver ett `clear`
 * En kort CRC arbetad genom rekursionen för hand
@@ -239,7 +247,7 @@ Innehåll:
 Att serialisera ut på bussen, med samma stoppbitsregel som i L10, nu i VHDL.
 
 Innehåll:
-* Live-kodning av `tx_shift_reg.vhd`: MSB-först skiftning och insättning av stoppbitar
+* `tx_shift_reg` på tavlan: MSB-först skiftning och insättning av stoppbitar
 * Varför en laddad grupps första bit måste ut omedelbart, och varför `done` väntar en skiftning
 * Varför stoppningstillståndet lever kvar över omladdningar
 * `stuff` och `bit_valid`, och varför CRC:n grindas på dem
@@ -250,7 +258,7 @@ Innehåll:
 Mottagarsidans spegelbild, plus projektets kodgranskningsseminarium.
 
 Innehåll:
-* Live-kodning av `rx_shift_reg.vhd`: deserialisering, avstoppning, stoppningsfel
+* `rx_shift_reg` på tavlan: deserialisering, avstoppning, stoppningsfel
 * Att sampla mitt i bitperioden snarare än vid bitslut
 * `real_bit`/`real_bit_valid`: att mata CRC-motorn en avstoppad bit i taget
 * **Kodgranskningsseminarium**, obligatoriskt: varje grupp visar en PR och en granskning
@@ -262,8 +270,8 @@ Ramen som tillståndsmaskin, först förklarad och sedan byggd på sändarsidan.
 
 Innehåll:
 * Tillståndsdiagrammet, fälttabellen och mönstret `STATE_LOAD_*`/skifta, före all VHDL
-* Att lägga till tillståndstypen och maskinens signaler i `can_controller`
-* Live-kodning av sändvägen
+* Tillståndstypen och maskinens signaler i `can_controller`
+* Sändvägen på tavlan: vad varje tillstånd laddar och driver
 * Att driva den öppna dräneringsbussen från skiftregistrets aktuella bit
 * Att mata `crc15` korrekt: grinda på `bit_valid`, inte på `bit_done`
 
@@ -285,7 +293,7 @@ Här börjar halvan som gör kontrollern nåbar från en mikrokontroller.
 
 Innehåll:
 * Varför encykelspulser är oanvändbara för en pollande drivrutin
-* Live-kodning av `register_bank.vhd`: STATUS-låsning, `TX_SEND`, RX-infångning, maskning
+* `register_bank` på tavlan: STATUS-låsning, `TX_SEND`, RX-infångning, maskning
 * SPI från vågformen och uppåt: lägen, MSB först, SS som ramning
 * Varför slaven översamplar SCK i stället för att klocka på den
 * Genomgång av den utdelade `spi_slave.vhd`
@@ -297,7 +305,7 @@ Projektets capstone: transaktionslagret, toppnivån, och hela kedjan mot riktig 
 
 Innehåll:
 * Transaktions-FSM:en: kommandobyte, fyra databytes, låsning vid läsning, avbrott vid SS
-* Live-kodning av `spi_reg_bridge.vhd`
+* `spi_reg_bridge` på tavlan
 * `can_spi_node.vhd`: att komponera hela noden
 * Systemverifiering: två noder på en buss
 * Bring-up i två halvor: två DE0-CV på en delad buss, sedan hatten som SPI-master, i åtta steg
@@ -321,7 +329,9 @@ Kursmaterialet består av:
 * Övningar som görs efter föreläsningarna
 * En självkontrollerande testbänk till varje genomarbetat exempel och till nästan varje
   VHDL-övning, så att nästan allt går att verifiera på en laptop
-* Åtta utdelade testbänkar till grupprojektets moduler. Ni skriver dem inte; ni får dem att passera
+* Nio utdelade testbänkar till grupprojektets moduler. Ni skriver dem inte; ni får dem att passera
+* Grupprojektets utdelade paket `can_def` och `spi_def`, och SPI-slaven `spi_slave.vhd`, som läggs
+  in oförändrade
 * [Simuleringsflödet](./simulation_workflow.md): den permanenta GHDL-referensen
 * [Registerkartan](../project/register_map.md) och
   [SPI-protokollet](../project/spi_register_protocol.md), som är kontraktet mot

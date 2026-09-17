@@ -112,7 +112,7 @@ ci/          Kontrollskript: GHDL-bygge, dubblettkontroll, Markdown-länkar.
 info/        Kursplan, examination, och de permanenta referenserna för GHDL och Quartus.
 lectures/    Per föreläsning: README, appendix/, exercises/, och genomarbetade exempel.
 project/     Grupprojektets specifikation, registerkartan och SPI-protokollet.
-controller/  CAN-kontrollerns utdelade testbänkar.
+controller/  CAN-kontrollerns utdelade testbänkar, plus can_def.vhd.
 bridge/      SPI-lagrets utdelade testbänkar, plus spi_slave.vhd och spi_def.vhd.
 diagrams/    Python-källor till de genererade figurerna, och övningarnas entitetsdefinitioner.
 libs/        Submoduler. Bara testramverket L10:s C++-övning bygger mot.
