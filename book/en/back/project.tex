@@ -116,9 +116,9 @@ complete, well-reviewed node has done the project right.
 Two flat directories, with the modules beside the testbenches that check them:
 
 \begin{textdrawing}
-controller/   can_def.vhd, meta_prev.vhd, bit_timer.vhd, crc15.vhd,
+controller/   meta_prev.vhd, bit_timer.vhd, crc15.vhd,
               tx_shift_reg.vhd, rx_shift_reg.vhd, can_controller.vhd
-              + the six *_tb.vhd handed out
+              + can_def.vhd and the six *_tb.vhd, handed out
 bridge/       register_bank.vhd, spi_reg_bridge.vhd, can_spi_node.vhd
               + spi_slave.vhd, spi_def.vhd, register_bank_tb.vhd,
                 spi_reg_bridge_tb.vhd, handed out
@@ -169,7 +169,9 @@ in simulation. That is the price of letting the interface table be the single so
 \section{The shared package \code{can_def}}
 \label{app:project:candef}
 
-Written in \chapref{c10:ch}, in \file{controller/can_def.vhd}, and read by everything else.
+Handed out, in \file{controller/can_def.vhd}, presented in \chapref{c10:ch}, and read by everything
+else. The package goes in unchanged: six of the testbenches handed out read its names and types, so
+it is part of the contract and not something the group designs.
 
 \textbf{Constants:} \code{CLOCK_FREQ_HZ}, \code{BIT_RATE_HZ}, \code{TICKS_PER_BIT},
 \code{SAMPLE_TICK}, \code{ID_WIDTH}, \code{DLC_WIDTH}, \code{DLC_MAX}, \code{CRC_WIDTH},
@@ -177,7 +179,7 @@ Written in \chapref{c10:ch}, in \file{controller/can_def.vhd}, and read by every
 
 \textbf{Subtypes:} \code{byte_t}, \code{id_t}, \code{crc_t}, \code{dlc_t}, \code{data_t}.
 
-Target values for a DE0-CV with a 50 MHz system clock and CAN at 1 Mbit/s:
+The values, for a DE0-CV with a 50 MHz system clock and CAN at 1 Mbit/s:
 
 \begin{booktable}{llL}
   \thead{Constant} & \thead{Value} & \thead{Comment} \\

@@ -38,9 +38,9 @@ i två tillstånd nödvändig.
 \xpart{a} Sortera för en sänd ram de här kategorierna av bitar i ”matas in i \code{crc15}” och
 ”utesluts”: SOF-biten, riktiga bitar ur ID, kontrollfält och data, instoppade stoppbitar, CRC-fältets
 egna bitar, och den ostoppade svansen (CRC-avgränsare, ACK-plats, ACK-avgränsare, EOF). Säg för varje
-utesluten kategori vad som utesluter den: antingen en term i
-\code{crc_enable <= txsr_bit_valid and not txsr_stuff and role;}, eller det faktum att fältet aldrig
-passerar genom \code{tx_shift_reg} över huvud taget.
+utesluten kategori vad som utesluter den: antingen ett av de tre villkoren i
+\secref{c16:sec:crcfeed}:s regel för \code{crc_enable} (\code{txsr_bit_valid}, \code{txsr_stuff} och
+\code{role}), eller det faktum att fältet aldrig passerar genom \code{tx_shift_reg} över huvud taget.
 
 \xpart{b} En av de kategorierna kan överraska dig: CRC-fältets egna bitar går tillbaka in i motorn.
 Säg, med \chapref{c13:ch}:s egenskap att generering och kontroll är samma operation, vilket värde

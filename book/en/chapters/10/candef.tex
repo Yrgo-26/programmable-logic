@@ -23,9 +23,13 @@
 \end{itemize}
 
 \subsection*{Reading \code{can_def.vhd}}
-Live-coded together during the session, and written \textbf{once}, to \file{controller/can_def.vhd}.
-This is the first VHDL the book writes. Every module you write from \chapref{c11:ch} onwards lands in
-the same directory, and all of them except \code{meta_prev} read this one file.
+Handed out, in \file{controller/can_def.vhd}, and presented on the whiteboard during the session.
+The package is part of the contract and not something to design: six of the testbenches handed out
+read its names and types directly, so it goes into the group's repository \textbf{unchanged}, just
+like the testbenches. Every module you write from \chapref{c11:ch} onwards lands in the same
+directory, and all of them except \code{meta_prev} read this one file.
+
+The listings below are the package's contents, part by part, in the same order as in the file.
 
 \textbf{The bit timing constants}, derived rather than hand-picked, so that they stay consistent with
 each other:

@@ -10,7 +10,7 @@
 till en fungerande C++-implementation. Övning~\ref{c10:ex:ascan} slår bron mellan det ramformatet och
 CAN. Övning~\ref{c10:ex:stuffing} till \ref{c10:ex:frame} befäster \secref{c10:sec:can} till
 \ref{c10:sec:bittiming}; de görs på papper och bygger upp till att sätta ihop en hel ram för hand.
-Övning~\ref{c10:ex:package} skriver paketet \code{can_def} och arbetar sedan mot det vid
+Övning~\ref{c10:ex:package} läser det utdelade paketet \code{can_def} och arbetar sedan mot det vid
 tangentbordet.
 \end{aside}
 
@@ -368,19 +368,23 @@ stoppbitsregeln faktiskt reagerar på.
 \exercise{\code{can_def} och dess härledningar}{VHDL}
 \label{c10:ex:package}
 Varje konstant i \code{can_def} går att spåra tillbaka till något det här kapitlet definierat. De
-här frågorna skriver paketet, kontrollerar att härledningarna håller när indata ändras, och utökar
-det med värden som \secref{c10:sec:frameformat} namngav men som paketet ännu inte håller.
+här frågorna läser paketet, kontrollerar att härledningarna håller när indata ändras, och utökar en
+kopia av det med värden som \secref{c10:sec:frameformat} namngav men som paketet ännu inte håller.
 
-\xpart{a} Skriv \file{controller/can_def.vhd}, med konstanterna och subtyperna som
-\secref{c10:sec:candef} ställer upp. Var du med på passet har du den redan; var du inte det är det
-här den kommer ifrån, och varje kapitel från \chapref{c11:ch} och framåt förutsätter att den finns.
+\xpart{a} Läs det utdelade \file{controller/can_def.vhd} med \secref{c10:sec:candef} vid sidan. Säg
+för varje konstant var i \secref{c10:sec:frameformat} den kommer ifrån, och dela upp dem i de som är
+satta och de som är uträknade ur andra konstanter. Vilka två av de uträknade skulle bli tyst fel,
+utan att något klagade vid analys, om de skrevs in som tal och någon sedan ändrade klockfrekvensen?
 
-Det här är den enda modulen i boken som delas ut i sin helhet i stället för som en specifikation, och
-det av ett skäl värt att nämna: ett paket innehåller inget beteende att designa, så det finns
-ingenting mellan värdena och koden för dig att lista ut. Det nya här är själva VHDL-koden, eftersom
-en paketdeklaration är en konstruktion boken inte använt tidigare. Skriv av den för hand i stället
-för att klistra in den. Namnen är de kommande åtta kapitlens vokabulär, och att skriva dem en gång är
-billigare än att slå upp dem åtta gånger.
+Paketet delas ut i sin helhet i stället för som en specifikation, och det av två skäl värda att
+nämna: ett paket innehåller inget beteende att designa, så det finns ingenting mellan värdena och
+koden för dig att lista ut, och de utdelade testbänkarna läser dess namn och typer, så det är en del
+av kontraktet. Det nya här är själva VHDL-koden, eftersom en paketdeklaration är en konstruktion
+boken inte använt tidigare. Namnen är de kommande åtta kapitlens vokabulär, och att ha läst dem en
+gång, ordentligt, är billigare än att slå upp dem åtta gånger.
+
+Gör (e) och (f) i en kladdkopia av paketet, utanför det som blir gruppens repo: det utdelade paketet
+läggs in oförändrat.
 
 \xpart{b} Anta att DE0-CV:ns klocka vore 40~MHz i stället för 50~MHz, med bithastigheten fortfarande
 1~Mbit/s. Räkna om \code{TICKS_PER_BIT} och \code{SAMPLE_TICK} (fortfarande 70~\%).
@@ -404,8 +408,7 @@ literaler. Lägg till \code{CRC_DELIM_BITS}, \code{ACK_BITS} och \code{EOF_BITS}
 två formerna en senare läsare är bäst betjänt av.
 
 \xpart{g} Kontrollera att paketet faktiskt kompilerar. Installera GHDL om du inte redan gjort det
-(bilaga~\ref{app:sim}), och kör sedan \code{make build-project} från roten av gruppens repo. Du bör
-se:
+(bilaga~\ref{app:sim}), och kör sedan \code{make build-project} från roten av kursrepot. Du bör se:
 
 \begin{console}
 --> controller/can_def.vhd analyzes cleanly
@@ -415,11 +418,11 @@ följt av de två utdelade \file{bridge/}-filerna, och därefter varje testbänk
 överhoppad, eftersom modulerna de kontrollerar inte finns ännu:
 
 \begin{console}
-0 testbench(es) run, 8 skipped.
+0 testbench(es) run, 9 skipped.
 \end{console}
 
-Gör nu sönder något med flit, ett saknat semikolon eller en felstavad typ, kör om, och läs vad GHDL
-säger om det. Ställ tillbaka det.
+Gör nu sönder något med flit i paketet, ett saknat semikolon eller en felstavad typ, kör om, och läs
+vad GHDL säger om det. Ställ tillbaka det, så att filen är exakt som den delades ut.
 
 Det här är hela verifieringsberättelsen för ett paket: ett paket har inget beteende att simulera, så
 ”den analyseras” är allt som finns att kontrollera. \Chapref{c11:ch} introducerar verktyget

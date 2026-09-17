@@ -116,9 +116,9 @@ in en komplett, välgranskad nod har gjort projektet rätt.
 Två platta kataloger, med modulerna bredvid de testbänkar som kontrollerar dem:
 
 \begin{textdrawing}
-controller/   can_def.vhd, meta_prev.vhd, bit_timer.vhd, crc15.vhd,
+controller/   meta_prev.vhd, bit_timer.vhd, crc15.vhd,
               tx_shift_reg.vhd, rx_shift_reg.vhd, can_controller.vhd
-              + de sex utdelade *_tb.vhd
+              + utdelade can_def.vhd och de sex *_tb.vhd
 bridge/       register_bank.vhd, spi_reg_bridge.vhd, can_spi_node.vhd
               + utdelade spi_slave.vhd, spi_def.vhd,
                 register_bank_tb.vhd, spi_reg_bridge_tb.vhd
@@ -166,7 +166,9 @@ fel i simuleringen. Det är priset för att gränssnittstabellen får vara enda 
 \section{Det delade paketet \code{can_def}}
 \label{app:project:candef}
 
-Skrivs i \chapref{c10:ch}, i \file{controller/can_def.vhd}, och läses av allt annat.
+Utdelat, i \file{controller/can_def.vhd}, genomgånget i \chapref{c10:ch}, och läst av allt annat.
+Paketet läggs in oförändrat: sex av de utdelade testbänkarna läser dess namn och typer, så det är en
+del av kontraktet och inte något gruppen konstruerar.
 
 \textbf{Konstanter:} \code{CLOCK_FREQ_HZ}, \code{BIT_RATE_HZ}, \code{TICKS_PER_BIT},
 \code{SAMPLE_TICK}, \code{ID_WIDTH}, \code{DLC_WIDTH}, \code{DLC_MAX}, \code{CRC_WIDTH},
@@ -174,7 +176,7 @@ Skrivs i \chapref{c10:ch}, i \file{controller/can_def.vhd}, och läses av allt a
 
 \textbf{Subtyper:} \code{byte_t}, \code{id_t}, \code{crc_t}, \code{dlc_t}, \code{data_t}.
 
-Riktvärden för ett DE0-CV med 50 MHz systemklocka och CAN på 1 Mbit/s:
+Värdena, för ett DE0-CV med 50 MHz systemklocka och CAN på 1 Mbit/s:
 
 \begin{booktable}{llL}
   \thead{Konstant} & \thead{Värde} & \thead{Kommentar} \\

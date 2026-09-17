@@ -38,9 +38,9 @@ split into two states necessary.
 \xpart{a} For a transmitted frame, sort these categories of bits into ``fed into \code{crc15}'' and
 ``excluded'': the SOF bit, real bits from the ID, control field and data, inserted stuff bits, the CRC
 field's own bits, and the unstuffed tail (CRC delimiter, ACK slot, ACK delimiter, EOF). For every
-excluded category, say what excludes it: either a term in
-\code{crc_enable <= txsr_bit_valid and not txsr_stuff and role;}, or the fact that the field never
-passes through \code{tx_shift_reg} at all.
+excluded category, say what excludes it: either one of the three conditions in
+\secref{c16:sec:crcfeed}'s rule for \code{crc_enable} (\code{txsr_bit_valid}, \code{txsr_stuff} and
+\code{role}), or the fact that the field never passes through \code{tx_shift_reg} at all.
 
 \xpart{b} One of those categories may surprise you: the CRC field's own bits go back into the engine.
 Using \chapref{c13:ch}'s property that generating and checking are the same operation, say what value

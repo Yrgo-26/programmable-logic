@@ -55,22 +55,21 @@ in CI too.
 
 The group project's VHDL lives in \textbf{two flat directories at the repository root}: the modules
 you write, alongside the testbenches handed out (\file{*_tb.vhd}) that check them. There are no
-per-session directories and nothing to copy between them; \file{can_def.vhd} in particular is written
-\emph{once}, in \chapref{c10:ch}, and every later controller module reads that one file.
+per-session directories and nothing to copy between them; \file{can_def.vhd} in particular is handed
+out, exists \emph{once}, and every controller module reads that one file.
 
 The split between the two directories is the protocol boundary: everything in \file{controller/}
 knows something about CAN and nothing about SPI, and everything in \file{bridge/} the other way
 round.
 
 \begin{textdrawing}
-controller/   can_def.vhd            ch 10, yours
-              can_controller.vhd     ch 11, yours (ports only at first, grows through ch 17)
+controller/   can_controller.vhd     ch 11, yours (ports only at first, grows through ch 17)
               meta_prev.vhd          ch 12, yours
               bit_timer.vhd          ch 12, yours
               crc15.vhd              ch 13, yours
               tx_shift_reg.vhd       ch 14, yours
               rx_shift_reg.vhd       ch 15, yours
-              + the six *_tb.vhd handed out
+              + can_def.vhd and the six *_tb.vhd, handed out
 
 bridge/       register_bank.vhd      ch 18, yours
               spi_reg_bridge.vhd     ch 19, yours
@@ -79,8 +78,9 @@ bridge/       register_bank.vhd      ch 18, yours
                 spi_reg_bridge_tb.vhd, handed out
 \end{textdrawing}
 
-The two directories initially contain only the files handed out: eight testbenches, plus
-\file{spi_slave.vhd} and \file{spi_def.vhd}. Every chapter from \chapref{c10:ch} adds a module, with
+The two directories initially contain only the files handed out: nine testbenches, plus
+\file{can_def.vhd}, \file{spi_slave.vhd} and \file{spi_def.vhd}. Every chapter from \chapref{c11:ch}
+adds a module, with
 the exception that \file{can_controller.vhd} is written early (\chapref{c11:ch}) as an entity with an
 empty architecture and then \emph{grows}: \chapref{c16:ch} fills in its transmit path and
 \chapref{c17:ch} its receive path, without any new file appearing for either. That is why
@@ -195,8 +195,8 @@ controller/meta_prev_tb.vhd:114:9:@311ns:(report note): meta_prev: all checks pa
 \end{console}
 
 That is what \chapref{c12:ch} looks like halfway through: \file{meta_prev.vhd} written and passing,
-\file{bit_timer.vhd} still to do. \file{can_def.vhd} is not named as missing, since \chapref{c10:ch}
-already wrote it.
+\file{bit_timer.vhd} still to do. \file{can_def.vhd} is never named as missing, since it is handed
+out.
 
 Skipped is not failed, deliberately. The project runs over ten sessions and most of the tree is
 missing during most of them; a build glowing red until the last module landed would say nothing useful

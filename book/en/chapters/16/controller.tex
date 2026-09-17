@@ -136,79 +136,45 @@ The \textbf{unstuffed} closing fields (CRC delimiter, ACK slot, ACK delimiter, E
 \file{can_controller.vhd} already holds the entity (\chapref{c11:ch}), the \code{meta_prev}
 synchroniser (\chapref{c12:ch}) and all four CAN subblock instances with the signals they connect to
 (\chapref{c12:ch} to \ref{c15:ch}). It holds no frame behaviour at all. Everything below is new in
-this chapter.
+this chapter. The chapter says what the machine has to do; how that is expressed in VHDL is yours.
 
-The state type and the state machine's own signals belong in the architecture's declarative part,
-above the four subblocks' signal groups:
+\paragraph{The states}
+They are the ones in the field table in \secref{c16:sec:fields}: \code{STATE_IDLE},
+\code{STATE_START}, \code{STATE_SOF}, one \code{STATE_LOAD_*} state and one shift state per stuffed
+field, the two settling states \code{STATE_CRC_WAIT} and \code{STATE_CRC_LO_WAIT}, and the four
+states of the tail. Twenty-one states in an enumerated type, in the same pattern as \chapref{c8:ch}.
 
-\begin{vhdlcode}
-    -- One state per frame field. Every stuffed field is a LOAD/shift pair; the
-    -- trailer fields (CRC delimiter, ACK slot/delim, EOF) are driven directly.
-    type state_t is (
-        STATE_IDLE,
-        STATE_START,
-        STATE_SOF,
-        STATE_LOAD_ARB_HI, STATE_ARB_HI,
-        STATE_LOAD_ARB_LO, STATE_ARB_LO,
-        STATE_LOAD_CTRL,   STATE_CTRL,
-        STATE_LOAD_DATA,   STATE_DATA,
-        STATE_CRC_WAIT,
-        STATE_LOAD_CRC_HI, STATE_CRC_HI,
-        STATE_LOAD_CRC_LO, STATE_CRC_LO,
-        STATE_CRC_LO_WAIT,
-        STATE_CRC_DELIM,
-        STATE_ACK_SLOT,
-        STATE_ACK_DELIM,
-        STATE_EOF);
+\paragraph{Memory}
+Besides \code{state}, the machine has to remember the following between clock edges. The names are
+the ones this chapter uses; keeping them makes the text and your code talk about the same signals.
 
-    signal state : state_t;
-
-    -- '1' while transmitting this frame, '0' while only receiving. Latched per frame.
-    signal role : std_logic;
-
-    -- Consecutive recessive bit periods seen in STATE_IDLE, saturating at 11. Only once this is
-    -- full may the node leave STATE_IDLE at all. Resets to 11, not 0.
-    signal idle_bits : natural range 0 to 11;
-
-    -- Data-byte index, and a countdown for the fixed-width trailer fields.
-    signal data_byte_idx   : natural range 0 to 8;
-    signal field_bit_count : natural range 0 to 7;
-
-    -- Accumulators for the frame being received.
-    signal rx_id_acc   : id_t;
-    signal rx_dlc_acc  : dlc_t;
-    signal rx_data_acc : data_t;
-
-    -- This frame's own CRC, captured at STATE_CRC_WAIT before the engine is fed
-    -- the CRC field's own bits and moves on.
-    signal crc_tx : crc_t;
-
-    -- The data byte selected by data_byte_idx, MSB-first (byte 0 first).
-    signal tx_data_shifted : data_t;
-    signal tx_current_byte : byte_t;
-\end{vhdlcode}
+\begin{booktable}{@{}>{\raggedright\arraybackslash}p{8.6em}L>{\raggedright\arraybackslash}p{5.4em}@{}}
+  \thead{Signal} & \thead{Holds} & \thead{After reset} \\
+  \midrule
+  \code{role} & \code{'1'} while the node is transmitting this frame, \code{'0'} while it is only
+    receiving. Latched once per frame. & \code{'0'} \\
+  \code{idle_bits} & The number of consecutive recessive bit periods seen in \code{STATE_IDLE},
+    saturating at 11 (\secref{c16:sec:roles}). & \textbf{11}, not 0 \\
+  \code{data_byte_idx} & The number of the data byte being sent or received. & 0 \\
+  \code{field_bit_count} & The countdown through EOF's seven bits. & 0 \\
+  \code{crc_tx} & The frame's own CRC, latched in \code{STATE_CRC_WAIT}
+    (\secref{c16:sec:crccapture}). & zeros \\
+  \code{rx_id_acc}, \code{rx_dlc_acc}, \code{rx_data_acc} & The accumulators for the frame being
+    received. & zeros \\
+\end{booktable}
 
 The three \code{rx_*_acc} accumulators are not used until \chapref{c17:ch}; declaring them with the
 rest keeps the group together instead of splitting it across two chapters.
 
-Two concurrent assignments pick out the data byte currently being sent. They belong after
-\code{begin}, alongside the subblock instances:
-
-\begin{vhdlcode}
-    tx_data_shifted <= std_logic_vector(shift_left(unsigned(tx_data), 8 * data_byte_idx));
-    tx_current_byte <= tx_data_shifted(63 downto 56);
-\end{vhdlcode}
-
-\code{shift_left} and \code{unsigned} come from \code{numeric_std}, so add
-\code{use ieee.numeric_std.all;} to the context clause if it is not already there.
-
-Everything else in this chapter is the two processes you write: a \textbf{combinational} one driving
-the subblocks per state, and a \textbf{sequential} one advancing the state machine and updating the
-bookkeeping.
+\paragraph{The current data byte}
+It is byte number \code{data_byte_idx} of \code{tx_data}, counted from the left: byte 0 is bits 63 downto 56, byte 1 is 55 downto 48, and so on. Select it with a concurrent
+assignment outside the processes, so that the data field's load state can read it directly.
 
 \paragraph{Which process drives what}
-The split is worth settling before the walkthrough, since every line in it lands in one of the two
-processes, and which one should be no mystery:
+The behaviour is split across two processes: a \textbf{combinational} one driving the subblocks per
+state, and a \textbf{sequential} one advancing the state machine and updating the memory. The split
+is worth settling before the behaviour is described, since every rule in the next two sections lands
+in one of them, and which one should be no mystery:
 \begin{itemize}
   \item The \textbf{combinational} process drives every input on the subblocks (\code{bt_enable},
     \code{bt_resync}, the four \code{txsr_*} inputs, the two \code{rxsr_*} inputs in
@@ -237,121 +203,80 @@ processes, and which one should be no mystery:
     free, and that is precisely the caller \secref{c11:sec:interface} assumes.
 \end{itemize}
 
+The sections that follow describe the transmit half of both processes and the concurrent assignments
+around \code{crc15}. Every place where \chapref{c17:ch} adds something is pointed out, so that nothing
+later is a surprise, only a gap being filled in. Read them alongside the state diagram in
+\secref{c16:sec:fields}.
+
 % ------------------------------------------------------------------------------------------
 \section{The combinational process}
 \label{c16:sec:comb}
 
 It drives the subblocks' inputs and the bus pair from \code{state}, with the defaults first and the
-per-state overrides after, and it is compact enough to show whole. Three things to see in it before
-the code. Every \code{STATE_LOAD_*} arm loads its group and shares an arm with the paired shift
-state, since the pair also shares a \code{bit_count}. \code{txsr_shift} is \code{bt_bit_done} only in
-the shift states, never in a \code{STATE_LOAD_*} state: \code{load} already presents the new group's
-first bit during the load cycle (\chapref{c14:ch}), so a dedicated one-cycle load state is what keeps
-that promise; getting this the wrong way round is the frame-level version of the one-bit timing error
-\chapref{c14:ch} warned about. And the bus is open-drain: a node drives \emph{actively} only when the
-bit is dominant, and otherwise releases, so that another node can pull the same wire dominant during
-the same period.
+per-state overrides after. Three things to keep in mind before the rules. Every \code{STATE_LOAD_*}
+state loads its group, and the paired shift state holds the same \code{bit_count}.
+\code{txsr_shift} is \code{bt_bit_done} only in the shift states, never in a \code{STATE_LOAD_*}
+state: \code{load} already presents the new group's first bit during the load cycle
+(\chapref{c14:ch}), so a dedicated one-cycle load state is what keeps that promise; getting this the
+wrong way round is the frame-level version of the one-bit timing error \chapref{c14:ch} warned about.
+And the bus is open-drain: a node drives \emph{actively} only when the bit is dominant, and otherwise
+releases, so that another node can pull the same wire dominant during the same period.
 
-\begin{vhdlcode}
-    COMBINATIONAL_PROCESS: process(state, role, bt_bit_done, tx_id, tx_dlc,
-                                   tx_current_byte, crc_tx, txsr_tx_bit) is
-    begin
-        -- Defaults: every sub-block input, every cycle, then per-state overrides.
-        bt_enable      <= '1';            -- Never held; the idle count needs it.
-        bt_resync      <= '0';
-        txsr_load      <= '0';
-        txsr_data      <= (others => '0');
-        txsr_bit_count <= "0000";
-        txsr_shift     <= '0';
-        rxsr_enable    <= '0';            -- The receive side arrives in L17.
-        rxsr_bit_count <= "0000";
-        tx_bus         <= '1';            -- Release the bus unless driving dominant.
-        bus_en         <= '0';
+\paragraph{The defaults}
+They are set first, every time the process runs:
 
-        -- Each STATE_LOAD_* arm loads its chunk. The paired shifting state keeps
-        -- the same bit_count applied, so grouping the pair in one arm is natural.
-        case state is
-            when STATE_START =>
-                bt_resync <= '1';         -- Adopt SOF as this node's bit boundary.
-                if (role = '1') then
-                    txsr_load      <= '1';
-                    txsr_data      <= "00000000";               -- SOF: one dominant bit.
-                    txsr_bit_count <= "0001";
-                end if;
-            when STATE_LOAD_ARB_HI | STATE_ARB_HI =>
-                if ((role = '1') and (state = STATE_LOAD_ARB_HI)) then
-                    txsr_load <= '1';
-                    txsr_data <= tx_id(10 downto 3);
-                end if;
-                txsr_bit_count <= "1000";
-            when STATE_LOAD_ARB_LO | STATE_ARB_LO =>
-                if ((role = '1') and (state = STATE_LOAD_ARB_LO)) then
-                    txsr_load <= '1';
-                    txsr_data <= tx_id(2 downto 0) & '0' & "0000";  -- ID low, then RTR.
-                end if;
-                txsr_bit_count <= "0100";
-            when STATE_LOAD_CTRL | STATE_CTRL =>
-                if ((role = '1') and (state = STATE_LOAD_CTRL)) then
-                    txsr_load <= '1';
-                    txsr_data <= "00" & tx_dlc & "00";              -- IDE, r0, DLC.
-                end if;
-                txsr_bit_count <= "0110";
-            when STATE_LOAD_DATA | STATE_DATA =>
-                if ((role = '1') and (state = STATE_LOAD_DATA)) then
-                    txsr_load <= '1';
-                    txsr_data <= tx_current_byte;
-                end if;
-                txsr_bit_count <= "1000";
-            when STATE_LOAD_CRC_HI | STATE_CRC_HI =>
-                if ((role = '1') and (state = STATE_LOAD_CRC_HI)) then
-                    txsr_load <= '1';
-                    txsr_data <= crc_tx(14 downto 7);
-                end if;
-                txsr_bit_count <= "1000";
-            when STATE_LOAD_CRC_LO | STATE_CRC_LO =>
-                if ((role = '1') and (state = STATE_LOAD_CRC_LO)) then
-                    txsr_load <= '1';
-                    txsr_data <= crc_tx(6 downto 0) & '0';
-                end if;
-                txsr_bit_count <= "0111";
-            when others =>
-                null;
-        end case;
+\begin{booktable}{@{}p{14em}p{5.6em}L@{}}
+  \thead{Signal} & \thead{Default} & \thead{Comment} \\
+  \midrule
+  \code{bt_enable} & \code{'1'} & Never held; the idle count needs it. \\
+  \code{bt_resync} & \code{'0'} & \\
+  \code{txsr_load}, \code{txsr_shift} & \code{'0'} & \\
+  \code{txsr_data}, \code{txsr_bit_count} & zeros & \\
+  \code{rxsr_enable}, \code{rxsr_bit_count} & \code{'0'}, zeros & The receive side arrives in
+    \chapref{c17:ch}. \\
+  \code{tx_bus}, \code{bus_en} & \code{'1'}, \code{'0'} & The bus released, unless a state drives it
+    dominant. \\
+\end{booktable}
 
-        -- Shifting states advance the register once per bit period; a LOAD
-        -- state never does, which keeps load and shift mutually exclusive.
-        if (role = '1') then
-            case state is
-                when STATE_SOF | STATE_ARB_HI | STATE_ARB_LO | STATE_CTRL
-                   | STATE_DATA | STATE_CRC_HI | STATE_CRC_LO =>
-                    txsr_shift <= bt_bit_done;
-                when others =>
-                    null;
-            end case;
-        end if;
+\paragraph{The loads}
+What each group loads, and at which width:
 
-        -- Driving the bus, open-drain: only the owning states, only dominant
-        -- bits. A receiver's one dominant bit is the ACK slot (L17).
-        case state is
-            when STATE_SOF
-               | STATE_LOAD_ARB_HI | STATE_ARB_HI
-               | STATE_LOAD_ARB_LO | STATE_ARB_LO
-               | STATE_LOAD_CTRL   | STATE_CTRL
-               | STATE_LOAD_DATA   | STATE_DATA
-               | STATE_LOAD_CRC_HI | STATE_CRC_HI
-               | STATE_LOAD_CRC_LO | STATE_CRC_LO =>
-                if ((role = '1') and (txsr_tx_bit = '0')) then
-                    bus_en <= '1';
-                    tx_bus <= '0';
-                end if;
-            when others =>
-                null;
-        end case;
-    end process;
-\end{vhdlcode}
+\begin{booktable}{@{}>{\raggedright\arraybackslash}p{11.6em}L>{\raggedright\arraybackslash}p{7.6em}@{}}
+  \thead{State} & \thead{\code{txsr_data}} & \thead{\code{txsr_bit_count}} \\
+  \midrule
+  \code{STATE_START} & \code{"00000000"}: SOF, one dominant bit & \code{"0001"} \\
+  \code{STATE_LOAD_ARB_HI} / \code{STATE_ARB_HI} & \code{tx_id(10 downto 3)} & \code{"1000"} \\
+  \code{STATE_LOAD_ARB_LO} / \code{STATE_ARB_LO} & \code{tx_id(2 downto 0) & '0' & "0000"}: ID low,
+    then RTR & \code{"0100"} \\
+  \code{STATE_LOAD_CTRL} / \code{STATE_CTRL} & \code{"00" & tx_dlc & "00"}: IDE, r0, DLC &
+    \code{"0110"} \\
+  \code{STATE_LOAD_DATA} / \code{STATE_DATA} & the current data byte & \code{"1000"} \\
+  \code{STATE_LOAD_CRC_HI} / \code{STATE_CRC_HI} & \code{crc_tx(14 downto 7)} & \code{"1000"} \\
+  \code{STATE_LOAD_CRC_LO} / \code{STATE_CRC_LO} & \code{crc_tx(6 downto 0) & '0'} & \code{"0111"} \\
+\end{booktable}
+
+\begin{itemize}
+  \item \code{txsr_load = '1'} and \code{txsr_data} as in the table only in the load state, that is
+    \code{STATE_START} or \code{STATE_LOAD_*}, and only when \code{role = '1'}.
+  \item \code{txsr_bit_count} as in the table in both states of a pair, whatever the role. In
+    \code{STATE_START} only when \code{role = '1'}.
+  \item \code{STATE_START} also drives \code{bt_resync = '1'}, in both roles: SOF becomes this node's
+    bit boundary.
+\end{itemize}
+
+\paragraph{Shifting}
+When \code{role = '1'}, \code{txsr_shift = bt_bit_done} in the shift states \code{STATE_SOF},
+\code{STATE_ARB_HI}, \code{STATE_ARB_LO}, \code{STATE_CTRL}, \code{STATE_DATA}, \code{STATE_CRC_HI}
+and \code{STATE_CRC_LO}. Never in a load state, and that is what keeps loading and shifting apart.
+
+\paragraph{The bus}
+\code{bus_en = '1'} and \code{tx_bus = '0'} exactly when \code{role = '1'}, \code{txsr_tx_bit = '0'},
+and \code{state} is \code{STATE_SOF} or one of the load and shift states from
+\code{STATE_LOAD_ARB_HI} up to and including \code{STATE_CRC_LO}. Every other state releases the bus.
+A receiver's single dominant bit, the ACK slot, comes in \chapref{c17:ch}.
 
 \begin{warning}
-The bounding of the bus driving in that last \code{case} statement deserves a sentence of its own:
+Bounding the bus driving to exactly those states deserves a sentence of its own:
 \code{txsr_tx_bit} is a level and holds its most recent value forever, so an unbounded version goes
 on driving after the group that produced it. A frame whose CRC ends on a dominant bit would still
 pull the bus down through the whole tail, and a node sitting in \code{STATE_IDLE} with \code{role}
@@ -360,85 +285,93 @@ are recessive for both roles and drive nothing, with the single exception of a r
 (\chapref{c17:ch}).
 \end{warning}
 
+\paragraph{The sensitivity list}
+The process reads \code{state}, \code{role}, \code{bt_bit_done}, \code{tx_id}, \code{tx_dlc}, the
+current data byte, \code{crc_tx} and \code{txsr_tx_bit}, and every one of them has to be in its
+sensitivity list. The project is analysed with \code{--std=93}, where \code{process(all)} does not
+exist, and a signal missing from the list gives a simulation that does not match the hardware
+synthesis builds.
+
 % ------------------------------------------------------------------------------------------
 \section{The sequential process}
 \label{c16:sec:seq}
 
-It owns \code{state}, the bookkeeping and the output ports. Skeleton, reset and defaults first:
+It owns \code{state}, the memory and the register-side output ports.
 
-\begin{vhdlcode}
-    SEQUENTIAL_PROCESS: process(clock, reset_s2_n) is
-    begin
-        if (reset_s2_n = '0') then
-            state           <= STATE_IDLE;
-            role            <= '0';
-            idle_bits       <= 11;        -- Full: an idle bus is assumed at power-up.
-            data_byte_idx   <= 0;
-            field_bit_count <= 0;
-            rx_id_acc       <= (others => '0');
-            rx_dlc_acc      <= (others => '0');
-            rx_data_acc     <= (others => '0');
-            crc_tx          <= (others => '0');
-            tx_done         <= '0';
-            rx_valid        <= '0';
-            error           <= '0';
-            rx_id           <= (others => '0');
-            rx_dlc          <= (others => '0');
-            rx_data         <= (others => '0');
-        elsif (rising_edge(clock)) then
-            tx_done  <= '0';              -- The two pulse outputs default low;
-            rx_valid <= '0';              -- error is a level and holds.
+\paragraph{Reset}
+With \code{reset_s2_n = '0'}, \code{state} goes to \code{STATE_IDLE}, the memory takes the values in
+the table in \secref{c16:sec:declare}, and \code{tx_done}, \code{rx_valid}, \code{error},
+\code{rx_id}, \code{rx_dlc} and \code{rx_data} are cleared.
 
-            case state is
-\end{vhdlcode}
+\paragraph{At every rising edge}
+First \code{tx_done} and \code{rx_valid} go to \code{'0'}, since they are one-cycle pulses;
+\code{error} is a level and holds its value. Then the rules for the state the machine is in apply.
 
-Everything below is arms of this single \code{case} statement. First the two states every frame
-passes through once:
-
-\begin{vhdlcode}
-                when STATE_IDLE =>
-                    if (bt_sample = '1') then
-                        if (rx_bus_s2 = '1') then
-                            if (idle_bits /= 11) then
-                                idle_bits <= idle_bits + 1;
-                            end if;
-                        else
-                            idle_bits <= 0;
-                        end if;
-                    end if;
-                    if (idle_bits = 11) then
-                        if (tx_req = '1') then
-                            role      <= '1';
-                            idle_bits <= 0;
-                            state     <= STATE_START;
-                        elsif (rx_bus_s2 = '0') then
-                            role      <= '0';    -- Someone else's SOF: receive (L17).
-                            idle_bits <= 0;
-                            state     <= STATE_START;
-                        end if;
-                    end if;
-                when STATE_START =>
-                    error         <= '0';
-                    data_byte_idx <= 0;
-                    rx_data_acc   <= (others => '0');
-                    state         <= STATE_SOF;
-\end{vhdlcode}
+\paragraph{\code{STATE_IDLE}}
+The state counts and waits:
+\begin{itemize}
+  \item At every \code{bt_sample}: if \code{rx_bus_s2 = '1'}, count \code{idle_bits} up, but not past
+    11; if it is \code{'0'}, clear \code{idle_bits}.
+  \item If \code{idle_bits} is 11: with \code{tx_req = '1'}, set \code{role} to \code{'1'} and go to
+    \code{STATE_START}; otherwise, with \code{rx_bus_s2 = '0'}, set \code{role} to \code{'0'}
+    (somebody else's SOF, \chapref{c17:ch}) and go to \code{STATE_START}. In both cases
+    \code{idle_bits} is cleared, and that clear wins over the count at the same edge.
+\end{itemize}
 
 \code{STATE_IDLE} counts recessive bit periods at the sample point and saturates at 11; a dominant
 sample clears the count. Nothing leaves the state until the count is \textbf{full}, whatever
 \code{tx_req} and \code{rx_bus_s2} do, so a \code{tx_req} pulse arriving while the bus is busy is
-\textbf{discarded}, not queued; the caller asks again. \code{STATE_START} needs no code for the SOF
-load or the resync, since the combinational process issues both from the state itself; setup that has
-to be \emph{remembered}, clearing \code{error}, the byte index and the received-data accumulator, is
-what lands here. \code{rx_data_acc} needs the clear because a received frame writes only the bytes its
-DLC covers (\chapref{c17:ch}): a five-byte frame arriving after an eight-byte frame has to report
-zeros in bytes 5 to 7, not the previous frame's residue. \code{rx_id_acc} and \code{rx_dlc_acc} are
-always written in full, so they need none. (\code{crc15} is cleared by this state too; see
-\secref{c16:sec:crcclear}.)
+\textbf{discarded}, not queued; the caller asks again.
 
-Then the LOAD/shift pairs. This is the shape every stuffed field follows, shown once for the
-identifier's high group; the transmit half of a LOAD state moves on after its single cycle, and the
-shift state waits for \code{tx_shift_reg.done}.
+\paragraph{The rest of the frame}
+The states common to both roles are \code{STATE_START}, \code{STATE_CRC_WAIT} and the four in the
+tail. In all the others the transitions below apply only when \code{role = '1'}, and
+\chapref{c17:ch} fills in the receiver's conditions.
+
+\begin{longbooktable}{@{}>{\raggedright\arraybackslash}p{9em}>{\raggedright\arraybackslash}p{8.8em}%
+    >{\raggedright\arraybackslash}p{9em}%
+    >{\raggedright\arraybackslash}p{\dimexpr\linewidth-26.8em-6\tabcolsep\relax}@{}}%
+  {\thead{State} & \thead{Advances when} & \thead{To} & \thead{Also}}
+  \code{STATE_START} & next edge & \code{STATE_SOF} & \code{error}, \code{data_byte_idx} and
+    \code{rx_data_acc} are cleared \\
+  \code{STATE_SOF} & \code{txsr_done = '1'} & \code{STATE_LOAD_ARB_HI} & \\
+  every \code{STATE_LOAD_*} & next edge & the pair's shift state & the load is issued by the
+    combinational process \\
+  \code{STATE_ARB_HI} & \code{txsr_done = '1'} & \code{STATE_LOAD_ARB_LO} & \chapref{c17:ch} adds
+    the arbitration check \\
+  \code{STATE_ARB_LO} & \code{txsr_done = '1'} & \code{STATE_LOAD_CTRL} & \chapref{c17:ch} adds the
+    arbitration check; RTR is dominant and can never be the bit that loses \\
+  \code{STATE_CTRL} & \code{txsr_done = '1'} & \code{STATE_CRC_WAIT} if \code{tx_dlc} is 0,
+    otherwise \code{STATE_LOAD_DATA} & \\
+  \code{STATE_DATA} & \code{txsr_done = '1'} & \code{STATE_CRC_WAIT} if \code{data_byte_idx + 1}
+    equals \code{tx_dlc} (the last byte), otherwise \code{STATE_LOAD_DATA} & count
+    \code{data_byte_idx} up when more bytes remain \\
+  \code{STATE_CRC_WAIT} & next edge & \code{STATE_LOAD_CRC_HI} & latch \code{crc_value} into
+    \code{crc_tx} \\
+  \code{STATE_CRC_HI} & \code{txsr_done = '1'} & \code{STATE_LOAD_CRC_LO} & \\
+  \code{STATE_CRC_LO} & \code{txsr_done = '1'} & \code{STATE_CRC_LO_WAIT} & \\
+  \code{STATE_CRC_LO_WAIT} & next edge & \code{STATE_CRC_DELIM} & one clock cycle, not a bit period;
+    the receiver checks \code{crc_valid} here (\chapref{c17:ch}) \\
+  \code{STATE_CRC_DELIM} & \code{bt_bit_done = '1'} & \code{STATE_ACK_SLOT} & \\
+  \code{STATE_ACK_SLOT} & \code{bt_bit_done = '1'} & \code{STATE_ACK_DELIM} & the transmitter has
+    released the bus; a receiver acknowledges here (\chapref{c17:ch}) \\
+  \code{STATE_ACK_DELIM} & \code{bt_bit_done = '1'} & \code{STATE_EOF} & set
+    \code{field_bit_count} to 6, EOF's countdown \\
+  \code{STATE_EOF} & \code{bt_bit_done = '1'} with \code{field_bit_count} 0 & \code{STATE_IDLE} &
+    pulse \code{tx_done} if \code{role = '1'} (\chapref{c17:ch} latches \code{rx_*} here); at every
+    earlier \code{bt_bit_done}, count \code{field_bit_count} down \\
+\end{longbooktable}
+
+\code{STATE_START} needs nothing of its own for the SOF load or the resync, since the combinational
+process issues both from the state itself; setup that has to be \emph{remembered}, clearing
+\code{error}, the byte index and the received-data accumulator, is what lands here. \code{rx_data_acc}
+needs the clear because a received frame writes only the bytes its DLC covers (\chapref{c17:ch}): a
+five-byte frame arriving after an eight-byte frame has to report zeros in bytes 5 to 7, not the
+previous frame's residue. \code{rx_id_acc} and \code{rx_dlc_acc} are always written in full, so they
+need none. (\code{crc15} is cleared by this state too; see \secref{c16:sec:crcclear}.)
+
+The LOAD/shift pairs all follow the same shape: the load state moves on after its single cycle, and
+the shift state waits for \code{tx_shift_reg.done}.
 
 \begin{aside}
 A timing note before the waveforms surprise you: \chapref{c14:ch} described \code{load} as issued at
@@ -449,141 +382,17 @@ point at 70~\% absorbs that with room to spare, and the offset does not accumula
 restarts from the same \code{bit_done}.
 \end{aside}
 
-\begin{vhdlcode}
-                when STATE_SOF =>
-                    if (role = '1') then
-                        if (txsr_done = '1') then
-                            state <= STATE_LOAD_ARB_HI;
-                        end if;
-                    end if;                       -- role = '0': L17.
-                when STATE_LOAD_ARB_HI =>
-                    if (role = '1') then
-                        state <= STATE_ARB_HI;    -- One cycle; the load is issued.
-                    end if;                       -- role = '0': L17.
-                when STATE_ARB_HI =>
-                    if (role = '1') then
-                        if (txsr_done = '1') then -- Arbitration watching joins here in L17.
-                            state <= STATE_LOAD_ARB_LO;
-                        end if;
-                    end if;                       -- role = '0': L17.
-                when STATE_LOAD_ARB_LO =>
-                    if (role = '1') then
-                        state <= STATE_ARB_LO;
-                    end if;                       -- role = '0': L17.
-                when STATE_ARB_LO =>
-                    if (role = '1') then
-                        if (txsr_done = '1') then -- Also watched in L17; RTR is dominant,
-                            state <= STATE_LOAD_CTRL;  -- so it can never be the bit that loses.
-                        end if;
-                    end if;                       -- role = '0': L17.
-\end{vhdlcode}
+\code{STATE_CRC_WAIT} is an empty cycle so that the last data bit has time to finish being integrated
+before \code{crc_value} is read, and its real job is the latching: both CRC groups are loaded from
+\code{crc_tx}, never from the live engine (\secref{c16:sec:crccapture} explains what goes wrong
+otherwise).
 
-The control and data states have the same shape with two decisions attached: the control field's
-\code{done} consults the DLC, and the data pair loops once per byte:
-
-\begin{vhdlcode}
-                when STATE_LOAD_CTRL =>
-                    if (role = '1') then
-                        state <= STATE_CTRL;
-                    end if;                       -- role = '0': L17.
-                when STATE_CTRL =>
-                    if (role = '1') then
-                        if (txsr_done = '1') then
-                            if (unsigned(tx_dlc) = 0) then
-                                state <= STATE_CRC_WAIT;    -- No data field at all.
-                            else
-                                state <= STATE_LOAD_DATA;
-                            end if;
-                        end if;
-                    end if;                       -- role = '0': L17.
-                when STATE_LOAD_DATA =>
-                    if (role = '1') then
-                        state <= STATE_DATA;
-                    end if;                       -- role = '0': L17.
-                when STATE_DATA =>
-                    if (role = '1') then
-                        if (txsr_done = '1') then
-                            if (data_byte_idx + 1 = to_integer(unsigned(tx_dlc))) then
-                                state <= STATE_CRC_WAIT;
-                            else
-                                data_byte_idx <= data_byte_idx + 1;
-                                state         <= STATE_LOAD_DATA;
-                            end if;
-                        end if;
-                    end if;                       -- role = '0': L17.
-\end{vhdlcode}
-
-Then the CRC. \code{STATE_CRC_WAIT} is an empty cycle so that the last data bit has time to finish
-being integrated before \code{crc_value} is read, and its real job is the latching: both CRC groups
-are loaded from \code{crc_tx}, never from the live engine (\secref{c16:sec:crccapture} explains what
-goes wrong otherwise). The two CRC pairs have the arbitration pairs' shape again:
-
-\begin{vhdlcode}
-                when STATE_CRC_WAIT =>
-                    crc_tx <= crc_value;          -- Capture before the engine moves on.
-                    state  <= STATE_LOAD_CRC_HI;
-                when STATE_LOAD_CRC_HI =>
-                    if (role = '1') then
-                        state <= STATE_CRC_HI;
-                    end if;                       -- role = '0': L17.
-                when STATE_CRC_HI =>
-                    if (role = '1') then
-                        if (txsr_done = '1') then
-                            state <= STATE_LOAD_CRC_LO;
-                        end if;
-                    end if;                       -- role = '0': L17.
-                when STATE_LOAD_CRC_LO =>
-                    if (role = '1') then
-                        state <= STATE_CRC_LO;
-                    end if;                       -- role = '0': L17.
-                when STATE_CRC_LO =>
-                    if (role = '1') then
-                        if (txsr_done = '1') then
-                            state <= STATE_CRC_LO_WAIT;
-                        end if;
-                    end if;                       -- role = '0': L17.
-\end{vhdlcode}
-
-Finally the tail, where the shift register bows out and the state machine counts \code{bt_bit_done}
-pulses itself. \code{STATE_CRC_LO_WAIT} is one clock cycle for a transmitter, \textbf{not} a bit
-period: \code{tx_shift_reg.done} pulses at the closing shift, which is itself a \code{bit_done}, so
-the transmitter is already on a bit boundary and the tail can begin immediately; waiting a whole
-period would push an extra recessive bit out onto the wire. (A receiver, \emph{by contrast}, waits a
-whole \code{bit_done} here, and checks \code{crc_valid} while it waits; \chapref{c17:ch}.)
-
-\begin{vhdlcode}
-                when STATE_CRC_LO_WAIT =>
-                    if (role = '1') then
-                        state <= STATE_CRC_DELIM; -- One clock cycle, not a bit period.
-                    end if;                       -- role = '0': L17 checks crc_valid here.
-                when STATE_CRC_DELIM =>
-                    if (bt_bit_done = '1') then
-                        state <= STATE_ACK_SLOT;
-                    end if;
-                when STATE_ACK_SLOT =>
-                    if (bt_bit_done = '1') then   -- Transmitter releases; a receiver
-                        state <= STATE_ACK_DELIM; -- acknowledges here (L17).
-                    end if;
-                when STATE_ACK_DELIM =>
-                    if (bt_bit_done = '1') then
-                        field_bit_count <= 6;     -- Arm the 7-bit EOF countdown.
-                        state           <= STATE_EOF;
-                    end if;
-                when STATE_EOF =>
-                    if (bt_bit_done = '1') then
-                        if (field_bit_count = 0) then
-                            if (role = '1') then
-                                tx_done <= '1';
-                            end if;                -- role = '0': L17 latches rx_* here.
-                            state <= STATE_IDLE;
-                        else
-                            field_bit_count <= field_bit_count - 1;
-                        end if;
-                    end if;
-            end case;
-        end if;
-    end process;
-\end{vhdlcode}
+In the tail the shift register bows out and the state machine counts \code{bt_bit_done} pulses
+itself. \code{STATE_CRC_LO_WAIT} is one clock cycle for a transmitter, \textbf{not} a bit period:
+\code{tx_shift_reg.done} pulses at the closing shift, which is itself a \code{bit_done}, so the
+transmitter is already on a bit boundary and the tail can begin immediately; waiting a whole period
+would push an extra recessive bit out onto the wire. (A receiver, \emph{by contrast}, waits a whole
+\code{bit_done} here, and checks \code{crc_valid} while it waits; \chapref{c17:ch}.)
 
 The tail's states need no \code{role} test to move on, since both roles count the same whole bit
 periods through the same fields; only what happens \emph{inside} them differs, and those differences
@@ -620,46 +429,43 @@ moment it is finished and before anything else touches the engine, removes the i
 
 \code{crc15} has to see every real bit from SOF through the end of the \textbf{CRC field}, and no
 others. Gate its enable on \code{tx_shift_reg.bit_valid} (\code{'0'} at every group's closing shift,
-so that the unchanged bit is not fed in twice), and shut out the stuff bits and the receive path:
+so that the unchanged bit is not fed in twice), and shut out the stuff bits and the receive path.
+Stated as a rule, written as two concurrent assignments outside the processes:
+\begin{itemize}
+  \item \code{crc_enable} is \code{'1'} exactly when \code{txsr_bit_valid = '1'},
+    \code{txsr_stuff = '0'} and \code{role = '1'}.
+  \item \code{crc_data_in} is \code{txsr_tx_bit}.
+\end{itemize}
 
-\begin{vhdlcode}
-crc_enable  <= txsr_bit_valid and not txsr_stuff and role;
-crc_data_in <= txsr_tx_bit;
-\end{vhdlcode}
-
-Three things follow from this being a simple concurrent assignment with no state term in it.
+Three things follow from the rule having no condition on the state.
 
 \textbf{The CRC field is fed back into the engine, and that is deliberate.} The value being sent sits
 safely in \code{crc_tx}, so nothing has to read the engine again once \code{STATE_CRC_WAIT} has
-captured it, and the expression has no state term that would stop the feed at the data field. On the
-transmit side the feedback is merely harmless: \chapref{c13:ch}'s generate-then-check property means
-that a message followed by its own CRC returns the register to zero, and \code{STATE_START}'s clear
-(\secref{c16:sec:crcclear}) hands the next frame a fresh engine anyway. Where the feedback earns its
-place is on the \textbf{receive side}: \chapref{c17:ch}'s CRC check \emph{is} the observation that the
-register has returned to zero once the received CRC field has gone in, and that observation exists
+captured it, and the rule has no condition on the state that would stop the feed at the data field.
+On the transmit side the feedback is merely harmless: \chapref{c13:ch}'s generate-then-check property
+means that a message followed by its own CRC returns the register to zero, and \code{STATE_START}'s
+clear (\secref{c16:sec:crcclear}) hands the next frame a fresh engine anyway. Where the feedback earns
+its place is on the \textbf{receive side}: \chapref{c17:ch}'s CRC check \emph{is} the observation that
+the register has returned to zero once the received CRC field has gone in, and that observation exists
 only because the CRC field is fed back. One rule for both roles, every real bit from SOF through the
 end of the CRC field, is what lets a single engine generate on one node while it checks on another.
 
 \textbf{The tail excludes itself.} CRC delimiter, ACK slot, ACK delimiter and EOF never go through
-\code{tx_shift_reg} at all, so \code{txsr_bit_valid} is already low across all of them. No state term
-is needed to keep them out of the checksum.
+\code{tx_shift_reg} at all, so \code{txsr_bit_valid} is already low across all of them. No condition
+on the state is needed to keep them out of the checksum.
 
-\textbf{\code{role} is the placeholder for the receive side.} With \code{role = '0'} this expression
-holds \code{crc15} disabled, which is correct for this chapter (transmission only) but not for the
-finished controller. \Chapref{c17:ch} replaces the whole assignment with one feeding
-\code{rx_shift_reg.real_bit} on \code{rx_shift_reg.real_bit_valid} during reception; the transmit half
-above is unchanged by that.
+\textbf{\code{role} is the placeholder for the receive side.} With \code{role = '0'} the rule holds
+\code{crc15} disabled, which is correct for this chapter (transmission only) but not for the finished
+controller. \Chapref{c17:ch} replaces the rule with one feeding \code{rx_shift_reg.real_bit} on
+\code{rx_shift_reg.real_bit_valid} during reception; the transmit half is unchanged by that.
 
 % ------------------------------------------------------------------------------------------
 \section{Clearing \code{crc15}}
 \label{c16:sec:crcclear}
 
 One more concurrent assignment, and it is the one that makes the engine safe to reuse frame after
-frame:
-
-\begin{vhdlcode}
-crc_clear <= '1' when state = STATE_START else '0';
-\end{vhdlcode}
+frame: \code{crc_clear} is \code{'1'} while the state machine is in \code{STATE_START}, and
+\code{'0'} otherwise.
 
 On the happy path it does nothing at all, since a frame that runs all the way has already returned
 the register to zero. It is there for the frames that do \emph{not} finish. \Chapref{c17:ch} gives

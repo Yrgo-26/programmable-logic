@@ -11,9 +11,8 @@
   \item Explain how wired-AND arbitration resolves contention without a bus master, and decide which
     of two nodes wins.
   \item Apply the bit stuffing rule to a bit sequence, by hand.
-  \item Write \file{can_def.vhd}: the constants, the subtypes and the CRC polynomial the rest of the
-    project reads.
-  \item Account for the group's way of working: branching, PRs and review.
+  \item Read \file{can_def.vhd}: say where every constant, subtype and the CRC polynomial come from,
+    and why the constants that can be computed are computed rather than typed in.
 \end{itemize}
 
 \needspace{6\baselineskip}
@@ -30,8 +29,9 @@
 
 \needspace{6\baselineskip}
 \subsection*{Target}
-\file{can_def.vhd} should be written and merged by the end of the session. It is a short file and the
-rest of the project reads it, so it is worth finishing straight away.
+By the end of the session, everyone in the group should be able to say where the constants in
+\file{can_def.vhd} come from. It is a short file and the rest of the project reads it, so it is worth
+understanding straight away.
 
 The targets in these chapters are just that, targets. They are not milestones, they are not graded,
 and the group decides for itself in which order the modules are built; see

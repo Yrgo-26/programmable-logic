@@ -10,8 +10,8 @@ The exercises are laid out like this. Exercise~\ref{c10:ex:byhand} and \ref{c10:
 frame into a working C++ implementation. Exercise~\ref{c10:ex:ascan} bridges that frame format and
 CAN. Exercise~\ref{c10:ex:stuffing} to \ref{c10:ex:frame} consolidate \secref{c10:sec:can} to
 \ref{c10:sec:bittiming}; they are done on paper and build up to assembling a whole frame by hand.
-Exercise~\ref{c10:ex:package} writes the \code{can_def} package and then works against it at the
-keyboard.
+Exercise~\ref{c10:ex:package} reads the \code{can_def} package handed out and then works against it
+at the keyboard.
 \end{aside}
 
 % ------------------------------------------------------------------------------------------
@@ -366,19 +366,24 @@ stuffing rule actually reacts to.
 \exercise{\code{can_def} and its derivations}{VHDL}
 \label{c10:ex:package}
 Every constant in \code{can_def} can be traced back to something this chapter defined. These
-questions write the package, check that the derivations hold when the inputs change, and extend it
-with values \secref{c10:sec:frameformat} named but the package does not yet hold.
+questions read the package, check that the derivations hold when the inputs change, and extend a copy
+of it with values \secref{c10:sec:frameformat} named but the package does not yet hold.
 
-\xpart{a} Write \file{controller/can_def.vhd}, with the constants and subtypes
-\secref{c10:sec:candef} sets out. If you were at the session you already have it; if you were not,
-this is where it comes from, and every chapter from \chapref{c11:ch} onwards assumes it exists.
+\xpart{a} Read the \file{controller/can_def.vhd} handed out, with \secref{c10:sec:candef} beside it.
+For each constant, say where in \secref{c10:sec:frameformat} it comes from, and split them into those
+that are set and those computed from other constants. Which two of the computed ones would go
+silently wrong, with nothing complaining at analysis, if they were typed in as numbers and someone
+later changed the clock frequency?
 
-This is the only module in the book handed out in full rather than as a specification, and for a
-reason worth mentioning: a package contains no behaviour to design, so there is nothing between the
-values and the code for you to work out. What is new here is the VHDL itself, since a package
-declaration is a construct the book has not used before. Write it out by hand rather than pasting it
-in. The names are the next eight chapters' vocabulary, and writing them once is cheaper than looking
-them up eight times.
+The package is handed out in full rather than as a specification, and for two reasons worth
+mentioning: a package contains no behaviour to design, so there is nothing between the values and
+the code for you to work out, and the testbenches handed out read its names and types, so it is part
+of the contract. What is new here is the VHDL itself, since a package declaration is a construct the
+book has not used before. The names are the next eight chapters' vocabulary, and having read them
+once, properly, is cheaper than looking them up eight times.
+
+Do (e) and (f) in a scratch copy of the package, outside what becomes the group's repository: the
+package handed out goes in unchanged.
 
 \xpart{b} Suppose the DE0-CV's clock were 40~MHz instead of 50~MHz, with the bit rate still
 1~Mbit/s. Recompute \code{TICKS_PER_BIT} and \code{SAMPLE_TICK} (still 70~\%).
@@ -401,7 +406,7 @@ as bare literals. Add \code{CRC_DELIM_BITS}, \code{ACK_BITS} and \code{EOF_BITS}
 two forms a later reader is better served by.
 
 \xpart{g} Check that the package actually compiles. Install GHDL if you have not already
-(appendix~\ref{app:sim}), and then run \code{make build-project} from the root of the group's
+(appendix~\ref{app:sim}), and then run \code{make build-project} from the root of the course
 repository. You should see:
 
 \begin{console}
@@ -412,11 +417,11 @@ followed by the two \file{bridge/} files handed out, and after that every testbe
 skipped, since the modules they check do not exist yet:
 
 \begin{console}
-0 testbench(es) run, 8 skipped.
+0 testbench(es) run, 9 skipped.
 \end{console}
 
-Now break something deliberately, a missing semicolon or a misspelled type, rerun, and read what GHDL
-says about it. Put it back.
+Now break something in the package deliberately, a missing semicolon or a misspelled type, rerun,
+and read what GHDL says about it. Put it back, so that the file is exactly as it was handed out.
 
 That is the whole verification story for a package: a package has no behaviour to simulate, so ``it
 analyses'' is all there is to check. \Chapref{c11:ch} introduces the tool properly, and from there

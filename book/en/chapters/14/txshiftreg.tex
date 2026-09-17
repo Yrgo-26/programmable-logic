@@ -51,15 +51,18 @@ Start where the introduction pointed: the paper version of the bit stuffing rule
 over the sequence}, and the hardware has no sequence to look back over. So before any process is
 written, list what has to live in a register. Everything below follows from the module's two jobs
 \textemdash{} keeping a group moving, and keeping the bit stuffing rule honest \textemdash{} and
-every rule in the rest of this chapter speaks in terms of exactly these five signals:
+every rule in the rest of this chapter speaks in terms of exactly these five signals. The names are
+the ones this chapter uses; keeping them makes the text and your code talk about the same thing.
 
-\begin{vhdlcode}
-signal shift_reg    : byte_t;                     -- Remaining chunk bits, next one in bit 7.
-signal bits_left    : natural range 0 to 8;       -- Real bits of the chunk still to present.
-signal last_bit     : std_logic;                  -- The bit most recently placed on the wire.
-signal consecutive  : natural range 0 to MAX_RUN; -- Current run length; 0 = none.
-signal stuff_pending: std_logic;                  -- A stuff bit is owed on the next shift.
-\end{vhdlcode}
+\begin{booktable}{@{}p{7em}>{\raggedright\arraybackslash}p{9.6em}L@{}}
+  \thead{Signal} & \thead{Type} & \thead{Holds} \\
+  \midrule
+  \code{shift_reg} & \code{byte_t} & The group's remaining bits, with the next bit in bit 7. \\
+  \code{bits_left} & integer, 0 to 8 & Number of real bits in the group not yet presented. \\
+  \code{last_bit} & \code{std_logic} & The bit most recently placed on the wire. \\
+  \code{consecutive} & integer, 0 to \code{MAX_RUN} & The length of the current run; 0 means none. \\
+  \code{stuff_pending} & \code{std_logic} & A stuff bit is owed at the next shift. \\
+\end{booktable}
 
 \begin{itemize}
   \item \textbf{\code{shift_reg} and \code{bits_left} are the group in flight.} The register holds
@@ -86,49 +89,22 @@ branch that earns them.
 \section{The process, top to bottom}
 \label{c14:sec:process}
 
-One clocked process holds all of the above. The walkthrough below follows the code in the order it is
-written, so every line has a home before the next turns up; the code fragments are the process's
-declarative part followed by successive slices of a single \code{if}/\code{elsif} chain, and placed
-in sequence inside the skeleton below, whose reset branch you fill in from its one-line description,
-they are the whole process. One line uses \code{to_integer(unsigned(...))}, so the file needs
-\code{use ieee.numeric_std.all;} alongside \code{ieee.std_logic_1164} and \code{work.can_def}.
-
-\textbf{The skeleton.} The process declares its own procedure before \code{begin}; then asynchronous
-reset first, everything else on the rising edge:
-
-\begin{vhdlcode}
-process(clock, reset_s2_n) is
-    -- One procedure, the run tracker (below).
-begin
-    if (reset_s2_n = '0') then
-        -- Clear everything.
-    elsif (rising_edge(clock)) then
-        -- Defaults, then the load branch or the shift branch.
-    end if;
-end process;
-\end{vhdlcode}
+One clocked process holds all of the above: asynchronous reset first, and on the rising edge first the
+defaults and then either the load branch or the shift branch. The rules below follow that order. The
+chapter says what each branch has to do; how that is expressed in VHDL is yours.
 
 \subsection{The run tracker, written once}
 \label{c14:sub:tracker}
 
-Every branch putting out a bit needs the same few lines, so they live in a procedure declared in the
-process's own declarative part, between \code{process(...) is} and \code{begin}:
-
-\begin{vhdlcode}
-    -- The run tracker: runs on the bit just placed on the wire.
-    procedure track_run(new_bit: in std_logic) is
-    begin
-        if ((new_bit = last_bit) and (consecutive /= 0)) then
-            consecutive <= consecutive + 1;
-            if (consecutive = MAX_RUN - 1) then -- Run reaches MAX_RUN.
-                stuff_pending <= '1';
-            end if;
-        else
-            consecutive <= 1;                   -- Start a new run.
-        end if;
-        last_bit <= new_bit;
-    end procedure;
-\end{vhdlcode}
+Every branch putting out a bit needs the same few rules, so they live in a procedure,
+\code{track_run}, with the placed bit as its only parameter, declared in the process's own declarative
+part, between \code{process(...) is} and \code{begin}. For the placed bit:
+\begin{itemize}
+  \item If it equals \code{last_bit} and \code{consecutive} is not 0, the run continues: count
+    \code{consecutive} up, and if the run thereby reaches \code{MAX_RUN}, arm \code{stuff_pending}.
+  \item Otherwise a new run begins: \code{consecutive} becomes 1.
+  \item In both cases \code{last_bit} becomes the placed bit.
+\end{itemize}
 
 This is the book's first subprogram, so four things about it before anything calls it:
 \begin{itemize}
@@ -148,26 +124,25 @@ This is the book's first subprogram, so four things about it before anything cal
     would satisfy the rule, at the cost of three extra arguments at every call and a real question
     about which process owns the drivers. Declared here, only this process can call it, so only this
     process drives them.
-  \item \textbf{The timing is unchanged.} An \code{in} parameter is evaluated at the call, so
-    \code{new_bit} carries the pre-edge value the caller passed in, and the signal reads inside the
-    body are also from before the edge (the variables-versus-signals rule from \chapref{c5:ch}). The
+  \item \textbf{The timing is unchanged.} An \code{in} parameter is evaluated at the call, so the
+    placed bit carries the pre-edge value the caller passed in, and the signal reads inside the body
+    are also from before the edge (the variables-versus-signals rule from \chapref{c5:ch}). The
     procedure behaves exactly like the same lines written inline.
   \item \textbf{Synthesis inlines it.} The result is the same logic replicated under every caller's
     branch condition; nothing is shared, multiplexed or called at run time. This is factoring at the
     source level, and the netlist comes out identical either way.
 \end{itemize}
 
-Two details inside the body, and one about where it is called:
+Two details in the rules, and one about where the procedure is called:
 \begin{itemize}
-  \item \textbf{\code{consecutive = MAX_RUN - 1} means ``the run is now full''.} The read gives the
-    pre-edge value, so the comparison is against the run length \emph{before} this bit extended it.
-    That semantics is exactly right here, and it is why the code compares against \code{MAX_RUN - 1}
-    and not \code{MAX_RUN}.
-  \item \textbf{Keep track of which \code{if} owns which branch.} \code{consecutive <= 1} is the
-    \emph{outer} \code{if} statement's \code{else} (every placed bit breaking the run starts a new
-    one), and \code{last_bit <= new_bit} stands after the whole \code{if} statement and updates at
-    \emph{every} placement, identical or not. Hang either of them off the inner \code{MAX_RUN - 1}
-    check and a broken run never restarts, or \code{last_bit} freezes.
+  \item \textbf{``The run reaches \code{MAX_RUN}'' means that \code{consecutive} reads
+    \code{MAX_RUN - 1}.} The read inside the procedure gives the pre-edge value, that is, the run
+    length \emph{before} this bit extended it. That semantics is exactly right here, and it is why
+    the comparison is made against \code{MAX_RUN - 1} and not \code{MAX_RUN}.
+  \item \textbf{Keep the three rules apart.} The restart at 1 belongs to the case where the run is
+    \emph{broken}, not to the case where it reaches \code{MAX_RUN}, and \code{last_bit} updates at
+    \emph{every} placement, identical or not. Tie either of them to the check against \code{MAX_RUN}
+    and a broken run never restarts, or \code{last_bit} freezes.
   \item \textbf{Call it from a branch that places a bit, never from the process's top level.} Nothing
     on the wire changes during the forty-nine-odd clock edges between presentations, so a call
     running at every edge counts phantom bits. It knows nothing about groups either way: the wire has
@@ -185,21 +160,16 @@ still forces a stuff bit right at the boundary. (That is the chained-reload scen
 testbench: one group ends with four \code{'1'}s, the next opens with a \code{'1'}, and the stuff bit
 lands before that group's second real bit.)
 
-\textbf{The defaults next, and only these three.} The pulse outputs fall at the start of every clock
-edge, the \code{bit_timer} idiom, so the branches below only \emph{raise} them:
-
-\begin{vhdlcode}
-stuff     <= '0';
-done      <= '0';
-bit_valid <= '0';
-\end{vhdlcode}
+\textbf{The defaults next, and only these three.} \code{stuff}, \code{done} and \code{bit_valid} are
+set to \code{'0'} first thing at every rising edge, the \code{bit_timer} idiom, so the branches below
+only \emph{raise} them.
 
 \begin{warning}
-\code{stuff_pending} does \textbf{not} belong here, however much it resembles them. It is state, not
-a pulse: armed at the shift completing a run, paid at the \emph{next} shift, a whole bit period
-(fifty clock edges) later. Default it low here and the debt evaporates at the first idle edge in
+\code{stuff_pending} does \textbf{not} belong among them, however much it resembles them. It is
+state, not a pulse: armed at the shift completing a run, paid at the \emph{next} shift, a whole bit
+period (fifty clock edges) later. Default it low and the debt evaporates at the first idle edge in
 between, and the module then simply never stuffs anything. It is written in exactly three places:
-cleared at reset, armed inside \code{track_run}, and cleared by the branch that pays it.
+cleared at reset, armed by the run tracker, and cleared by the branch that pays it.
 \end{warning}
 
 \subsection{The load branch}
@@ -208,77 +178,54 @@ cleared at reset, armed inside \code{track_run}, and cleared by the branch that 
 \textbf{\code{load = '1'} presents the first bit immediately.} A bit period begins the moment the
 previous group's last \code{bit_done} goes, which is also when the next group's \code{load} goes. If
 \code{load} merely latched the data and waited for the first \code{shift} pulse, the first period
-would still show the previous group's last bit, a whole bit late. So the branch puts out
-\code{data(7)} now, pre-shifts the register past it, sets \code{bits_left} to \code{bit_count - 1},
-and then runs the placed bit through the run tracker:
+would still show the previous group's last bit, a whole bit late. So when \code{load = '1'}:
+\begin{itemize}
+  \item \code{tx_bit} becomes \code{data(7)}: the first bit is put out now.
+  \item \code{shift_reg} becomes \code{data} shifted one step left, with a \code{'0'} shifted in at
+    the bottom, so that the group's second bit stands in bit 7.
+  \item \code{bits_left} becomes \code{bit_count - 1}. The contract says \code{bit_count} is 1 to 8;
+    0 would underflow here.
+  \item \code{bit_valid} pulses: a new bit is on \code{tx_bit}.
+  \item The run tracker runs on \code{data(7)}, the bit just placed on the wire.
+\end{itemize}
 
-\begin{vhdlcode}
-if (load = '1') then
-    tx_bit    <= data(7);                 -- Output the first bit immediately.
-    shift_reg <= data(6 downto 0) & '0';  -- Remove the output bit and prepare the next one.
-    bits_left <= to_integer(unsigned(bit_count)) - 1;  -- bit_count is 1-8 by contract:
-                                                       -- 0 would underflow bits_left here.
-    bit_valid <= '1';                     -- Indicate that a valid bit has been output.
-
-    track_run(data(7));                   -- data(7) was just placed on the wire.
-\end{vhdlcode}
-
-The call is neither optional nor a detail: \code{load} places a bit on the wire, so the tracker has to
-see it like any other. Leave it out and the run count runs one bit behind for the rest of the frame;
-test 1 in the testbench catches it at shift 5, where the stuff bit the five \code{'1'}s earned fails
-to appear.
+The last item is neither optional nor a detail: \code{load} places a bit on the wire, so the tracker
+has to see it like any other. Leave it out and the run count runs one bit behind for the rest of the
+frame; test 1 in the testbench catches it at shift 5, where the stuff bit the five \code{'1'}s earned
+fails to appear.
 
 \subsection{The shift branch}
 \label{c14:sub:shift}
 
-\textbf{\code{shift = '1'} does exactly one of three things} (never in the same cycle as \code{load};
-that is why the branch is an \code{elsif}), tested in this priority order. First the stuff bit that is
-owed, if there is one:
+\textbf{\code{shift = '1'} does exactly one of three things}, never in the same cycle as \code{load},
+tested in this priority order:
+\begin{enumerate}
+  \item \textbf{A stuff bit is owed} (\code{stuff_pending = '1'}): \code{tx_bit} becomes
+    \code{not last_bit}, \code{stuff} and \code{bit_valid} pulse, \code{stuff_pending} is cleared,
+    since the debt is paid, and the run tracker runs on the stuff bit. \code{shift_reg} and
+    \code{bits_left} are left untouched.
+  \item \textbf{The closing shift} (\code{bits_left = 0}): \code{done} pulses, and nothing else
+    changes; \code{tx_bit} in particular keeps its value.
+  \item \textbf{Otherwise, the next real bit:} the same shape as the load branch, with
+    \code{shift_reg} in \code{data}'s place. \code{tx_bit} becomes \code{shift_reg(7)},
+    \code{shift_reg} is shifted one step left with a \code{'0'} at the bottom, \code{bits_left}
+    counts down, \code{bit_valid} pulses, and the run tracker runs on the placed bit, which may arm a
+    stuff bit for the next shift.
+\end{enumerate}
 
-\begin{vhdlcode}
-elsif (shift = '1') then
-    if (stuff_pending = '1') then
-        tx_bit        <= not last_bit;  -- The stuff bit inverts the run.
-        stuff         <= '1';
-        bit_valid     <= '1';
-        stuff_pending <= '0';           -- The debt is paid.
+A stuff bit goes through the tracker exactly like a real one, and the placed bit being
+\code{not last_bit} is what makes that come out right with no special case: it differs from
+\code{last_bit} by construction, so the tracker takes the broken-run path and does precisely what the
+rule wants, restarting the run at 1 with the stuff bit's own value in \code{last_bit}. Nothing arms a
+new debt here either, since the arming belongs to the path that cannot be taken. The group itself
+makes no progress.
 
-        track_run(not last_bit);        -- A stuffed bit is a placed bit like any other.
-\end{vhdlcode}
-
-A stuff bit goes through the tracker exactly like a real one, and passing in \code{not last_bit} is
-what makes that come out right with no special case: inside the body the comparison
-\code{new_bit = last_bit} is then false by construction, so the call takes the \code{else} path and
-does precisely what the rule wants, restarting the run at 1 with the stuff bit's own value in
-\code{last_bit}. Nothing arms a new debt here either, since the arming sits in the branch that cannot
-be taken. The group itself makes no progress: \code{shift_reg} and \code{bits_left} are left
-untouched.
-
-Next the \emph{closing} shift:
-
-\begin{vhdlcode}
-    elsif (bits_left = 0) then
-        done <= '1';                    -- The closing shift changes nothing else.
-\end{vhdlcode}
-
-Every bit has been put out and the last has now had its full period on the bus; \code{tx_bit} in
-particular keeps its value. Otherwise: send the next real bit, the same shape as the \code{load}
-branch with \code{shift_reg(7)} in \code{data(7)}'s place:
-
-\begin{vhdlcode}
-    else
-        tx_bit    <= shift_reg(7);            -- Output the next bit.
-        shift_reg <= shift_reg(6 downto 0) & '0';
-        bits_left <= bits_left - 1;
-        bit_valid <= '1';
-
-        track_run(shift_reg(7));              -- May arm a stuff bit for the next shift.
-    end if;
-end if;
-\end{vhdlcode}
+The closing shift exists so that the last bit gets its full period on the bus: when \code{bits_left}
+is 0 every bit has been put out, and this shift marks that the last one has now been out on the bus
+for a whole bit period.
 
 The priority order is load-bearing: a pending stuff bit comes before the closing shift, and that is
-what makes the special case below work with no extra code; a group whose \emph{last} real bit
+what makes the special case below work with no extra rule; a group whose \emph{last} real bit
 completes a run still gets its stuff bit sent before \code{done} goes. (\code{load} never has an
 outstanding stuff bit to worry about: \code{can_controller} loads only after \code{done}, and
 \code{done} comes after every pending stuff bit has been sent.)

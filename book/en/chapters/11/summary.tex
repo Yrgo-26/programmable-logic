@@ -29,12 +29,13 @@
 
 \needspace{6\baselineskip}
 \subsection*{Target}
-The top level's entity should exist and analyse cleanly. After that it is up to the group: someone
-may well start on \code{bit_timer} or \code{crc15} straight away. The four leaf modules,
-\code{bit_timer}, \code{crc15}, \code{tx_shift_reg} and \code{rx_shift_reg}, do not depend on each
-other and each has a testbench of its own, so a group of 4--5 can build them in parallel. It is the
-one point in the project where the order genuinely matters to how fast you make progress; see
-appendix~\ref{app:project}.
+The group's repository should exist, with \code{main} protected, and the files handed out should
+have reached \code{main} through a reviewed pull request. The top level's entity should exist and analyse
+cleanly. After that it is up to the group: someone may well start on \code{bit_timer} or
+\code{crc15} straight away. The four leaf modules, \code{bit_timer}, \code{crc15},
+\code{tx_shift_reg} and \code{rx_shift_reg}, do not depend on each other and each has a testbench of
+its own, so a group of 4--5 can build them in parallel. It is the one point in the project where the
+order genuinely matters to how fast you make progress; see appendix~\ref{app:project}.
 
 \needspace{6\baselineskip}
 \subsection*{Looking ahead}

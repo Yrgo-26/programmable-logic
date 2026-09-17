@@ -51,15 +51,19 @@ Börja där inledningen pekade: pappersversionen av stoppbitsregeln såg \emph{t
 och hårdvaran har ingen följd att se tillbaka över. Så innan någon process skrivs, lista vad som
 måste bo i ett register. Allt nedan följer av modulens två uppgifter \textemdash{} att hålla en grupp
 i rörelse, och att hålla stoppbitsregeln ärlig \textemdash{} och varje regel i resten av det här
-kapitlet talar i termer av exakt de här fem signalerna:
+kapitlet talar i termer av exakt de här fem signalerna. Namnen är de kapitlet använder; att behålla
+dem får texten och din kod att tala om samma sak.
 
-\begin{vhdlcode}
-signal shift_reg    : byte_t;                     -- Remaining chunk bits, next one in bit 7.
-signal bits_left    : natural range 0 to 8;       -- Real bits of the chunk still to present.
-signal last_bit     : std_logic;                  -- The bit most recently placed on the wire.
-signal consecutive  : natural range 0 to MAX_RUN; -- Current run length; 0 = none.
-signal stuff_pending: std_logic;                  -- A stuff bit is owed on the next shift.
-\end{vhdlcode}
+\begin{booktable}{@{}p{7.2em}>{\raggedright\arraybackslash}p{9.6em}L@{}}
+  \thead{Signal} & \thead{Typ} & \thead{Håller} \\
+  \midrule
+  \code{shift_reg} & \code{byte_t} & Gruppens återstående bitar, med nästa bit i bit 7. \\
+  \code{bits_left} & heltal, 0 till 8 & Antal riktiga bitar i gruppen som ännu inte presenterats. \\
+  \code{last_bit} & \code{std_logic} & Biten som senast lades ut på ledningen. \\
+  \code{consecutive} & heltal, 0 till \code{MAX_RUN} & Längden på den aktuella följden; 0 betyder
+    ingen. \\
+  \code{stuff_pending} & \code{std_logic} & En stoppbit är skyldig vid nästa skiftning. \\
+\end{booktable}
 
 \begin{itemize}
   \item \textbf{\code{shift_reg} och \code{bits_left} är gruppen i flykt.} Registret håller de
@@ -85,49 +89,22 @@ beskrev, som förval låga högst upp i processen och höjda bara i den gren som
 \section{Processen, uppifrån och ned}
 \label{c14:sec:process}
 
-En klockad process håller allt ovanstående. Genomgången nedan följer koden i den ordning den skrivs,
-så varje rad har ett hem innan nästa dyker upp; kodfragmenten är processens deklarativa del följd av
-på varandra följande skivor av en enda \code{if}/\code{elsif}-kedja, och lagda i följd inuti
-skelettet nedan, vars resetgren du fyller i utifrån dess enradiga beskrivning, är de hela processen.
-En rad använder \code{to_integer(unsigned(...))}, så filen behöver \code{use ieee.numeric_std.all;}
-vid sidan av \code{ieee.std_logic_1164} och \code{work.can_def}.
-
-\textbf{Skelettet.} Processen deklarerar sin egen procedur före \code{begin}; sedan asynkron reset
-först, allt annat på den stigande flanken:
-
-\begin{vhdlcode}
-process(clock, reset_s2_n) is
-    -- One procedure, the run tracker (below).
-begin
-    if (reset_s2_n = '0') then
-        -- Clear everything.
-    elsif (rising_edge(clock)) then
-        -- Defaults, then the load branch or the shift branch.
-    end if;
-end process;
-\end{vhdlcode}
+En klockad process håller allt ovanstående: asynkron reset först, och på den stigande flanken först
+förvalen och sedan antingen laddgrenen eller skiftgrenen. Reglerna nedan följer den ordningen.
+Kapitlet säger vad varje gren måste göra; hur det uttrycks i VHDL är ditt.
 
 \subsection{Följdspåraren, skriven en gång}
 \label{c14:sub:tracker}
 
-Varje gren som lägger ut en bit behöver samma få rader, så de bor i en procedur som deklareras i
-processens egen deklarativa del, mellan \code{process(...) is} och \code{begin}:
-
-\begin{vhdlcode}
-    -- The run tracker: runs on the bit just placed on the wire.
-    procedure track_run(new_bit: in std_logic) is
-    begin
-        if ((new_bit = last_bit) and (consecutive /= 0)) then
-            consecutive <= consecutive + 1;
-            if (consecutive = MAX_RUN - 1) then -- Run reaches MAX_RUN.
-                stuff_pending <= '1';
-            end if;
-        else
-            consecutive <= 1;                   -- Start a new run.
-        end if;
-        last_bit <= new_bit;
-    end procedure;
-\end{vhdlcode}
+Varje gren som lägger ut en bit behöver samma få regler, så de bor i en procedur, \code{track_run},
+med den utlagda biten som enda parameter, deklarerad i processens egen deklarativa del, mellan
+\code{process(...) is} och \code{begin}. För den utlagda biten gäller:
+\begin{itemize}
+  \item Är den lika med \code{last_bit} och \code{consecutive} inte 0, fortsätter följden: räkna upp
+    \code{consecutive}, och når följden därmed \code{MAX_RUN}, armera \code{stuff_pending}.
+  \item Annars börjar en ny följd: \code{consecutive} blir 1.
+  \item I båda fallen blir \code{last_bit} den utlagda biten.
+\end{itemize}
 
 Det här är bokens första underprogram, så fyra saker om det innan något anropar det:
 \begin{itemize}
@@ -147,8 +124,8 @@ Det här är bokens första underprogram, så fyra saker om det innan något anr
     skulle uppfylla regeln, till priset av tre extra argument vid varje anrop och en verklig fråga om
     vilken process som äger drivarna. Deklarerad här kan bara den här processen anropa den, så bara
     den här processen driver dem.
-  \item \textbf{Tajmingen är oförändrad.} En \code{in}-parameter evalueras vid anropet, så
-    \code{new_bit} bär det värde före flanken som anroparen skickade in, och signalläsningarna inuti
+  \item \textbf{Tajmingen är oförändrad.} En \code{in}-parameter evalueras vid anropet, så den
+    utlagda biten bär det värde före flanken som anroparen skickade in, och signalläsningarna inuti
     kroppen är också från före flanken (regeln om variabler kontra signaler från \chapref{c5:ch}).
     Proceduren beter sig precis som samma rader skrivna inline.
   \item \textbf{Syntesen inlinar den.} Resultatet är samma logik replikerad under varje anropares
@@ -156,17 +133,16 @@ Det här är bokens första underprogram, så fyra saker om det innan något anr
     källkodsnivå, och nätlistan blir identisk hur som helst.
 \end{itemize}
 
-Två detaljer inuti kroppen, och en om var den anropas:
+Två detaljer i reglerna, och en om var proceduren anropas:
 \begin{itemize}
-  \item \textbf{\code{consecutive = MAX_RUN - 1} betyder ”följden är nu full”.} Läsningen ger värdet
-    före flanken, så jämförelsen sker mot följdlängden \emph{innan} den här biten förlängde den. Den
-    semantiken är precis rätt här, och det är därför koden jämför mot \code{MAX_RUN - 1} och inte
-    \code{MAX_RUN}.
-  \item \textbf{Håll reda på vilket \code{if} som äger vilken gren.} \code{consecutive <= 1} är det
-    \emph{yttre} \code{if}-satsens \code{else} (varje utlagd bit som bryter följden startar en ny),
-    och \code{last_bit <= new_bit} står efter hela \code{if}-satsen och uppdateras vid \emph{varje}
-    utläggning, lika eller inte. Häng någon av dem på den inre \code{MAX_RUN - 1}-kontrollen, så
-    startar en bruten följd aldrig om, eller så fryser \code{last_bit}.
+  \item \textbf{”Följden når \code{MAX_RUN}” betyder att \code{consecutive} läser
+    \code{MAX_RUN - 1}.} Läsningen inuti proceduren ger värdet före flanken, alltså följdlängden
+    \emph{innan} den här biten förlängde den. Den semantiken är precis rätt här, och det är därför
+    jämförelsen görs mot \code{MAX_RUN - 1} och inte \code{MAX_RUN}.
+  \item \textbf{Håll isär de tre reglerna.} Omstarten på 1 hör till fallet där följden
+    \emph{bryts}, inte till fallet där den når \code{MAX_RUN}, och \code{last_bit} uppdateras vid
+    \emph{varje} utläggning, lika eller inte. Knyt någon av dem till kontrollen mot \code{MAX_RUN},
+    så startar en bruten följd aldrig om, eller så fryser \code{last_bit}.
   \item \textbf{Anropa den från en gren som lägger ut en bit, aldrig från processens toppnivå.}
     Ingenting på ledningen ändras under de dryga fyrtionio klockflanker som ligger mellan
     presentationerna, så ett anrop som körs vid varje flank räknar spökbitar. Grupper vet den
@@ -185,21 +161,16 @@ fortsätter in i nästa tvingar fortfarande fram en stoppbit precis vid gränsen
 kedjad omladdning, test 3 i testbänken: en grupp slutar med fyra \code{'1'}:or, nästa öppnar med en
 \code{'1'}, och stoppbiten landar före den gruppens andra riktiga bit.)
 
-\textbf{Förvalen härnäst, och bara de här tre.} Pulsutgångarna faller vid varje klockflanks början,
-\code{bit_timer}-idiomet, så grenarna nedan bara \emph{höjer} dem:
-
-\begin{vhdlcode}
-stuff     <= '0';
-done      <= '0';
-bit_valid <= '0';
-\end{vhdlcode}
+\textbf{Förvalen härnäst, och bara de här tre.} \code{stuff}, \code{done} och \code{bit_valid} sätts
+till \code{'0'} först vid varje stigande flank, \code{bit_timer}-idiomet, så grenarna nedan bara
+\emph{höjer} dem.
 
 \begin{warning}
-\code{stuff_pending} hör \textbf{inte} hemma här, hur mycket den än liknar dem. Den är tillstånd,
-inte en puls: armerad vid den skiftning som fullbordar en följd, betald vid \emph{nästa} skiftning,
-en hel bitperiod (femtio klockflanker) senare. Ge den förvalet lågt här, så avdunstar skulden vid
-den första lediga flanken däremellan, och då stoppar modulen helt enkelt aldrig in något. Den skrivs
-på exakt tre ställen: nollställd vid reset, armerad inuti \code{track_run}, och nollställd av den
+\code{stuff_pending} hör \textbf{inte} hemma bland dem, hur mycket den än liknar dem. Den är
+tillstånd, inte en puls: armerad vid den skiftning som fullbordar en följd, betald vid \emph{nästa}
+skiftning, en hel bitperiod (femtio klockflanker) senare. Ge den förvalet lågt, så avdunstar skulden
+vid den första lediga flanken däremellan, och då stoppar modulen helt enkelt aldrig in något. Den
+skrivs på exakt tre ställen: nollställd vid reset, armerad av följdspåraren, och nollställd av den
 gren som betalar den.
 \end{warning}
 
@@ -209,22 +180,19 @@ gren som betalar den.
 \textbf{\code{load = '1'} presenterar den första biten omedelbart.} En bitperiod börjar i samma
 ögonblick som den föregående gruppens sista \code{bit_done} går, vilket också är när nästa grupps
 \code{load} går. Om \code{load} bara låste data och väntade på den första \code{shift}-pulsen skulle
-den första perioden fortfarande visa den föregående gruppens sista bit, en hel bit försent. Så grenen
-lägger ut \code{data(7)} nu, för registret i förväg förbi den, sätter \code{bits_left} till
-\code{bit_count - 1}, och kör sedan den utlagda biten genom följdspåraren:
+den första perioden fortfarande visa den föregående gruppens sista bit, en hel bit försent. Så när
+\code{load = '1'}:
+\begin{itemize}
+  \item \code{tx_bit} blir \code{data(7)}: den första biten läggs ut nu.
+  \item \code{shift_reg} blir \code{data} skiftad ett steg åt vänster, med en \code{'0'} inskiftad
+    underst, så att gruppens andra bit står i bit 7.
+  \item \code{bits_left} blir \code{bit_count - 1}. Kontraktet säger att \code{bit_count} är 1 till
+    8; 0 skulle ge ett underspill här.
+  \item \code{bit_valid} pulsar: en ny bit ligger på \code{tx_bit}.
+  \item Följdspåraren körs på \code{data(7)}, biten som just lades ut.
+\end{itemize}
 
-\begin{vhdlcode}
-if (load = '1') then
-    tx_bit    <= data(7);                 -- Output the first bit immediately.
-    shift_reg <= data(6 downto 0) & '0';  -- Remove the output bit and prepare the next one.
-    bits_left <= to_integer(unsigned(bit_count)) - 1;  -- bit_count is 1-8 by contract:
-                                                       -- 0 would underflow bits_left here.
-    bit_valid <= '1';                     -- Indicate that a valid bit has been output.
-
-    track_run(data(7));                   -- data(7) was just placed on the wire.
-\end{vhdlcode}
-
-Anropet är varken valfritt eller en detalj: \code{load} lägger ut en bit på ledningen, så spåraren
+Det sista är varken valfritt eller en detalj: \code{load} lägger ut en bit på ledningen, så spåraren
 måste se den som vilken annan som helst. Utelämna det, så ligger följdräkningen en bit efter under
 resten av ramen; test 1 i testbänken fångar det vid skiftning 5, där stoppbiten som de fem
 \code{'1'}:orna förtjänat uteblir.
@@ -232,56 +200,36 @@ resten av ramen; test 1 i testbänken fångar det vid skiftning 5, där stoppbit
 \subsection{Skiftgrenen}
 \label{c14:sub:shift}
 
-\textbf{\code{shift = '1'} gör exakt en av tre saker} (aldrig i samma cykel som \code{load}; det är
-därför grenen är ett \code{elsif}), prövade i den här prioritetsordningen. Först den stoppbit som är
-skyldig, om det finns någon:
+\textbf{\code{shift = '1'} gör exakt en av tre saker}, aldrig i samma cykel som \code{load}, prövade
+i den här prioritetsordningen:
+\begin{enumerate}
+  \item \textbf{En stoppbit är skyldig} (\code{stuff_pending = '1'}): \code{tx_bit} blir
+    \code{not last_bit}, \code{stuff} och \code{bit_valid} pulsar, \code{stuff_pending} nollställs,
+    eftersom skulden är betald, och följdspåraren körs på stoppbiten. \code{shift_reg} och
+    \code{bits_left} lämnas orörda.
+  \item \textbf{Den avslutande skiftningen} (\code{bits_left = 0}): \code{done} pulsar, och
+    ingenting annat ändras; \code{tx_bit} i synnerhet behåller sitt värde.
+  \item \textbf{Annars, nästa riktiga bit:} samma form som laddgrenen, med \code{shift_reg} i
+    \code{data}s ställe. \code{tx_bit} blir \code{shift_reg(7)}, \code{shift_reg} skiftas ett steg
+    åt vänster med en \code{'0'} underst, \code{bits_left} räknas ned, \code{bit_valid} pulsar, och
+    följdspåraren körs på den utlagda biten, vilket kan armera en stoppbit till nästa skiftning.
+\end{enumerate}
 
-\begin{vhdlcode}
-elsif (shift = '1') then
-    if (stuff_pending = '1') then
-        tx_bit        <= not last_bit;  -- The stuff bit inverts the run.
-        stuff         <= '1';
-        bit_valid     <= '1';
-        stuff_pending <= '0';           -- The debt is paid.
+En stoppbit går genom spåraren precis som en riktig, och att den utlagda biten är \code{not last_bit}
+är det som gör att det blir rätt utan något specialfall: den är per konstruktion olik
+\code{last_bit}, så spåraren tar vägen för en bruten följd och gör precis det regeln vill, startar om
+följden på 1 med stoppbitens eget värde i \code{last_bit}. Ingenting armerar någon ny skuld här
+heller, eftersom armeringen hör till den väg som inte kan tas. Gruppen själv gör inga framsteg.
 
-        track_run(not last_bit);        -- A stuffed bit is a placed bit like any other.
-\end{vhdlcode}
-
-En stoppbit går genom spåraren precis som en riktig, och att skicka in \code{not last_bit} är det som
-gör att det blir rätt utan något specialfall: inuti kroppen är jämförelsen \code{new_bit = last_bit}
-då falsk per konstruktion, så anropet tar \code{else}-vägen och gör precis det regeln vill, startar
-om följden på 1 med stoppbitens eget värde i \code{last_bit}. Ingenting armerar någon ny skuld här
-heller, eftersom armeringen sitter i den gren som inte kan tas. Gruppen själv gör inga framsteg:
-\code{shift_reg} och \code{bits_left} lämnas orörda.
-
-Härnäst den \emph{avslutande} skiftningen:
-
-\begin{vhdlcode}
-    elsif (bits_left = 0) then
-        done <= '1';                    -- The closing shift changes nothing else.
-\end{vhdlcode}
-
-Varje bit har lagts ut och den sista har nu fått sin fulla period på bussen; \code{tx_bit} i
-synnerhet behåller sitt värde. I annat fall: sänd nästa riktiga bit, samma form som
-\code{load}-grenen med \code{shift_reg(7)} i \code{data(7)}:s ställe:
-
-\begin{vhdlcode}
-    else
-        tx_bit    <= shift_reg(7);            -- Output the next bit.
-        shift_reg <= shift_reg(6 downto 0) & '0';
-        bits_left <= bits_left - 1;
-        bit_valid <= '1';
-
-        track_run(shift_reg(7));              -- May arm a stuff bit for the next shift.
-    end if;
-end if;
-\end{vhdlcode}
+Den avslutande skiftningen finns för att den sista biten ska få sin fulla period på bussen: när
+\code{bits_left} är 0 har varje bit lagts ut, och den här skiftningen markerar att den sista nu har
+legat ute en hel bitperiod.
 
 Prioritetsordningen är bärande: en väntande stoppbit går före den avslutande skiftningen, och det är
-det som får specialfallet nedan att fungera utan någon extra kod; en grupp vars \emph{sista} riktiga
-bit fullbordar en följd får ändå sin stoppbit utsänd innan \code{done} går. (\code{load} har aldrig
-någon utestående stoppbit att bekymra sig om: \code{can_controller} laddar bara efter \code{done},
-och \code{done} kommer efter att varje väntande stoppbit har sänts.)
+det som får specialfallet nedan att fungera utan någon extra regel; en grupp vars \emph{sista}
+riktiga bit fullbordar en följd får ändå sin stoppbit utsänd innan \code{done} går. (\code{load} har
+aldrig någon utestående stoppbit att bekymra sig om: \code{can_controller} laddar bara efter
+\code{done}, och \code{done} kommer efter att varje väntande stoppbit har sänts.)
 
 % ------------------------------------------------------------------------------------------
 \section{Utgångarnas tajming, den del testbänken låser exakt}

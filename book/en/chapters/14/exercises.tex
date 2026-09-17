@@ -84,7 +84,7 @@ then repeat the experiment with an internal copy of the transmitted bit in its p
 
 \xpart{c} \Secref{c14:sub:tracker} also says that the procedure has to be declared \emph{inside} the
 process rather than in the architecture. Move it out to the architecture's declarative part,
-unchanged, and analyse the file. It does not compile; read the four errors before you go on. Then
-make an architecture-level version that \emph{does} compile, with identical behaviour and a passing
-testbench. Compare the two call sites and say what the second version costs, and which new question
-it raises that the inside-the-process version cannot raise.
+unchanged, and analyse the file. It does not compile; read the errors, one per signal assignment in
+the procedure, before you go on. Then make an architecture-level version that \emph{does} compile,
+with identical behaviour and a passing testbench. Compare the two call sites and say what the second
+version costs, and which new question it raises that the inside-the-process version cannot raise.

@@ -56,21 +56,20 @@ passerar också i CI.
 
 Grupprojektets VHDL ligger i \textbf{två platta kataloger i repots rot}: modulerna du skriver, vid
 sidan av de utdelade testbänkarna (\file{*_tb.vhd}) som kontrollerar dem. Det finns inga kataloger
-per pass och ingenting att kopiera mellan dem; \file{can_def.vhd} i synnerhet skrivs \emph{en} gång,
-i \chapref{c10:ch}, och varje senare kontrollermodul läser den enda filen.
+per pass och ingenting att kopiera mellan dem; \file{can_def.vhd} i synnerhet är utdelad,
+finns \emph{en} gång, och varje kontrollermodul läser den enda filen.
 
 Uppdelningen mellan de två katalogerna är protokollgränsen: allt i \file{controller/} vet något om
 CAN och ingenting om SPI, och allt i \file{bridge/} tvärtom.
 
 \begin{textdrawing}
-controller/   can_def.vhd            kap 10, din
-              can_controller.vhd     kap 11, din (först bara portar, växer genom kap 17)
+controller/   can_controller.vhd     kap 11, din (först bara portar, växer genom kap 17)
               meta_prev.vhd          kap 12, din
               bit_timer.vhd          kap 12, din
               crc15.vhd              kap 13, din
               tx_shift_reg.vhd       kap 14, din
               rx_shift_reg.vhd       kap 15, din
-              + de sex utdelade *_tb.vhd
+              + utdelade can_def.vhd och de sex *_tb.vhd
 
 bridge/       register_bank.vhd      kap 18, din
               spi_reg_bridge.vhd     kap 19, din
@@ -79,9 +78,9 @@ bridge/       register_bank.vhd      kap 18, din
                 register_bank_tb.vhd, spi_reg_bridge_tb.vhd
 \end{textdrawing}
 
-De två katalogerna innehåller från början bara de utdelade filerna: åtta testbänkar, plus
-\file{spi_slave.vhd} och \file{spi_def.vhd}. Varje kapitel från \chapref{c10:ch} lägger till en
-modul, med undantaget att \file{can_controller.vhd} skrivs tidigt (\chapref{c11:ch}) som en entitet
+De två katalogerna innehåller från början bara de utdelade filerna: nio testbänkar, plus
+\file{can_def.vhd}, \file{spi_slave.vhd} och \file{spi_def.vhd}. Varje kapitel från \chapref{c11:ch}
+lägger till en modul, med undantaget att \file{can_controller.vhd} skrivs tidigt (\chapref{c11:ch}) som en entitet
 med en tom arkitektur och sedan \emph{växer}: \chapref{c16:ch} fyller i dess sändväg och
 \chapref{c17:ch} dess mottagväg, utan att någon ny fil dyker upp för någondera. Det är därför
 \code{can_controller_tb}, den enda testbänk som prövar hela kontrollern, är grindad på mer än att
@@ -199,7 +198,7 @@ controller/meta_prev_tb.vhd:114:9:@311ns:(report note): meta_prev: all checks pa
 \end{console}
 
 Så ser \chapref{c12:ch} ut halvvägs: \file{meta_prev.vhd} skriven och godkänd, \file{bit_timer.vhd}
-kvar att göra. \file{can_def.vhd} namnges inte som saknad, eftersom \chapref{c10:ch} redan skrev den.
+kvar att göra. \file{can_def.vhd} namnges aldrig som saknad, eftersom den är utdelad.
 
 Överhoppad är inte underkänd, med flit. Projektet löper över tio pass och det mesta av trädet saknas
 under de flesta av dem; ett bygge som lyste rött tills den sista modulen landade skulle inte säga

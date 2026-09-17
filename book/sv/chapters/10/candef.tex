@@ -23,10 +23,13 @@
 \end{itemize}
 
 \subsection*{Att läsa \code{can_def.vhd}}
-Live-kodad tillsammans under passet, och skriven \textbf{en gång}, till
-\file{controller/can_def.vhd}. Det här är den första VHDL boken skriver. Varje modul du skriver från
-\chapref{c11:ch} och framåt hamnar i samma katalog, och alla utom \code{meta_prev} läser den här
-enda filen.
+Utdelat, i \file{controller/can_def.vhd}, och genomgånget på tavlan under passet. Paketet är en del
+av kontraktet och inte något att konstruera: sex av de utdelade testbänkarna läser dess namn och
+typer direkt, så det läggs in i gruppens repo \textbf{oförändrat}, precis som testbänkarna. Varje
+modul du skriver från \chapref{c11:ch} och framåt hamnar i samma katalog, och alla utom
+\code{meta_prev} läser den här enda filen.
+
+Listningarna nedan är paketets innehåll, avsnitt för avsnitt, i samma ordning som i filen.
 
 \textbf{Bittajmingskonstanterna}, härledda snarare än handplockade, så att de förblir konsekventa med
 varandra:

@@ -51,20 +51,22 @@ two jobs, mirrored \textemdash{} keeping a group \emph{filling up}, and keeping 
 honest \textemdash{} plus one it did not have: \emph{predicting} where the transmitter must have
 inserted a stuff bit. Every rule below speaks in terms of exactly these five signals:
 
-\begin{vhdlcode}
-signal data_reg      : byte_t;                     -- Collected real bits, filling from the right.
-signal collected     : natural range 0 to 8;       -- Real bits accepted toward this chunk so far.
-signal last_bit      : std_logic;                  -- The bit most recently sampled off the bus.
-signal consecutive   : natural range 0 to MAX_RUN; -- Current run length; 0 = none.
-signal stuff_expected: std_logic;                  -- The next sampled bit must be a stuff bit.
-\end{vhdlcode}
+\begin{booktable}{@{}p{7.4em}>{\raggedright\arraybackslash}p{9.6em}L@{}}
+  \thead{Signal} & \thead{Type} & \thead{Holds} \\
+  \midrule
+  \code{data_reg} & \code{byte_t} & The collected real bits, filled from the right. \\
+  \code{collected} & integer, 0 to 8 & Number of real bits accepted towards this group so far. \\
+  \code{last_bit} & \code{std_logic} & The bit most recently sampled off the bus. \\
+  \code{consecutive} & integer, 0 to \code{MAX_RUN} & The length of the current run; 0 means none. \\
+  \code{stuff_expected} & \code{std_logic} & The next sampled bit must be a stuff bit. \\
+\end{booktable}
 
 \begin{itemize}
   \item \textbf{\code{data_reg} and \code{collected} are the group filling up.} Every accepted bit is
-    shifted in from the right (\code{data_reg(6 downto 0) & rx_bus}), which is where the
-    right-justification comes from, and \code{collected} counts accepted bits towards
-    \code{bit_count}. The register behind \code{data} has to be this internal signal, with
-    \code{data <= data_reg;} as a concurrent assignment outside the process: an \code{out} port
+    shifted in from the right: the seven lowest bits move up one step and the new bit lands in bit 0,
+    which is where the right-justification comes from, and \code{collected} counts accepted bits
+    towards \code{bit_count}. The register behind \code{data} has to be this internal signal, with
+    \code{data} assigned from it by a concurrent assignment outside the process: an \code{out} port
     cannot be \emph{read}, and a shift is a read-modify-write.
   \item \textbf{\code{last_bit} and \code{consecutive} are the same run tracker as \chapref{c14:ch}'s},
     character for character: the bit most recently on the wire, and how long the identical run it
@@ -87,57 +89,22 @@ The outputs are registered in the same process: \code{data} and \code{real_bit} 
 \section{The process, top to bottom}
 \label{c15:sec:process}
 
-One clocked process holds all of the above, plus one concurrent assignment outside it. As in
-\chapref{c14:ch}, the walkthrough follows the code in the order it is written. \textbf{The run
-tracker} is line for line \chapref{c14:ch}'s, with only the flag renamed after what it now means: the
-same procedure, declared inside this module's process and called from every branch taking a bit off
-the wire but one, and the exception is noted where it arises. As in \chapref{c14:ch},
-\code{collected} is compared against \code{bit_count} via \code{to_integer(unsigned(...))}, so the
-file needs \code{use ieee.numeric_std.all;}.
-
-\textbf{The skeleton.} The concurrent line first: \code{data} is an \code{out} port and cannot be
-\emph{read}, while a shift is a read-modify-write, so the register is the internal \code{data_reg}
-and the port merely mirrors it. Then the process, with its procedure declared before \code{begin},
-asynchronous reset first and everything else on the rising edge:
-
-\begin{vhdlcode}
-data <= data_reg;  -- Concurrent, outside the process.
-
-process(clock, reset_s2_n) is
-    -- One procedure, the run tracker (below).
-begin
-    if (reset_s2_n = '0') then
-        -- Clear everything.
-    elsif (rising_edge(clock)) then
-        -- Defaults, then the sample branch.
-    end if;
-end process;
-\end{vhdlcode}
+One clocked process holds all of the above, plus the concurrent assignment of \code{data} from
+\code{data_reg} outside it. The process has the same shape as \chapref{c14:ch}'s: asynchronous reset
+first, and on the rising edge first the defaults and then the only working branch. The chapter says
+what it has to do; how that is expressed in VHDL is yours. \textbf{The run tracker} is rule for rule
+\chapref{c14:ch}'s, with only the flag renamed after what it now means: the same procedure, declared
+inside this module's process and called from every branch taking a bit off the wire but one, and the
+exception is noted where it arises.
 
 \subsection{The run tracker, written once}
 \label{c15:sub:tracker}
 
-\Chapref{c14:ch}'s procedure with \code{stuff_expected} in place of \code{stuff_pending}; that single
-rename is the whole difference on the receive side. Everything \secref{c14:sub:tracker} says about the
-idiom (why it reads the signals directly, why it is declared inside the process rather than in the
-architecture, why an \code{in} parameter preserves the pre-edge timing, and why synthesis inlines it)
-applies here unchanged:
-
-\begin{vhdlcode}
-    -- The run tracker: runs on the bit just taken off the wire.
-    procedure track_run(new_bit: in std_logic) is
-    begin
-        if ((new_bit = last_bit) and (consecutive /= 0)) then
-            consecutive <= consecutive + 1;
-            if (consecutive = MAX_RUN - 1) then -- Run reaches MAX_RUN.
-                stuff_expected <= '1';
-            end if;
-        else
-            consecutive <= 1;                   -- Start a new run.
-        end if;
-        last_bit <= new_bit;
-    end procedure;
-\end{vhdlcode}
+\Chapref{c14:ch}'s procedure \code{track_run} and its three rules, with \code{stuff_expected} in place
+of \code{stuff_pending}; that single rename is the whole difference on the receive side. Everything
+\secref{c14:sub:tracker} says about the idiom (why it reads the signals directly, why it is declared
+inside the process rather than in the architecture, why an \code{in} parameter preserves the pre-edge
+timing, and why synthesis inlines it) applies here unchanged.
 
 \subsection{Reset and defaults}
 \label{c15:sub:defaults}
@@ -147,89 +114,65 @@ applies here unchanged:
 \textbf{only} place the tracker is ever cleared. The groups do not clear it: the transmitter's stream
 is continuous over the whole frame, so the receiver's picture of it has to be as well.
 
-\textbf{The defaults next, and only these three}, so that the branches below only \emph{raise} them:
-
-\begin{vhdlcode}
-valid          <= '0';
-stuff_error    <= '0';
-real_bit_valid <= '0';
-\end{vhdlcode}
+\textbf{The defaults next, and only these three.} \code{valid}, \code{stuff_error} and
+\code{real_bit_valid} are set to \code{'0'} first thing at every rising edge, so the branches below
+only \emph{raise} them.
 
 \begin{warning}
-\code{stuff_expected} does \textbf{not} belong here, for exactly the same reason
-\code{stuff_pending} did not belong in \chapref{c14:ch}'s defaults: it is state, armed at the sample
-completing a run and settled at the \emph{next} sample, a whole bit period (fifty clock edges) later.
-Default it low and the prediction evaporates before it can fall due, and then stuff bits are neither
-discarded nor checked. It is written in exactly three places: cleared at reset, armed inside
-\code{track_run}, and cleared when the prediction falls due (both outcomes below).
+\code{stuff_expected} does \textbf{not} belong among them, for exactly the same reason
+\code{stuff_pending} did not belong among \chapref{c14:ch}'s defaults: it is state, armed at the
+sample completing a run and settled at the \emph{next} sample, a whole bit period (fifty clock edges)
+later. Default it low and the prediction evaporates before it can fall due, and then stuff bits are
+neither discarded nor checked. It is written in exactly three places: cleared at reset, armed by the
+run tracker, and cleared when the prediction falls due (both outcomes below).
 \end{warning}
 
 \subsection{The sample branch}
 \label{c15:sub:sample}
 
-\textbf{\code{(sample = '1') and (enable = '1')} is the only working branch}; there is no
-\code{load} on the receive side. It does exactly one of three things, tested in this priority order.
-First: an outstanding prediction falls due, and the sampled bit settles it one way or the other:
+\textbf{\code{sample = '1'} together with \code{enable = '1'} is the only working branch}; there is
+no \code{load} on the receive side. It does exactly one of three things, tested in this priority
+order:
+\begin{enumerate}
+  \item \textbf{The expected stuff bit arrived} (\code{stuff_expected = '1'} and \code{rx_bus}
+    differs from \code{last_bit}): \code{stuff_expected} is cleared, since the prediction is
+    settled, and the run tracker runs on \code{rx_bus}. Nothing else changes.
+  \item \textbf{The expected stuff bit did not come} (\code{stuff_expected = '1'} and \code{rx_bus}
+    equal to \code{last_bit}): \code{stuff_error} pulses, \code{stuff_expected} is cleared, and
+    \code{consecutive} is set directly to 1. The run tracker does \textbf{not} run here.
+  \item \textbf{Otherwise, a real bit:}
+    \begin{itemize}
+      \item \code{rx_bus} is shifted into \code{data_reg} from the right.
+      \item \code{real_bit} becomes \code{rx_bus}, and \code{real_bit_valid} pulses.
+      \item If \code{collected} reads \code{bit_count - 1}, this bit completes the group:
+        \code{valid} pulses and \code{collected} becomes 0. Otherwise \code{collected} counts up.
+      \item The run tracker runs on \code{rx_bus}, which may arm a stuff bit for the next sample.
+    \end{itemize}
+\end{enumerate}
 
-\begin{vhdlcode}
-if ((sample = '1') and (enable = '1')) then
-    if (stuff_expected = '1') then
-        if (rx_bus /= last_bit) then
-            stuff_expected <= '0';    -- The stuff bit arrived; prediction settled.
-
-            track_run(rx_bus);        -- A stuff bit is a bit off the wire like any other.
-        else
-            stuff_error    <= '1';    -- Six identical bits: a stuffing violation.
-            stuff_expected <= '0';
-            consecutive    <= 1;      -- Restart the run at the violating bit; the
-                                      -- tracker must never count past MAX_RUN.
-        end if;
-\end{vhdlcode}
-
-The arrived stuff bit is \emph{discarded}: no shift, no change to \code{collected}, and
+The arrived stuff bit in case 1 is \emph{discarded}: no shift, no change to \code{collected}, and
 \code{real_bit_valid} stays \code{'0'}, since a stuff bit is never a real bit (this is the bit
-\code{crc15} must not see). The call to the tracker is the mirror image of \chapref{c14:ch}'s in its
-stuff branch: a discarded stuff bit resyncs the tracker exactly as a transmitted one does, since the
-wire does not distinguish real bits from stuff bits and the tracker must not either. Here it needs no
-special argument, since \code{rx_bus /= last_bit} is this branch's own condition, so
-\code{track_run(rx_bus)} takes the new-run path by construction and restarts the count at 1.
+\code{crc15} must not see). Running the tracker on it is the mirror image of \chapref{c14:ch}'s stuff
+branch: a discarded stuff bit resyncs the tracker exactly as a transmitted one does, since the wire
+does not distinguish real bits from stuff bits and the tracker must not either. Here it needs no
+special argument, since \code{rx_bus} differing from \code{last_bit} is the case's own condition, so
+the tracker takes the new-run path by construction and restarts the count at 1.
 
-In the \code{else} branch, six identical bits in a row are impossible on a correctly stuffed bus, so
+In case 2, six identical bits in a row are impossible on a correctly stuffed bus, so
 \code{stuff_error} pulses. The cleanest thing for the rest is to clear the flag, accept nothing, and
 restart the run count at the violating bit (\code{last_bit} already holds its value), since it is not
 this module's job to decide what a violation \emph{means}. The restart is not optional tidiness:
-without it \code{consecutive} stays at \code{MAX_RUN}, the next identical bit runs the tracker's
-\code{+ 1}, and the signal's declared range is exceeded; the testbench feeds in a bit past the
-violation to pin down exactly that. This is also the one placement \code{track_run} cannot serve, and
-for the same reason: \code{rx_bus = last_bit} here, so the call would take the \code{+ 1} path with
+without it \code{consecutive} stays at \code{MAX_RUN}, the next identical bit counts it up, and the
+signal's declared range is exceeded; the testbench feeds in a bit past the violation to pin down
+exactly that. This is also the one case the run tracker cannot serve, and for the same reason:
+\code{rx_bus} equals \code{last_bit} here, so the tracker would take the continuing-run path with
 \code{consecutive} already at \code{MAX_RUN}. The violating bit is the exception to the rule the
-procedure encodes, so its two lines stay written out. \code{can_controller} treats it as fatal and
-aborts the reception (\chapref{c17:ch}), exactly as a real controller would.
+procedure encodes, so its restart is written out on its own. \code{can_controller} treats the
+violation as fatal and aborts the reception (\chapref{c17:ch}), exactly as a real controller would.
 
-Otherwise: accept a real bit, shift it in from the right, expose it bit-wise to \code{crc15},
-complete the group if this bit completes it, and run the tracker on the bit just accepted:
-
-\begin{vhdlcode}
-    else
-        data_reg       <= data_reg(6 downto 0) & rx_bus;  -- Shift in from the right.
-        real_bit       <= rx_bus;
-        real_bit_valid <= '1';
-
-        if (collected = to_integer(unsigned(bit_count)) - 1) then
-            valid     <= '1';                 -- This bit completes the chunk.
-            collected <= 0;
-        else
-            collected <= collected + 1;
-        end if;
-
-        track_run(rx_bus);   -- rx_bus was just accepted off the wire.
-    end if;
-end if;
-\end{vhdlcode}
-
-The comparison here is \chapref{c14:ch}'s pre-edge signal read: \code{collected} against
-\code{bit_count - 1} is the ``run-is-now-full'' idiom applied to the group's completion, the same
-shape as \code{consecutive = MAX_RUN - 1} inside \code{track_run}. Nothing else happens at a group
+The comparison in case 3 is \chapref{c14:ch}'s pre-edge signal read: \code{collected} against
+\code{bit_count - 1} is the same idiom as the comparison against \code{MAX_RUN - 1} in the run
+tracker, applied to the group's completion. Nothing else happens at a group
 boundary: \code{bit_count} is read live, so the next group simply begins with the next accepted bit at
 whatever width \code{can_controller} has set by then, and \code{data_reg} is \emph{not} cleared; the
 new group's bits are shifted in beneath whatever the old group left above them

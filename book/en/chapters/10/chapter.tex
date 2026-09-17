@@ -5,7 +5,8 @@
 \chapter{Project start: the CAN bus, the frame and \code{can_def}}
 \label{c10:ch}
 
-{\large\itshape Why protocols need frames, what CAN actually is, and the project's first VHDL.\par}
+{\large\itshape Why protocols need frames, what CAN actually is, and the package the rest of the
+project reads.\par}
 
 \begin{chapterbox}{In this chapter}
 \begin{itemize}
@@ -38,7 +39,7 @@ standard. The protocol itself is described in \canbook, a short book written for
 CAN system \textemdash{} the one building the controller in hardware and the one writing the driver
 in software \textemdash{} and it is the protocol reference throughout part~\ref{part:can}.
 
-This chapter gives the working understanding needed to write \code{can_def} and get started; if you
+This chapter gives the working understanding needed to read \code{can_def} and get started; if you
 get lost in a field, a rule or a timing relationship, that is where you look it up. For whoever is
 building the controller, its \textbf{chapters 1--6 are the requirement specification, bit by bit},
 and its chapter~7 describes exactly the simplified controller part~\ref{part:can} builds: what it
