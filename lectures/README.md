@@ -39,7 +39,8 @@ andra. Innehållet är detsamma, och avsnittsnumren är desamma i båda upplagor
 
 ## Del 2 - Grupprojektet: en CAN-kontroller
 * [L10](./L10/README.md): Projektstart: CAN-bussen, ramen och `can_def`.
-* [L11](./L11/README.md): Arkitektur, toppnivån, registerkartan och simulering.
+* [L11](./L11/README.md): Arkitektur, toppnivån, registerkartan och simulering, samt
+  Git-introduktionen.
 * [L12](./L12/README.md): Synkronisering och bittimern.
 * [L13](./L13/README.md): CRC-15-motorn.
 * [L14](./L14/README.md): Sändningsskiftregister och bitstoppning.

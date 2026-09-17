@@ -9,7 +9,7 @@ er egen hatt som SPI-master mot dem.
 ## Agenda
 * Transaktions-FSM:en: kommandobyte, fyra databytes, låsning en gång vid läsning, verkställande på
   femte byten, och avbrott när SS går hög för tidigt.
-* Live-kodning av `spi_reg_bridge.vhd`.
+* `spi_reg_bridge` på tavlan: blocket med sina tio portar, och transaktions-FSM:ens tillstånd.
 * Att komponera `spi_slave`, `spi_reg_bridge`, `register_bank` och `can_controller` till
   `can_spi_node.vhd`.
 * Systemverifiering: två noder på en buss, arbitrering, och hela vägen från ett SPI-kommando till
@@ -63,8 +63,9 @@ Efter den här föreläsningen ska ni kunna:
 ### Under föreläsningen
 * Transaktionsformatet på tavlan, byte för byte, med de fem raderna ur protokollspecifikationens
   exempel.
-* Live-kodning av `spi_reg_bridge.vhd`, och dess testbänk körd direkt.
-* `can_spi_node.vhd` kopplad ihop, och hela kedjan simulerad.
+* `spi_reg_bridge` på tavlan: vad bryggan gör efter varje byte, och vad som händer när `SS` går
+  hög för tidigt.
+* `can_spi_node` på tavlan: blocken den instansierar, och vilka signaler som går mellan dem.
 
 ### Bring-up
 Bring-upen har två halvor, och båda är era: CAN-sidan mellan två kort, och SPI-sidan mellan er
@@ -156,8 +157,9 @@ drivrutin som gör det fäller er på dem.
 ### Handledd grupptid
 Kortare än i tidigare pass, eftersom redovisningen tar sin del av tiden. Prioritera i den här
 ordningen:
-* Få `spi_reg_bridge_tb` grön. Den är det enda som står mellan er och en fullständig
-  `make build-project`.
+* Implementera `spi_reg_bridge.vhd` utifrån
+  [protokollspecifikationen](../../project/spi_register_protocol.md) och få `spi_reg_bridge_tb`
+  grön. Den är det enda som står mellan er och en fullständig `make build-project`.
 * Koppla ihop `can_spi_node` och simulera kedjan. Bring-upen är roligare, men det är simuleringen
   som bedöms.
 * Bring-up så långt ni hinner, i stegens ordning.
@@ -178,7 +180,7 @@ Slutredovisningen är projektets andra och sista fasta hållpunkt. Projektet lä
 ---
 
 ## Riktvärde
-Det här passet är kursens tightaste, och det är värt att säga rakt ut: två moduler live-kodas,
+Det här passet är kursens tightaste, och det är värt att säga rakt ut: två moduler ska skrivas,
 hela kedjan ska simuleras, hårdvaran ska upp, och varje grupp redovisar. Med fyra till sex grupper
 går en tredjedel till halva passet åt till redovisningarna.
 

@@ -34,8 +34,8 @@ I slutet av `STATE_EOF`, lås `rx_id`/`rx_dlc`/`rx_data` från ackumulatorerna o
 ### Mottagarvägen, tillstånd för tillstånd
 Samma tillståndssekvens som L16:s sändväg, gången som mottagare. `role = '0'` hela vägen. Läs det
 här vid sidan av L16:s fälttabell: gruppstorlekarna är identiska, bara det som händer med varje
-grupp skiljer sig. Tabellen är kartan; "Att färdigställa processerna, uppifrån och ned" nedan är
-koden den kartlägger.
+grupp skiljer sig. Tabellen är specifikationen; "Att färdigställa processerna" nedan samlar de
+regler som inte ryms i den.
 
 "Föregriper" är det `rxsr_bit_count`/`rxsr_enable` som det **kombinatoriska** blocket driver medan
 `state` fortfarande läser `STATE_LOAD_*`-värdet, en cykel innan skifttillståndet blir synligt;
@@ -120,32 +120,12 @@ fortfarande hållande svansen av fall 1:s CRC.
 Riktig CAN har inget sådant fel, eftersom stoppbitsräkningen börjar om från noll vid varje SOF, och
 den här designen får samma garanti med en enda signal: båda skiftregistren **hålls i reset medan
 bussen är ledig**, så varje ram börjar med rena spårare på varje nod, vad var och en än gjorde
-innan. I den deklarativa delen:
+innan.
 
-```vhdl
-    -- Shift-register reset: asserted while the bus is idle, so every frame
-    -- starts with clean run trackers on every node ("A clean slate", L17).
-    signal srs_reset_n : std_logic;
-```
-
-efter `begin`:
-
-```vhdl
-    srs_reset_n <= '0' when ((reset_s2_n = '0') or (state = STATE_IDLE)) else '1';
-```
-
-och båda skiftregisterinstanserna byter sin andra association från `reset_s2_n` till
-`srs_reset_n`, så att port map-anropen från L14/L15 blir:
-
-```vhdl
-    tx_shift_reg1: entity work.tx_shift_reg
-        port map(clock, srs_reset_n, txsr_load, txsr_data, txsr_bit_count, txsr_shift,
-                 txsr_tx_bit, txsr_stuff, txsr_done, txsr_bit_valid);
-
-    rx_shift_reg1: entity work.rx_shift_reg
-        port map(clock, srs_reset_n, bt_sample, rx_bus_s2, rxsr_bit_count, rxsr_enable,
-                 rxsr_data, rxsr_valid, rxsr_stuff_error, rxsr_real_bit, rxsr_real_bit_valid);
-```
+Konkret betyder det en egen, aktivt låg reset för skiftregistren, konkurrent tilldelad: låg när
+`reset_s2_n` är låg **eller** tillståndsmaskinen står i `STATE_IDLE`, hög annars. Båda
+skiftregisterinstanserna från L14 och L15 kopplar sin resetport, den andra i deras portlistor, till
+den signalen i stället för till `reset_s2_n`. Ingenting annat i instansieringarna ändras.
 
 Reseten släpper på den flank som lämnar `STATE_IDLE`, en hel cykel innan SOF-laddningen klockas in
 i `tx_shift_reg`, så registren är vakna i tid inför varje ram. Lägg märke till vad det här *inte*
@@ -163,8 +143,14 @@ Spegelbilden av L16:s grindning på sändarsidan: aktivera `crc15` på `rx_shift
 CRC-fältets egna bitar återför registret till exakt noll om ramen kom fram intakt (L13:s
 generera-och-sedan-kontrollera), vilket rapporteras av `crc_valid`.
 
-Det finns en `crc15` och en enable, så det här ersätter L16:s tilldelning i stället för att stå vid
-sidan av den. `role` väljer nu källa i stället för att stänga av motorn:
+Det finns en `crc15` och en enable, så det här ersätter L16:s regel i stället för att stå vid sidan
+av den. `role` väljer nu källa i stället för att stänga av motorn.
+
+Det här är det enda stället i appendixet där formen på koden är given, och skälet är bygget, inte
+designen: `make build-project` avgör om kontrollern har en mottagarväg genom att leta efter just de
+här två uttrycken i `can_controller.vhd` (se
+[`controller/README.md`](../../../controller/README.md)). Stavar ni dem annorlunda hoppas
+`can_controller_tb` över i stället för att köras. Skriv dem så här:
 
 ```vhdl
 crc_enable  <= (txsr_bit_valid and not txsr_stuff and role) or
@@ -254,21 +240,18 @@ upp som ett CRC-fel eller ett stoppbitsbrott, långt ifrån sin orsak.
 Exakt L10:s regel, kontrollerad en gång per bit vid sampelpunkten enbart under
 `STATE_ARB_HI`/`STATE_ARB_LO`, vilket är precis arbitreringsfältet, ID plus RTR. Unika ID:n
 garanterar att arbitreringen avgörs inom den 11 bitar långa identifieraren; kontrollen täcker
-harmlöst även RTR, där varje nod här sänder dominant, en bit som aldrig kan förlora:
+harmlöst även RTR, där varje nod här sänder dominant, en bit som aldrig kan förlora.
 
-```vhdl
-if ((bt_sample = '1') and (txsr_tx_bit = '1') and (rx_bus_s2 = '0')) then
-    error     <= '1';    -- Sent recessive, read dominant: lost.
-    tx_done   <= '1';    -- The attempt is over; say so, win or lose.
-    role      <= '0';
-    idle_bits <= 0;
-    state     <= STATE_IDLE;
-end if;
-```
+I `STATE_ARB_HI` och `STATE_ARB_LO`, medan `role = '1'`, har noden förlorat när
+`bt_sample = '1'`, `txsr_tx_bit = '1'` och `rx_bus_s2 = '0'`: den sände recessivt och läser
+dominant. På den flanken:
+* `error` går till `'1'`.
+* `tx_done` pulsar: försöket är över, vunnet eller förlorat.
+* `role` går till `'0'` och `idle_bits` till 0.
+* Tillståndsmaskinen går tillbaka till `STATE_IDLE`.
 
-Kontrollen bor inuti `STATE_ARB_HI`s och `STATE_ARB_LO`s `if (role = '1')`-gren (genomgången nedan
-placerar den), och det är det som avgränsar den till en sändande nod; de tre termerna ovan är själva
-avkänningsvillkoret, och det är dem övning 2 ber er gå igenom bit för bit.
+Att kontrollen bara gäller medan `role = '1'` är det som avgränsar den till en sändande nod; de tre
+termerna är själva avkänningsvillkoret, och det är dem övning 2 ber er gå igenom bit för bit.
 
 **Varför `tx_done` pulsar även här, på en ram som aldrig sändes.** Det läser fel först: `tx_done`
 betyder "ramen blev klar", och det blev den här inte. Läs den i stället som *"sändningsförsöket är
@@ -299,247 +282,52 @@ just höjde. Samma nollställning krävs vid varje annat avbrott nedan, av samma
 
 ---
 
-### Att färdigställa processerna, uppifrån och ned
-Samma regler som i L16:s genomgång: kodfragmenten är på varandra följande skivor i den ordning koden
-läses, och ingenting från L16 skrivs om utöver dess markerade platshållare; varje skiva nedan fyller
-i en av dem. När de alla är på plats är de två processerna färdiga, och `can_controller_tb` har
-äntligen något att döma om.
+### Att färdigställa processerna
+Ingenting från L16 skrivs om. Varje ställe där L16 lämnade mottagarrollen till den här
+föreläsningen fylls i enligt tabellen i "Mottagarvägen, tillstånd för tillstånd", och reglerna nedan
+är de som inte ryms i tabellen. När de alla är på plats är de två processerna färdiga, och
+`can_controller_tb` har äntligen något att döma om.
 
-**Den kombinatoriska processen** får två nya block, och `crc_valid` ansluter sig till dess
-känslighetslista (ACK-drivningen nedan läser den). Först, mellan sändarsidans `case` för
-skiftgrindningen och `case`-satsen för bussdrivningen, mottagarsidans enable och gruppbredder,
-vilket är föregripandet gjort konkret:
+**Den kombinatoriska processen** får två tillägg, och `crc_valid` behöver in i dess
+känslighetslista, eftersom kvitteringen läser den:
 
-```vhdl
-        -- The receive-side enable and chunk widths: the pre-empt. Active
-        -- through every stuffed field's LOAD and shifting state, so the sample
-        -- that falls while state still reads STATE_LOAD_* is collected at the
-        -- new width.
-        if (role = '0') then
-            case state is
-                when STATE_SOF =>
-                    rxsr_enable    <= '1';
-                    rxsr_bit_count <= "0001";
-                when STATE_LOAD_ARB_HI | STATE_ARB_HI
-                   | STATE_LOAD_DATA   | STATE_DATA
-                   | STATE_LOAD_CRC_HI | STATE_CRC_HI =>
-                    rxsr_enable    <= '1';
-                    rxsr_bit_count <= "1000";
-                when STATE_LOAD_ARB_LO | STATE_ARB_LO =>
-                    rxsr_enable    <= '1';
-                    rxsr_bit_count <= "0100";
-                when STATE_LOAD_CTRL | STATE_CTRL =>
-                    rxsr_enable    <= '1';
-                    rxsr_bit_count <= "0110";
-                when STATE_LOAD_CRC_LO | STATE_CRC_LO =>
-                    rxsr_enable    <= '1';
-                    rxsr_bit_count <= "0111";
-                when others =>
-                    null;
-            end case;
-        end if;
-```
+* **Föregripandet.** När `role = '0'` driver processen `rxsr_enable = '1'` och `rxsr_bit_count`
+  enligt tabellens kolumn *Föregriper*: i `STATE_SOF` med bredden 1, och i varje stoppat fält i
+  **både** `STATE_LOAD_*`-tillståndet och dess skifttillstånd. I alla andra tillstånd gäller
+  förvalen från L16. Att paret delar samma värde är det som gör föregripandet automatiskt: det
+  `bt_sample` som faller medan `state` fortfarande läser `STATE_LOAD_*` samlas in med den kommande
+  gruppens bredd, precis som "Väntan på ett extra sampel" härledde.
+* **Kvitteringen.** I `STATE_ACK_SLOT`, när `role = '0'` och `crc_valid = '1'`: `bus_en = '1'` och
+  `tx_bus = '0'`. Det är den enda bit en mottagare någonsin driver.
 
-Varje `STATE_LOAD_*`-tillstånd föregriper den *kommande* gruppens bredd, ett `bt_sample` innan
-`state` synligt ändras, precis som "Väntan på ett extra sampel" härledde; att gruppera det med sitt
-skifttillstånd i en och samma arm är det som gör det automatiskt. För det andra, mottagarens enda
-dominanta bit: en ny arm i `case`-satsen för bussdrivningen, ovanför dess `when others`:
+**Den sekventiella processen.** Mottagarhalvan av varje tillstånd följer en av två former, och
+tabellen säger vilken:
 
-```vhdl
-            when STATE_ACK_SLOT =>
-                if ((role = '0') and (crc_valid = '1')) then
-                    bus_en <= '1';
-                    tx_bus <= '0';
-                end if;
-```
+* Ett mottagande `STATE_LOAD_*`-tillstånd går vidare till sitt skifttillstånd på nästa `bt_sample`,
+  och gör inget annat.
+* Ett mottagande skifttillstånd går vidare på `rxsr_valid` och skördar sin grupp enligt tabellens
+  sista kolumn. `STATE_CRC_HI` och `STATE_CRC_LO` skördar ingenting: deras bitar når `crc15` en i
+  taget genom `real_bit`, och de hopsatta grupperna betyder ingenting.
 
-**Den sekventiella processen**: varje markering `-- role = '0': L17.` blir armens andra halva. Det
-finns bara två mottagarformer. Ett mottagande `STATE_LOAD_*`-tillstånd väntar på ett extra
-`bt_sample` (samma `elsif` i alla sex), och ett mottagande skifttillstånd går vidare på
-`rxsr_valid` och skördar sin grupp om ramen behåller något av den. Här är båda formerna ifyllda, på
-`STATE_SOF` och identifierarens höga par; lägg märke till att `STATE_ARB_HI`s sändarhalva också
-växte, och tog upp förra avsnittets arbitreringskontroll före `done`-testet. (De två kan aldrig slå
-till samma cykel, eftersom `bt_sample` ligger mitt i perioden och `done` följer ett `bit_done`, så
-ordningen handlar om läsbarhet snarare än prioritet; en förlust på en grupps sista bit vinner ändå
-helt enkelt genom att komma först, vid den bitens sampelpunkt.)
+Tre regler till, som tabellen inte uttrycker:
 
-```vhdl
-                when STATE_SOF =>
-                    if (role = '1') then
-                        if (txsr_done = '1') then
-                            state <= STATE_LOAD_ARB_HI;
-                        end if;
-                    else
-                        if (rxsr_valid = '1') then
-                            state <= STATE_LOAD_ARB_HI;
-                        end if;
-                    end if;
-                when STATE_LOAD_ARB_HI =>
-                    if (role = '1') then
-                        state <= STATE_ARB_HI;
-                    elsif (bt_sample = '1') then
-                        state <= STATE_ARB_HI;
-                    end if;
-                when STATE_ARB_HI =>
-                    if (role = '1') then
-                        if ((bt_sample = '1') and (txsr_tx_bit = '1') and (rx_bus_s2 = '0')) then
-                            error     <= '1';    -- Sent recessive, read dominant: lost.
-                            tx_done   <= '1';
-                            role      <= '0';
-                            idle_bits <= 0;
-                            state     <= STATE_IDLE;
-                        elsif (txsr_done = '1') then
-                            state <= STATE_LOAD_ARB_LO;
-                        end if;
-                    else
-                        if (rxsr_valid = '1') then
-                            rx_id_acc(10 downto 3) <= rxsr_data(7 downto 0);
-                            state <= STATE_LOAD_ARB_LO;
-                        end if;
-                    end if;
-```
-
-`STATE_LOAD_ARB_LO`, `STATE_LOAD_CTRL`, `STATE_LOAD_DATA`, `STATE_LOAD_CRC_HI` och
-`STATE_LOAD_CRC_LO` tar alla den identiska väntan `elsif (bt_sample = '1')`, och
-`STATE_CRC_HI`/`STATE_CRC_LO` tar det identiska `rxsr_valid`-framsteget utan att skörda något:
-deras bitar når `crc15` bit för bit genom `real_bit`, och de hopsatta grupperna betyder ingenting.
-Tillstånden med verkligt mottagararbete i sig:
-
-```vhdl
-                when STATE_ARB_LO =>
-                    if (role = '1') then
-                        if ((bt_sample = '1') and (txsr_tx_bit = '1') and (rx_bus_s2 = '0')) then
-                            error     <= '1';
-                            tx_done   <= '1';
-                            role      <= '0';
-                            idle_bits <= 0;
-                            state     <= STATE_IDLE;
-                        elsif (txsr_done = '1') then
-                            state <= STATE_LOAD_CTRL;
-                        end if;
-                    else
-                        if (rxsr_valid = '1') then
-                            rx_id_acc(2 downto 0) <= rxsr_data(3 downto 1);
-                            if (rxsr_data(0) = '1') then
-                                error     <= '1';    -- Recessive RTR: a remote frame.
-                                idle_bits <= 0;
-                                state     <= STATE_IDLE;
-                            else
-                                state <= STATE_LOAD_CTRL;
-                            end if;
-                        end if;
-                    end if;
-                when STATE_CTRL =>
-                    if (role = '1') then
-                        if (txsr_done = '1') then
-                            if (unsigned(tx_dlc) = 0) then
-                                state <= STATE_CRC_WAIT;
-                            else
-                                state <= STATE_LOAD_DATA;
-                            end if;
-                        end if;
-                    else
-                        if (rxsr_valid = '1') then
-                            rx_dlc_acc <= rxsr_data(3 downto 0);
-                            if (unsigned(rxsr_data(3 downto 0)) = 0) then
-                                state <= STATE_CRC_WAIT;
-                            else
-                                state <= STATE_LOAD_DATA;
-                            end if;
-                        end if;
-                    end if;
-                when STATE_DATA =>
-                    if (role = '1') then
-                        if (txsr_done = '1') then
-                            if (data_byte_idx + 1 = to_integer(unsigned(tx_dlc))) then
-                                state <= STATE_CRC_WAIT;
-                            else
-                                data_byte_idx <= data_byte_idx + 1;
-                                state         <= STATE_LOAD_DATA;
-                            end if;
-                        end if;
-                    else
-                        if (rxsr_valid = '1') then
-                            case data_byte_idx is    -- Fixed position per byte index.
-                                when 0 => rx_data_acc(63 downto 56) <= rxsr_data;
-                                when 1 => rx_data_acc(55 downto 48) <= rxsr_data;
-                                when 2 => rx_data_acc(47 downto 40) <= rxsr_data;
-                                when 3 => rx_data_acc(39 downto 32) <= rxsr_data;
-                                when 4 => rx_data_acc(31 downto 24) <= rxsr_data;
-                                when 5 => rx_data_acc(23 downto 16) <= rxsr_data;
-                                when 6 => rx_data_acc(15 downto  8) <= rxsr_data;
-                                when others => rx_data_acc(7 downto 0) <= rxsr_data;
-                            end case;
-                            if (data_byte_idx + 1 = to_integer(unsigned(rx_dlc_acc))) then
-                                state <= STATE_CRC_WAIT;
-                            else
-                                data_byte_idx <= data_byte_idx + 1;
-                                state         <= STATE_LOAD_DATA;
-                            end if;
-                        end if;
-                    end if;
-```
-
-Två läsningar före flanken att lägga märke till, båda samma regel som L14:s `MAX_RUN - 1`.
-`STATE_CTRL` avgör DLC-grenen direkt utifrån `rxsr_data(3 downto 0)`, eftersom `rx_dlc_acc`
-tilldelas på just den här flanken och fortfarande läser den förra ramens värde. Och `STATE_DATA`
-jämför mot `rx_dlc_acc`, som vid det laget *är* stabil, låst ett helt fält tidigare.
-
-Svansen skiljer sig från L16:s i exakt två armar. `STATE_CRC_LO_WAIT` är där mottagaren förbrukar
-den sista CRC-bitens avslutande period och fäller sin dom, och `STATE_EOF`s sista bit är där en
-mottagare publicerar ramen:
-
-```vhdl
-                when STATE_CRC_LO_WAIT =>
-                    if (role = '1') then
-                        state <= STATE_CRC_DELIM;    -- One clock cycle, not a bit period.
-                    elsif (bt_bit_done = '1') then
-                        if (crc_valid = '1') then
-                            state <= STATE_CRC_DELIM;
-                        else
-                            error     <= '1';        -- The engine did not return to zero.
-                            idle_bits <= 0;
-                            state     <= STATE_IDLE;
-                        end if;
-                    end if;
-```
-
-```vhdl
-                when STATE_EOF =>
-                    if (bt_bit_done = '1') then
-                        if (field_bit_count = 0) then
-                            if (role = '1') then
-                                tx_done <= '1';
-                            else
-                                rx_id    <= rx_id_acc;
-                                rx_dlc   <= rx_dlc_acc;
-                                rx_data  <= rx_data_acc;
-                                rx_valid <= '1';
-                            end if;
-                            state <= STATE_IDLE;
-                        else
-                            field_bit_count <= field_bit_count - 1;
-                        end if;
-                    end if;
-```
-
-Till sist en pålagring som inte hör hemma i något enskilt tillstånd. Efter hela `case`-satsen,
-fortfarande inuti den klockade grenen:
-
-```vhdl
-            -- A stuffing violation aborts a reception from any stuffed state.
-            if ((role = '0') and (rxsr_stuff_error = '1')) then
-                error     <= '1';
-                idle_bits <= 0;
-                state     <= STATE_IDLE;
-            end if;
-```
-
-Placerad efter `case`-satsen vinner den över vad än tillståndsarmen bestämde på samma flank, vilket
-är hela poängen: ett brott är fatalt var det än slår till, och ett sampel kan slå till i vilken som
-helst av armarna för stoppade fält, LOAD-tillstånden inräknade (deras föregripna sampel behandlas
-som vilket annat som helst). Att skriva den en gång är bättre än att upprepa tre rader i ett dussin
-armar.
+* **Arbitreringskontrollen och `done`.** I `STATE_ARB_HI` och `STATE_ARB_LO` har
+  sändarhalvan nu två villkor: förlorad arbitrering enligt föregående avsnitt, och `txsr_done` som i
+  L16. De två kan aldrig slå till samma cykel, eftersom `bt_sample` ligger mitt i perioden och
+  `done` följer ett `bit_done`, så ordningen handlar om läsbarhet snarare än prioritet; en förlust
+  på en grupps sista bit vinner ändå helt enkelt genom att komma först, vid den bitens sampelpunkt.
+* **Två läsningar före flanken**, båda samma regel som L14:s `MAX_RUN - 1`. `STATE_CTRL` avgör
+  DLC-grenen direkt utifrån `rxsr_data(3 downto 0)`, eftersom `rx_dlc_acc` tilldelas på just den
+  flanken och fortfarande läser den förra ramens värde. Och `STATE_DATA` jämför mot `rx_dlc_acc`,
+  som vid det laget *är* stabil, låst ett helt fält tidigare.
+* **Ett stoppbitsbrott avbryter från vilket tillstånd som helst.** När `role = '0'` och
+  `rxsr_stuff_error = '1'`: `error` till `'1'`, `idle_bits` till 0, och tillbaka till `STATE_IDLE`.
+  Regeln måste vinna över vad tillståndets egen regel bestämde på samma flank, vilket är hela
+  poängen: ett brott är fatalt var det än slår till, och ett sampel kan slå till i vilket som helst
+  av tillstånden för stoppade fält, LOAD-tillstånden inräknade (deras föregripna sampel behandlas
+  som vilket annat som helst). I en klockad process är det den sista tilldelningen till en signal
+  som gäller, så att skriva regeln en gång, efter alla tillstånd, är bättre än att upprepa den i ett
+  dussin.
 
 ---
 

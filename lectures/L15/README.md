@@ -6,8 +6,7 @@ stoppningsfel. Passet innehåller också projektets **obligatoriska kodgransknin
 ---
 
 ## Agenda
-* Live-kodning av `rx_shift_reg.vhd`: deserialisering, avstoppning och detektering av
-  stoppningsfel.
+* `rx_shift_reg` på tavlan: deserialisering, avstoppning och detektering av stoppningsfel.
 * Att sampla mitt i bitperioden (`bit_timer.sample`) snarare än vid `bit_done`.
 * `real_bit`/`real_bit_valid`: att mata `crc15` en avstoppad bit i taget.
 * Verifiering mot den utdelade testbänken.
@@ -48,8 +47,9 @@ Efter den här föreläsningen ska ni kunna:
   mer värd att visa än en som ingen läste.
 
 ### Under föreläsningen
-* Live-kodning av `rx_shift_reg.vhd`.
-* Testbänken körd, med särskild vikt vid fallen för stoppningsfel.
+* `rx_shift_reg` på tavlan: blocket med sina elva portar, och en bitföljd med en korrekt stoppbit
+  och ett stoppningsfel.
+* Testbänkens fall för stoppningsfel lästa i detalj.
 
 ### Kodgranskningsseminarium
 Ungefär en timme, i helgrupp. Varje grupp får tio minuter och visar:
@@ -63,7 +63,8 @@ inte för sig, men det ingår i den helhetsbedömning av arbetssättet som beskr
 [projektspecifikationen](../../project/README.md).
 
 ### Handledd grupptid
-* Skriv gruppens `rx_shift_reg.vhd` och få `rx_shift_reg_tb` att passera.
+* Implementera `rx_shift_reg.vhd` utifrån specifikationen i Appendix A och få `rx_shift_reg_tb`
+  att passera.
 
 ### Efter föreläsningen
 * [Appendix B](./appendix/b_exercises.md) innehåller övningarna.

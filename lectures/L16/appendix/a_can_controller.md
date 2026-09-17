@@ -133,85 +133,37 @@ för båda rollerna.
 ### Vad ni lägger till i arkitekturen
 `can_controller.vhd` håller redan entiteten (L11), synkroniseraren `meta_prev` (L12) och alla fyra
 CAN-delblocksinstanserna med de signaler de kopplas till (L12 till L15). Den håller inget
-rambeteende alls. Allt nedan är nytt i den här föreläsningen.
+rambeteende alls. Allt nedan är nytt i den här föreläsningen. Appendixet säger vad maskinen måste
+göra; hur det uttrycks i VHDL är ert.
 
-Tillståndstypen och tillståndsmaskinens egna signaler hör hemma i arkitekturens deklarativa del,
-ovanför de fyra delblockens signalgrupper:
+**Tillstånden** är de i fälttabellen ovan: `STATE_IDLE`, `STATE_START`, `STATE_SOF`, ett
+`STATE_LOAD_*`-tillstånd och ett skifttillstånd per stoppat fält, de två stabiliseringstillstånden
+`STATE_CRC_WAIT` och `STATE_CRC_LO_WAIT`, och de fyra tillstånden i svansen. Tjugoen tillstånd i
+en uppräknad typ, med samma mönster som L08.
 
-```vhdl
-    -- One state per frame field. Every stuffed field is a LOAD/shift pair; the
-    -- trailer fields (CRC delimiter, ACK slot/delim, EOF) are driven directly.
-    type state_t is (
-        STATE_IDLE,
-        STATE_START,
-        STATE_SOF,
-        STATE_LOAD_ARB_HI, STATE_ARB_HI,
-        STATE_LOAD_ARB_LO, STATE_ARB_LO,
-        STATE_LOAD_CTRL,   STATE_CTRL,
-        STATE_LOAD_DATA,   STATE_DATA,
-        STATE_CRC_WAIT,
-        STATE_LOAD_CRC_HI, STATE_CRC_HI,
-        STATE_LOAD_CRC_LO, STATE_CRC_LO,
-        STATE_CRC_LO_WAIT,
-        STATE_CRC_DELIM,
-        STATE_ACK_SLOT,
-        STATE_ACK_DELIM,
-        STATE_EOF);
+**Minnet.** Utöver `state` måste maskinen komma ihåg följande mellan klockflankerna. Namnen är de
+appendixet använder; att behålla dem får texten och er kod att tala om samma signaler.
 
-    signal state : state_t;
-
-    -- '1' while transmitting this frame, '0' while only receiving. Latched per frame.
-    signal role : std_logic;
-
-    -- Consecutive recessive bit periods seen in STATE_IDLE, saturating at 11. Only once this is
-    -- full may the node leave STATE_IDLE at all: to transmit on tx_req, or to receive on a
-    -- dominant rx_bus_s2 that now genuinely means SOF rather than a bit of somebody else's
-    -- frame already in progress ("One node, two roles" above). Resets to 11, not 0.
-    signal idle_bits : natural range 0 to 11;
-
-    -- Data-byte index, and a countdown for the fixed-width trailer fields.
-    signal data_byte_idx   : natural range 0 to 8;
-    signal field_bit_count : natural range 0 to 7;
-
-    -- Accumulators for the frame being received.
-    signal rx_id_acc   : id_t;
-    signal rx_dlc_acc  : dlc_t;
-    signal rx_data_acc : data_t;
-
-    -- This frame's own CRC, captured at STATE_CRC_WAIT before the engine is fed
-    -- the CRC field's own bits and moves on ("Capturing the CRC" below).
-    signal crc_tx : crc_t;
-
-    -- The data byte selected by data_byte_idx, MSB-first (byte 0 first).
-    signal tx_data_shifted : data_t;
-    signal tx_current_byte : byte_t;
-```
+| Signal | Håller | Efter reset |
+|---|---|---|
+| `role` | `'1'` medan noden sänder den här ramen, `'0'` medan den bara tar emot. Låses en gång per ram. | `'0'` |
+| `idle_bits` | Antal recessiva bitperioder i rad som setts i `STATE_IDLE`, mättat vid 11 ("En nod, två roller" ovan). | **11**, inte 0 |
+| `data_byte_idx` | Numret på den databyte som sänds eller tas emot. | 0 |
+| `field_bit_count` | Nedräkningen genom EOF:s sju bitar. | 0 |
+| `crc_tx` | Ramens egen CRC, låst i `STATE_CRC_WAIT` ("Att fånga CRC:n" nedan). | nollor |
+| `rx_id_acc`, `rx_dlc_acc`, `rx_data_acc` | Ackumulatorerna för den ram som tas emot. | nollor |
 
 De tre ackumulatorerna `rx_*_acc` används inte förrän i L17; att deklarera dem med resten håller
 ihop gruppen i stället för att dela den över två föreläsningar.
 
-Två konkurrenta tilldelningar plockar ut den databyte som just nu sänds. De hör hemma efter `begin`,
-vid sidan av delblocksinstanserna:
+**Den aktuella databyten** är byte nummer `data_byte_idx` i `tx_data`, räknat från vänster: byte 0
+är bitarna 63 downto 56, byte 1 är 55 downto 48, och så vidare. Välj ut den med en konkurrent
+tilldelning utanför processerna, så att laddtillståndet för data kan läsa den direkt.
 
-```vhdl
-    tx_data_shifted <= std_logic_vector(shift_left(unsigned(tx_data), 8 * data_byte_idx));
-    tx_current_byte <= tx_data_shifted(63 downto 56);
-```
-
-`shift_left` och `unsigned` kommer från `numeric_std`, så lägg till den i kontextklausulen om den
-inte redan finns där:
-
-```vhdl
-    use ieee.numeric_std.all;
-```
-
-Allt annat i den här föreläsningen är de två processer ni skriver live: en **kombinatorisk** som
-driver delblocken per tillstånd, och en **sekventiell** som för tillståndsmaskinen framåt och
-uppdaterar bokföringen. Resten av det här appendixet går igenom båda, uppifrån och ned, på samma
-sätt som L14 och L15 gick igenom skiftregistren.
-
-**Vilken process driver vad.** Uppdelningen är värd att fastställa före genomgången, eftersom varje
-rad i den landar i en av de två processerna, och vilken det är ska inte vara någon gåta:
+**Vilken process driver vad.** Beteendet delas på två processer: en **kombinatorisk** som driver
+delblocken per tillstånd, och en **sekventiell** som för tillståndsmaskinen framåt och uppdaterar
+minnet. Uppdelningen är värd att fastställa innan beteendet beskrivs, eftersom varje regel i de två
+avsnitten nedan landar i en av dem, och vilken det är ska inte vara någon gåta:
 
 * Den **kombinatoriska** processen driver varje ingång på delblocken (`bt_enable`, `bt_resync`, de
   fyra `txsr_*`-ingångarna, de två `rxsr_*`-ingångarna i L17) och bussparet `tx_bus`/`bus_en`. Ge
@@ -236,346 +188,145 @@ rad i den landar i en av de två processerna, och vilken det är ska inte vara n
   skyldigheten på anroparen: håll alla tre stabila från `tx_req` till `tx_done`. Ett registerblock i
   samma klockdomän gör det gratis, och det är precis den anropare L11:s gränssnitt förutsätter.
 
-### De två processerna, uppifrån och ned
-Som i L14 och L15 följer genomgången nedan koden i den ordning den skrivs: kodfragmenten är på
-varandra följande skivor av respektive process, och lagda i följd är de hela processen. Den här
-föreläsningen skriver sändarhalvan; varje ställe där L17 fyller på något är markerat med en
-kommentar, så inget senare blir en överraskning, bara en ifyllnad. Läs skivorna vid sidan av
-diagrammet ovan.
+Avsnitten som följer beskriver sändarhalvan av båda processerna och de konkurrenta tilldelningarna
+runt `crc15`. Varje ställe där L17 fyller på något är utpekat, så att inget senare
+blir en överraskning, bara en ifyllnad. Läs dem vid sidan av diagrammet ovan.
 
-**Den kombinatoriska processen** driver delblockens ingångar och bussparet utifrån `state`, med
-förvalen först och överskrivningarna per tillstånd efter, och den är kompakt nog att visas hel. Tre
-saker att se i den innan koden. Varje `STATE_LOAD_*`-arm laddar sin grupp och delar arm med det
-parade skifttillståndet, eftersom paret också delar ett `bit_count`. `txsr_shift` är `bt_bit_done`
-bara i skifttillstånden, aldrig i ett `STATE_LOAD_*`-tillstånd: `load` presenterar redan den nya
-gruppens första bit under laddcykeln (L14), så ett dedikerat laddtillstånd på en cykel är det som
-håller L14:s löfte om att "`load` och `shift` utesluter varandra"; att få det här om bakfoten är
-ramnivåns version av det enbitsfel i tajmingen som L14 varnade för. Och bussen har öppen dränering:
-en nod driver bara *aktivt* när biten är dominant, i annat fall släpper den, så att en annan nod kan
-dra samma ledning dominant under samma period (mekanismen som L17:s arbitrering vilar på).
+### Den kombinatoriska processen
+Den driver delblockens ingångar och bussparet utifrån `state`, med förvalen först och
+överskrivningarna per tillstånd efter. Tre saker att hålla i huvudet innan reglerna. Varje
+`STATE_LOAD_*`-tillstånd laddar sin grupp, och det parade skifttillståndet håller samma `bit_count`.
+`txsr_shift` är `bt_bit_done` bara i skifttillstånden, aldrig i ett `STATE_LOAD_*`-tillstånd: `load`
+presenterar redan den nya gruppens första bit under laddcykeln (L14), så ett dedikerat laddtillstånd
+på en cykel är det som håller L14:s löfte om att "`load` och `shift` utesluter varandra"; att få det
+här om bakfoten är ramnivåns version av det enbitsfel i tajmingen som L14 varnade för. Och bussen
+har öppen dränering: en nod driver bara *aktivt* när biten är dominant, i annat fall släpper den, så
+att en annan nod kan dra samma ledning dominant under samma period (mekanismen som L17:s
+arbitrering vilar på).
 
-```vhdl
-    COMBINATIONAL_PROCESS: process(state, role, bt_bit_done, tx_id, tx_dlc,
-                                   tx_current_byte, crc_tx, txsr_tx_bit) is
-    begin
-        -- Defaults: every sub-block input, every cycle, then per-state overrides.
-        bt_enable      <= '1';            -- Never held; the idle count needs it.
-        bt_resync      <= '0';
-        txsr_load      <= '0';
-        txsr_data      <= (others => '0');
-        txsr_bit_count <= "0000";
-        txsr_shift     <= '0';
-        rxsr_enable    <= '0';            -- The receive side arrives in L17.
-        rxsr_bit_count <= "0000";
-        tx_bus         <= '1';            -- Release the bus unless driving dominant.
-        bus_en         <= '0';
+**Förvalen**, satta först varje gång processen körs:
 
-        -- Each STATE_LOAD_* arm loads its chunk. The paired shifting state keeps
-        -- the same bit_count applied, so grouping the pair in one arm is natural.
-        case state is
-            when STATE_START =>
-                bt_resync <= '1';         -- Adopt SOF as this node's bit boundary.
-                if (role = '1') then
-                    txsr_load      <= '1';
-                    txsr_data      <= "00000000";               -- SOF: one dominant bit.
-                    txsr_bit_count <= "0001";
-                end if;
-            when STATE_LOAD_ARB_HI | STATE_ARB_HI =>
-                if ((role = '1') and (state = STATE_LOAD_ARB_HI)) then
-                    txsr_load <= '1';
-                    txsr_data <= tx_id(10 downto 3);
-                end if;
-                txsr_bit_count <= "1000";
-            when STATE_LOAD_ARB_LO | STATE_ARB_LO =>
-                if ((role = '1') and (state = STATE_LOAD_ARB_LO)) then
-                    txsr_load <= '1';
-                    txsr_data <= tx_id(2 downto 0) & '0' & "0000";  -- ID low, then RTR.
-                end if;
-                txsr_bit_count <= "0100";
-            when STATE_LOAD_CTRL | STATE_CTRL =>
-                if ((role = '1') and (state = STATE_LOAD_CTRL)) then
-                    txsr_load <= '1';
-                    txsr_data <= "00" & tx_dlc & "00";              -- IDE, r0, DLC.
-                end if;
-                txsr_bit_count <= "0110";
-            when STATE_LOAD_DATA | STATE_DATA =>
-                if ((role = '1') and (state = STATE_LOAD_DATA)) then
-                    txsr_load <= '1';
-                    txsr_data <= tx_current_byte;
-                end if;
-                txsr_bit_count <= "1000";
-            when STATE_LOAD_CRC_HI | STATE_CRC_HI =>
-                if ((role = '1') and (state = STATE_LOAD_CRC_HI)) then
-                    txsr_load <= '1';
-                    txsr_data <= crc_tx(14 downto 7);
-                end if;
-                txsr_bit_count <= "1000";
-            when STATE_LOAD_CRC_LO | STATE_CRC_LO =>
-                if ((role = '1') and (state = STATE_LOAD_CRC_LO)) then
-                    txsr_load <= '1';
-                    txsr_data <= crc_tx(6 downto 0) & '0';
-                end if;
-                txsr_bit_count <= "0111";
-            when others =>
-                null;
-        end case;
+| Signal | Förval | Kommentar |
+|---|---|---|
+| `bt_enable` | `'1'` | Aldrig hållen; tomgångsräkningen behöver den. |
+| `bt_resync` | `'0'` | |
+| `txsr_load`, `txsr_shift` | `'0'` | |
+| `txsr_data`, `txsr_bit_count` | nollor | |
+| `rxsr_enable`, `rxsr_bit_count` | `'0'`, nollor | Mottagarsidan kommer i L17. |
+| `tx_bus`, `bus_en` | `'1'`, `'0'` | Bussen släppt, om inget tillstånd driver den dominant. |
 
-        -- Shifting states advance the register once per bit period; a LOAD
-        -- state never does, which keeps load and shift mutually exclusive.
-        if (role = '1') then
-            case state is
-                when STATE_SOF | STATE_ARB_HI | STATE_ARB_LO | STATE_CTRL
-                   | STATE_DATA | STATE_CRC_HI | STATE_CRC_LO =>
-                    txsr_shift <= bt_bit_done;
-                when others =>
-                    null;
-            end case;
-        end if;
+**Laddningarna.** Vad varje grupp laddar, och med vilken bredd:
 
-        -- Driving the bus, open-drain: only the owning states, only dominant
-        -- bits. A receiver's one dominant bit is the ACK slot (L17).
-        case state is
-            when STATE_SOF
-               | STATE_LOAD_ARB_HI | STATE_ARB_HI
-               | STATE_LOAD_ARB_LO | STATE_ARB_LO
-               | STATE_LOAD_CTRL   | STATE_CTRL
-               | STATE_LOAD_DATA   | STATE_DATA
-               | STATE_LOAD_CRC_HI | STATE_CRC_HI
-               | STATE_LOAD_CRC_LO | STATE_CRC_LO =>
-                if ((role = '1') and (txsr_tx_bit = '0')) then
-                    bus_en <= '1';
-                    tx_bus <= '0';
-                end if;
-            when others =>
-                null;
-        end case;
-    end process;
-```
+| Tillstånd | `txsr_data` | `txsr_bit_count` |
+|---|---|---|
+| `STATE_START` | `"00000000"`: SOF, en dominant bit | `"0001"` |
+| `STATE_LOAD_ARB_HI` / `STATE_ARB_HI` | `tx_id(10 downto 3)` | `"1000"` |
+| `STATE_LOAD_ARB_LO` / `STATE_ARB_LO` | `tx_id(2 downto 0) & '0' & "0000"`: ID låg, sedan RTR | `"0100"` |
+| `STATE_LOAD_CTRL` / `STATE_CTRL` | `"00" & tx_dlc & "00"`: IDE, r0, DLC | `"0110"` |
+| `STATE_LOAD_DATA` / `STATE_DATA` | den aktuella databyten | `"1000"` |
+| `STATE_LOAD_CRC_HI` / `STATE_CRC_HI` | `crc_tx(14 downto 7)` | `"1000"` |
+| `STATE_LOAD_CRC_LO` / `STATE_CRC_LO` | `crc_tx(6 downto 0) & '0'` | `"0111"` |
 
-Avgränsningen av bussdrivningen i den sista `case`-satsen förtjänar sin egen mening: `txsr_tx_bit`
-är en nivå och håller sitt senaste värde i all evighet, så en oavgränsad version fortsätter driva
-efter den grupp som producerade den. En ram vars CRC slutar på en dominant bit skulle fortfarande
-dra ned bussen genom hela svansen, och en nod som sitter i `STATE_IDLE` med `role` fortfarande `'1'`
-från sin förra ram skulle hålla hela bussen dominant för alltid. Svansens fält är recessiva för båda
-rollerna och driver ingenting, med det enda undantaget en mottagares ACK-lucka (L17).
+* `txsr_load = '1'` och `txsr_data` enligt tabellen bara i laddtillståndet, alltså `STATE_START`
+  eller `STATE_LOAD_*`, och bara när `role = '1'`.
+* `txsr_bit_count` enligt tabellen i båda tillstånden i ett par, oavsett roll. I `STATE_START` bara
+  när `role = '1'`.
+* `STATE_START` driver dessutom `bt_resync = '1'`, i båda rollerna: SOF blir den här nodens
+  bitgräns.
 
-**Den sekventiella processen** äger `state`, bokföringen och utgångsportarna. Skelett, reset och
-förval först:
+**Skiftningen.** När `role = '1'` är `txsr_shift = bt_bit_done` i skifttillstånden `STATE_SOF`,
+`STATE_ARB_HI`, `STATE_ARB_LO`, `STATE_CTRL`, `STATE_DATA`, `STATE_CRC_HI` och `STATE_CRC_LO`. I
+ett laddtillstånd aldrig, och det är det som håller laddning och skiftning isär.
 
-```vhdl
-    SEQUENTIAL_PROCESS: process(clock, reset_s2_n) is
-    begin
-        if (reset_s2_n = '0') then
-            state           <= STATE_IDLE;
-            role            <= '0';
-            idle_bits       <= 11;        -- Full: an idle bus is assumed at power-up.
-            data_byte_idx   <= 0;
-            field_bit_count <= 0;
-            rx_id_acc       <= (others => '0');
-            rx_dlc_acc      <= (others => '0');
-            rx_data_acc     <= (others => '0');
-            crc_tx          <= (others => '0');
-            tx_done         <= '0';
-            rx_valid        <= '0';
-            error           <= '0';
-            rx_id           <= (others => '0');
-            rx_dlc          <= (others => '0');
-            rx_data         <= (others => '0');
-        elsif (rising_edge(clock)) then
-            tx_done  <= '0';              -- The two pulse outputs default low;
-            rx_valid <= '0';              -- error is a level and holds.
+**Bussen.** `bus_en = '1'` och `tx_bus = '0'` precis när `role = '1'`, `txsr_tx_bit = '0'`, och
+`state` är `STATE_SOF` eller något av laddnings- och skifttillstånden från `STATE_LOAD_ARB_HI` till
+och med `STATE_CRC_LO`. Varje annat tillstånd släpper bussen. En mottagares enda dominanta bit,
+ACK-luckan, kommer i L17.
 
-            case state is
-```
+Avgränsningen till just de tillstånden förtjänar sin egen mening: `txsr_tx_bit` är en nivå och
+håller sitt senaste värde i all evighet, så en oavgränsad version fortsätter driva efter den grupp
+som producerade den. En ram vars CRC slutar på en dominant bit skulle fortfarande dra ned bussen
+genom hela svansen, och en nod som sitter i `STATE_IDLE` med `role` fortfarande `'1'` från sin förra
+ram skulle hålla hela bussen dominant för alltid. Svansens fält är recessiva för båda rollerna och
+driver ingenting, med det enda undantaget en mottagares ACK-lucka (L17).
 
-Allt nedan är armar i den här enda `case`-satsen. Först de två tillstånd varje ram passerar en
-gång:
+**Känslighetslistan.** Processen läser `state`, `role`, `bt_bit_done`, `tx_id`, `tx_dlc`, den
+aktuella databyten, `crc_tx` och `txsr_tx_bit`, och var och en av dem måste stå i dess
+känslighetslista. Projektet analyseras med `--std=93`, där `process(all)` inte finns, och en signal
+som saknas i listan ger en simulering som inte stämmer med den hårdvara syntesen bygger.
 
-```vhdl
-                when STATE_IDLE =>
-                    if (bt_sample = '1') then
-                        if (rx_bus_s2 = '1') then
-                            if (idle_bits /= 11) then
-                                idle_bits <= idle_bits + 1;
-                            end if;
-                        else
-                            idle_bits <= 0;
-                        end if;
-                    end if;
-                    if (idle_bits = 11) then
-                        if (tx_req = '1') then
-                            role      <= '1';
-                            idle_bits <= 0;
-                            state     <= STATE_START;
-                        elsif (rx_bus_s2 = '0') then
-                            role      <= '0';    -- Someone else's SOF: receive (L17).
-                            idle_bits <= 0;
-                            state     <= STATE_START;
-                        end if;
-                    end if;
-                when STATE_START =>
-                    error         <= '0';
-                    data_byte_idx <= 0;
-                    rx_data_acc   <= (others => '0');
-                    state         <= STATE_SOF;
-```
+### Den sekventiella processen
+Den äger `state`, minnet och utgångsportarna på registersidan.
+
+**Reset** (`reset_s2_n = '0'`): `state` blir `STATE_IDLE`, minnet får värdena i tabellen ovan, och
+`tx_done`, `rx_valid`, `error`, `rx_id`, `rx_dlc` och `rx_data` nollställs.
+
+**Vid varje stigande flank** går `tx_done` och `rx_valid` först till `'0'`, eftersom de är pulser på
+en cykel; `error` är en nivå och håller sitt värde. Sedan gäller reglerna för det tillstånd maskinen
+står i.
+
+**`STATE_IDLE`** räknar och väntar:
+* Vid varje `bt_sample`: är `rx_bus_s2 = '1'`, räkna upp `idle_bits`, men inte förbi 11; är den
+  `'0'`, nollställ `idle_bits`.
+* Är `idle_bits` 11: med `tx_req = '1'`, sätt `role` till `'1'` och gå till `STATE_START`; annars,
+  med `rx_bus_s2 = '0'`, sätt `role` till `'0'` (någon annans SOF, L17) och gå till `STATE_START`.
+  I båda fallen nollställs `idle_bits`, och den nollställningen vinner över räkningen på samma
+  flank.
 
 `STATE_IDLE` räknar recessiva bitperioder vid sampelpunkten och mättar vid 11; ett dominant sampel
 nollställer räkningen. Ingenting lämnar tillståndet förrän räkningen är **full**, vad `tx_req` och
 `rx_bus_s2` än gör, så en `tx_req`-puls som anländer medan bussen är upptagen **förkastas**, den
-köas inte; anroparen begär om (L11:s portbeskrivning av `tx_req` säger redan det). `STATE_START`
-behöver ingen kod för SOF-laddningen eller resynken, eftersom den kombinatoriska processen utfärdar
-båda utifrån tillståndet självt; uppsättning som måste *minnas*, att nollställa `error`, byteindexet
-och ackumulatorn för mottagen data, är det som landar här. `rx_data_acc` behöver nollställningen
-eftersom en mottagen ram bara skriver de byte dess DLC täcker (L17): en fembytesram som anländer
-efter en åttabytesram måste rapportera nollor i byte 5 till 7, inte den förra ramens rester.
-`rx_id_acc` och `rx_dlc_acc` skrivs alltid i sin helhet, så de behöver ingen. (`crc15` nollställs
-också av det här tillståndet: "Att nollställa `crc15`" nedan.)
+köas inte; anroparen begär om (L11:s portbeskrivning av `tx_req` säger redan det).
 
-Sedan LOAD/skift-paren. Det här är formen varje stoppat fält följer, visad en gång för
-identifierarens höga grupp; sändarhalvan av ett LOAD-tillstånd går vidare efter sin enda cykel, och
+**Resten av ramen.** Tillstånden som är gemensamma för båda rollerna är `STATE_START`,
+`STATE_CRC_WAIT` och de fyra i svansen. I alla andra gäller övergångarna nedan bara när
+`role = '1'`, och mottagarens villkor fyller L17 i.
+
+| Tillstånd | Går vidare när | Till | Dessutom |
+|---|---|---|---|
+| `STATE_START` | nästa flank | `STATE_SOF` | `error`, `data_byte_idx` och `rx_data_acc` nollställs |
+| `STATE_SOF` | `txsr_done = '1'` | `STATE_LOAD_ARB_HI` | |
+| varje `STATE_LOAD_*` | nästa flank | parets skifttillstånd | laddningen utfärdas av den kombinatoriska processen |
+| `STATE_ARB_HI` | `txsr_done = '1'` | `STATE_LOAD_ARB_LO` | L17 lägger till arbitreringskontrollen |
+| `STATE_ARB_LO` | `txsr_done = '1'` | `STATE_LOAD_CTRL` | L17 lägger till arbitreringskontrollen; RTR är dominant och kan aldrig vara biten som förlorar |
+| `STATE_CTRL` | `txsr_done = '1'` | `STATE_CRC_WAIT` om `tx_dlc` är 0, annars `STATE_LOAD_DATA` | |
+| `STATE_DATA` | `txsr_done = '1'` | `STATE_CRC_WAIT` om `data_byte_idx + 1` är lika med `tx_dlc` (den sista byten), annars `STATE_LOAD_DATA` | räkna upp `data_byte_idx` när fler byte återstår |
+| `STATE_CRC_WAIT` | nästa flank | `STATE_LOAD_CRC_HI` | lås `crc_value` i `crc_tx` |
+| `STATE_CRC_HI` | `txsr_done = '1'` | `STATE_LOAD_CRC_LO` | |
+| `STATE_CRC_LO` | `txsr_done = '1'` | `STATE_CRC_LO_WAIT` | |
+| `STATE_CRC_LO_WAIT` | nästa flank | `STATE_CRC_DELIM` | en klockcykel, inte en bitperiod; mottagaren kontrollerar `crc_valid` här (L17) |
+| `STATE_CRC_DELIM` | `bt_bit_done = '1'` | `STATE_ACK_SLOT` | |
+| `STATE_ACK_SLOT` | `bt_bit_done = '1'` | `STATE_ACK_DELIM` | sändaren har släppt bussen; en mottagare kvitterar här (L17) |
+| `STATE_ACK_DELIM` | `bt_bit_done = '1'` | `STATE_EOF` | sätt `field_bit_count` till 6, EOF:s nedräkning |
+| `STATE_EOF` | `bt_bit_done = '1'` med `field_bit_count` 0 | `STATE_IDLE` | pulsa `tx_done` om `role = '1'` (L17 låser `rx_*` här); vid varje tidigare `bt_bit_done`, räkna ned `field_bit_count` |
+
+`STATE_START` behöver inget eget för SOF-laddningen eller resynken, eftersom den kombinatoriska
+processen utfärdar båda utifrån tillståndet självt; uppsättning som måste *minnas*, att
+nollställa `error`, byteindexet och ackumulatorn för mottagen data, är det som landar här.
+`rx_data_acc` behöver nollställningen eftersom en mottagen ram bara skriver de byte dess DLC täcker
+(L17): en fembytesram som anländer efter en åttabytesram måste rapportera nollor i byte 5 till 7,
+inte den förra ramens
+rester. `rx_id_acc` och `rx_dlc_acc` skrivs alltid i sin helhet, så de behöver ingen. (`crc15`
+nollställs också av det här tillståndet: "Att nollställa `crc15`" nedan.)
+
+LOAD/skift-paren följer alla samma form: laddtillståndet går vidare efter sin enda cykel, och
 skifttillståndet väntar på `tx_shift_reg.done`. En tajmingnotering innan vågformerna överraskar er:
 L14 beskrev `load` som att den utfärdas i samma ögonblick som den förra gruppens sista `bit_done`,
 och här utfärdas den två klockflanker senare, en för att tillståndsmaskinen ska hinna se `txsr_done`
 och en för själva LOAD-tillståndet. Varje grupps första bit når därför ledningen omkring 40 ns in i
 sin bitperiod på 1000 ns; sampelpunkten vid 70 % absorberar det med marginal, och förskjutningen
-ackumuleras inte, eftersom varje grupp startar om från samma `bit_done`:
+ackumuleras inte, eftersom varje grupp startar om från samma `bit_done`.
 
-```vhdl
-                when STATE_SOF =>
-                    if (role = '1') then
-                        if (txsr_done = '1') then
-                            state <= STATE_LOAD_ARB_HI;
-                        end if;
-                    end if;                       -- role = '0': L17.
-                when STATE_LOAD_ARB_HI =>
-                    if (role = '1') then
-                        state <= STATE_ARB_HI;    -- One cycle; the load is issued.
-                    end if;                       -- role = '0': L17.
-                when STATE_ARB_HI =>
-                    if (role = '1') then
-                        if (txsr_done = '1') then -- Arbitration watching joins here in L17.
-                            state <= STATE_LOAD_ARB_LO;
-                        end if;
-                    end if;                       -- role = '0': L17.
-                when STATE_LOAD_ARB_LO =>
-                    if (role = '1') then
-                        state <= STATE_ARB_LO;
-                    end if;                       -- role = '0': L17.
-                when STATE_ARB_LO =>
-                    if (role = '1') then
-                        if (txsr_done = '1') then -- Also watched in L17; RTR is dominant,
-                            state <= STATE_LOAD_CTRL;  -- so it can never be the bit that loses.
-                        end if;
-                    end if;                       -- role = '0': L17.
-```
+`STATE_CRC_WAIT` är en tom cykel så att den sista databiten hinner integreras klart innan
+`crc_value` läses, och dess verkliga uppgift är låsningen: båda CRC-grupperna laddas från `crc_tx`,
+aldrig från den levande motorn ("Att fånga CRC:n" nedan förklarar vad som går fel annars).
 
-Kontroll- och datatillstånden har samma form med två beslut påhängda: kontrollfältets `done`
-konsulterar DLC:n, och dataparet loopar en gång per byte:
-
-```vhdl
-                when STATE_LOAD_CTRL =>
-                    if (role = '1') then
-                        state <= STATE_CTRL;
-                    end if;                       -- role = '0': L17.
-                when STATE_CTRL =>
-                    if (role = '1') then
-                        if (txsr_done = '1') then
-                            if (unsigned(tx_dlc) = 0) then
-                                state <= STATE_CRC_WAIT;    -- No data field at all.
-                            else
-                                state <= STATE_LOAD_DATA;
-                            end if;
-                        end if;
-                    end if;                       -- role = '0': L17.
-                when STATE_LOAD_DATA =>
-                    if (role = '1') then
-                        state <= STATE_DATA;
-                    end if;                       -- role = '0': L17.
-                when STATE_DATA =>
-                    if (role = '1') then
-                        if (txsr_done = '1') then
-                            if (data_byte_idx + 1 = to_integer(unsigned(tx_dlc))) then
-                                state <= STATE_CRC_WAIT;
-                            else
-                                data_byte_idx <= data_byte_idx + 1;
-                                state         <= STATE_LOAD_DATA;
-                            end if;
-                        end if;
-                    end if;                       -- role = '0': L17.
-```
-
-Sedan CRC:n. `STATE_CRC_WAIT` är en tom cykel så att den sista databiten hinner integreras klart
-innan `crc_value` läses, och dess verkliga uppgift är låsningen: båda CRC-grupperna laddas från
-`crc_tx`, aldrig från den levande motorn ("Att fånga CRC:n" nedan förklarar vad som går fel
-annars). De två CRC-paren har arbitreringsparens form igen:
-
-```vhdl
-                when STATE_CRC_WAIT =>
-                    crc_tx <= crc_value;          -- Capture before the engine moves on.
-                    state  <= STATE_LOAD_CRC_HI;
-                when STATE_LOAD_CRC_HI =>
-                    if (role = '1') then
-                        state <= STATE_CRC_HI;
-                    end if;                       -- role = '0': L17.
-                when STATE_CRC_HI =>
-                    if (role = '1') then
-                        if (txsr_done = '1') then
-                            state <= STATE_LOAD_CRC_LO;
-                        end if;
-                    end if;                       -- role = '0': L17.
-                when STATE_LOAD_CRC_LO =>
-                    if (role = '1') then
-                        state <= STATE_CRC_LO;
-                    end if;                       -- role = '0': L17.
-                when STATE_CRC_LO =>
-                    if (role = '1') then
-                        if (txsr_done = '1') then
-                            state <= STATE_CRC_LO_WAIT;
-                        end if;
-                    end if;                       -- role = '0': L17.
-```
-
-Till sist svansen, där skiftregistret bugar och går och tillståndsmaskinen själv räknar
-`bt_bit_done`-pulser. `STATE_CRC_LO_WAIT` är en klockcykel för en sändare, **inte** en bitperiod:
-`tx_shift_reg.done` pulsar vid den avslutande skiftningen, som själv är ett `bit_done`, så sändaren
-står redan på en bitgräns och svansen kan börja omedelbart; att vänta en hel period skulle trycka ut
-en extra recessiv bit på ledningen. (En mottagare väntar *däremot* ett helt `bit_done` här, och
-kontrollerar `crc_valid` medan den väntar; L17.)
-
-```vhdl
-                when STATE_CRC_LO_WAIT =>
-                    if (role = '1') then
-                        state <= STATE_CRC_DELIM; -- One clock cycle, not a bit period.
-                    end if;                       -- role = '0': L17 checks crc_valid here.
-                when STATE_CRC_DELIM =>
-                    if (bt_bit_done = '1') then
-                        state <= STATE_ACK_SLOT;
-                    end if;
-                when STATE_ACK_SLOT =>
-                    if (bt_bit_done = '1') then   -- Transmitter releases; a receiver
-                        state <= STATE_ACK_DELIM; -- acknowledges here (L17).
-                    end if;
-                when STATE_ACK_DELIM =>
-                    if (bt_bit_done = '1') then
-                        field_bit_count <= 6;     -- Arm the 7-bit EOF countdown.
-                        state           <= STATE_EOF;
-                    end if;
-                when STATE_EOF =>
-                    if (bt_bit_done = '1') then
-                        if (field_bit_count = 0) then
-                            if (role = '1') then
-                                tx_done <= '1';
-                            end if;                -- role = '0': L17 latches rx_* here.
-                            state <= STATE_IDLE;
-                        else
-                            field_bit_count <= field_bit_count - 1;
-                        end if;
-                    end if;
-            end case;
-        end if;
-    end process;
-```
+I svansen bugar skiftregistret och går, och tillståndsmaskinen räknar själv `bt_bit_done`-pulser.
+`STATE_CRC_LO_WAIT` är en klockcykel för en sändare, **inte** en bitperiod: `tx_shift_reg.done`
+pulsar vid den avslutande skiftningen, som själv är ett `bit_done`, så sändaren står redan på en
+bitgräns och svansen kan börja omedelbart; att vänta en hel period skulle trycka ut en extra
+recessiv bit på ledningen. (En mottagare väntar *däremot* ett helt `bit_done` här, och kontrollerar
+`crc_valid` medan den väntar; L17.)
 
 Svansens tillstånd behöver inget `role`-test för att gå vidare, eftersom båda rollerna räknar samma
 hela bitperioder genom samma fält; bara det som händer *inuti* dem skiljer sig, och de skillnaderna
@@ -605,41 +356,37 @@ färdigt och innan något annat rör motorn, tar bort samspelet helt.
 ### Att mata `crc15`
 `crc15` måste se varje riktig bit från SOF till och med slutet av **CRC-fältet**, och inga andra.
 Grinda dess enable på `tx_shift_reg.bit_valid` (`'0'` vid varje grupps avslutande skiftning, så att
-den oförändrade biten inte matas in två gånger), och stäng ute stoppbitarna och mottagarvägen:
+den oförändrade biten inte matas in två gånger), och stäng ute stoppbitarna och mottagarvägen. Som
+regel, skriven som två konkurrenta tilldelningar utanför processerna:
 
-```vhdl
-crc_enable  <= txsr_bit_valid and not txsr_stuff and role;
-crc_data_in <= txsr_tx_bit;
-```
+* `crc_enable` är `'1'` precis när `txsr_bit_valid = '1'`, `txsr_stuff = '0'` och `role = '1'`.
+* `crc_data_in` är `txsr_tx_bit`.
 
-Tre saker följer av att det här är en enkel konkurrent tilldelning utan någon tillståndsterm i sig.
+Tre saker följer av att regeln inte har något villkor på tillståndet.
 
 **CRC-fältet matas tillbaka in i motorn, och det är avsiktligt.** Värdet som sänds ligger tryggt i
-`crc_tx`, så ingenting behöver läsa motorn igen när `STATE_CRC_WAIT` väl fångat det, och uttrycket
-har ingen tillståndsterm som skulle stoppa matningen vid datafältet. På sändarsidan är återmatningen
-bara harmlös: L13:s egenskap generera-och-sedan-kontrollera betyder att ett meddelande följt av sin
-egen CRC återför registret till noll, och `STATE_START`s nollställning ("Att nollställa `crc15`"
-nedan) lämnar hur som helst över en fräsch motor till nästa ram. Där återmatningen förtjänar sin
-plats är på **mottagarsidan**: L17:s CRC-kontroll *är* observationen att registret återvänt till
-noll när det mottagna CRC-fältet gått in, och den observationen finns bara därför att CRC-fältet
-matas tillbaka. En regel för båda rollerna, varje riktig bit från SOF till och med slutet av
-CRC-fältet, är det som låter en enda motor generera på en nod medan den kontrollerar på en annan.
+`crc_tx`, så ingenting behöver läsa motorn igen när `STATE_CRC_WAIT` väl fångat det, och regeln har
+inget villkor på tillståndet som skulle stoppa matningen vid datafältet. På sändarsidan är
+återmatningen bara harmlös: L13:s egenskap generera-och-sedan-kontrollera betyder att ett meddelande
+följt av sin egen CRC återför registret till noll, och `STATE_START`s nollställning ("Att nollställa
+`crc15`" nedan) lämnar hur som helst över en fräsch motor till nästa ram. Där återmatningen
+förtjänar sin plats är på **mottagarsidan**: L17:s CRC-kontroll *är* observationen att registret
+återvänt till noll när det mottagna CRC-fältet gått in, och den observationen finns bara därför att
+CRC-fältet matas tillbaka. En regel för båda rollerna, varje riktig bit från SOF till och med slutet
+av CRC-fältet, är det som låter en enda motor generera på en nod medan den kontrollerar på en annan.
 
 **Svansen utesluter sig själv.** CRC-avgränsare, ACK-lucka, ACK-avgränsare och EOF går aldrig genom
-`tx_shift_reg` alls, så `txsr_bit_valid` är redan låg över allihop. Ingen tillståndsterm behövs för
-att hålla dem utanför checksumman.
+`tx_shift_reg` alls, så `txsr_bit_valid` är redan låg över allihop. Inget villkor på tillståndet
+behövs för att hålla dem utanför checksumman.
 
-**`role` är platshållaren för mottagarsidan.** Med `role = '0'` håller det här uttrycket `crc15`
-avstängd, vilket är korrekt för L16 (bara sändning) men inte för den färdiga kontrollern. L17
-ersätter hela tilldelningen med en som matar `rx_shift_reg.real_bit` på
-`rx_shift_reg.real_bit_valid` under mottagning; sändarhalvan ovan är oförändrad av det.
+**`role` är platshållaren för mottagarsidan.** Med `role = '0'` håller regeln `crc15` avstängd,
+vilket är korrekt för L16 (bara sändning) men inte för den färdiga kontrollern. L17 ersätter regeln
+med en som matar `rx_shift_reg.real_bit` på `rx_shift_reg.real_bit_valid` under mottagning;
+sändarhalvan är oförändrad av det.
 
 ### Att nollställa `crc15`
 Ännu en konkurrent tilldelning, och det är den som gör motorn säker att återanvända ram efter ram:
-
-```vhdl
-crc_clear <= '1' when state = STATE_START else '0';
-```
+`crc_clear` är `'1'` medan tillståndsmaskinen står i `STATE_START`, och `'0'` annars.
 
 På den lyckliga vägen gör den ingenting alls, eftersom en ram som körs hela vägen redan har återfört
 registret till noll. Den finns där för de ramar som *inte* blir klara. L17 ger den här noden tre

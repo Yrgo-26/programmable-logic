@@ -7,8 +7,8 @@ Ramen som tillståndsmaskin, först förklarad och sedan byggd på sändarsidan.
 ## Agenda
 * Den ramsekvenserande tillståndsmaskinen som begrepp: tillståndsdiagrammet, fälttabellen och
   mönstret `STATE_LOAD_*`/skifta, innan någon VHDL skrivs.
-* Att lägga till tillståndstypen och maskinens signaler i `can_controller`, och sedan live-koda
-  dess sändväg.
+* Sändvägen på tavlan: tillståndstypen och maskinens signaler i `can_controller`, vad varje
+  `STATE_LOAD_*` laddar, och vilken puls som för maskinen vidare.
 * Att driva den öppna dräneringsbussen från skiftregistrets aktuella bit.
 * Att mata `crc15` korrekt: grinda på `bit_valid`, inte på `bit_done`.
 
@@ -45,12 +45,13 @@ Efter den här föreläsningen ska ni kunna:
 
 ### Under föreläsningen
 * Tillståndsdiagrammet på tavlan, härlett fält för fält ur ramformatet.
-* Live-kodning av sändvägen i `can_controller.vhd`.
-* Toppnivån analyserad och elaborerad; `can_controller_tb` kan ännu inte köras, eftersom den
-  kräver en mottagarväg, och det är [L17](../L17/README.md):s.
+* Sändvägen på tavlan: vad varje tillstånd laddar i `tx_shift_reg`, vad det driver på bussen, och
+  när `crc15` får uppdatera sig.
 
 ### Handledd grupptid
-* Skriv gruppens tillståndsmaskin och sändväg.
+* Implementera tillståndsmaskinen och sändvägen utifrån specifikationen i Appendix A.
+* Få toppnivån att analysera och elaborera. `can_controller_tb` kan ännu inte köras, eftersom den
+  kräver en mottagarväg, och det är [L17](../L17/README.md):s.
 * Det här är projektets största enskilda kodinsats och den enda del som är svår att dela upp på
   flera personer. Ett rimligt upplägg är att två skriver och resten granskar tätt, snarare än att
   fyra skriver var sin del av samma process.

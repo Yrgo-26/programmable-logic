@@ -8,7 +8,7 @@ det färdiga systemet kommer de ingångarna från drivrutinens register snarare 
 hand.
 
 L18 byggde lagret som gör dem nåbara - `register_bank`, som gör om pulser till pollbara nivåer -
-och det här passet bygger transporten framför det. Den sista modul kursen live-kodar är alltså
+och det här passet bygger transporten framför det. Den sista modul projektet bygger är alltså
 `can_spi_node.vhd`: toppnivån som binder ihop `spi_slave`, `spi_reg_bridge`, `register_bank` och
 `can_controller` till en nod, och exponerar exakt två saker mot omvärlden, SPI och CAN-bussen.
 

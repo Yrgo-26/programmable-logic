@@ -1,15 +1,15 @@
 # L10 - Projektstart: CAN-bussen, ramen och `can_def`
 
 Första föreläsningen i **grupprojektet**. Passet börjar med hur projektet drivs, fortsätter med
-vad CAN faktiskt är, och slutar i projektets första VHDL: det delade paketet `can_def`.
+vad CAN faktiskt är, och slutar i det delade paketet `can_def`, som resten av projektet läser.
 
 Läs [projektspecifikationen](../../project/README.md) före passet. Grupperna sätts samman här.
 
 ---
 
 ## Agenda
-* Projektet: grupper om 4-5, eget privat Git-repo, feature-branchar, Pull Requests och
-  kodgranskning. Vad som bedöms, och vad som inte gör det.
+* Projektet: grupper om 4-5, hur arbetet drivs, och vad som bedöms och vad som inte gör det.
+  Git-flödet med branchar, Pull Requests och granskning gås igenom i [L11](../L11/README.md).
 * Varför protokoll behöver ramar alls: nyttolast, längdfält, checksumma, och varför DST/SRC/SEQ
   uppstår så snart en länk delas av fler än två noder.
 * CAN:s differentiella buss och multimasterdesign.
@@ -19,7 +19,8 @@ Läs [projektspecifikationen](../../project/README.md) före passet. Grupperna s
 * Bitstoppning: femregeln, och varför den finns.
 * Wired-AND-arbitrering med öppen dränering, med två- och trenodersexempel för hand.
 * Bittajming och sampelpunkten, på begreppsnivå.
-* Live-kodning av `can_def.vhd`, det delade paketet som håller varje konstant passet definierar.
+* `can_def` på tavlan: det delade paketet som håller varje konstant passet definierar. Paketet är
+  utdelat, eftersom de utdelade testbänkarna läser dess namn och typer.
 
 ---
 
@@ -30,8 +31,8 @@ Efter den här föreläsningen ska ni kunna:
 * Förklara hur wired-AND-arbitrering löser upp konkurrens utan bussmästare, och avgöra vilken av
   två noder som vinner.
 * Tillämpa stoppbitsregeln på en bitföljd, för hand.
-* Skriva `can_def.vhd`: konstanterna, subtyperna och CRC-polynomet som resten av projektet läser.
-* Redogöra för gruppens arbetssätt: branchning, PR:er och granskning.
+* Läsa `can_def.vhd`: säga var varje konstant, subtyp och CRC-polynomet kommer ifrån, och varför
+  de konstanter som går att räkna ut är uträknade i stället för inskrivna.
 
 ---
 
@@ -39,7 +40,6 @@ Efter den här föreläsningen ska ni kunna:
 * Hela [L01](../L01/README.md)-[L08](../L08/README.md). Projektet återanvänder allt: entiteter och
   arkitekturer, processer, signaler kontra variabler, generics, dubbelvippsynkroniseraren och
   Mooremaskiner. Ingenting av det förklaras om.
-* Git och GitHub på grundnivå: klona, branch, commit, push, Pull Request.
 
 ---
 
@@ -60,15 +60,16 @@ Efter den här föreläsningen ska ni kunna:
 ### Under föreläsningen
 * Projektupplägget och gruppindelningen, först.
 * Genomgång av CAN från bussen och uppåt, med arbitrering och stoppbitar arbetade på tavlan.
-* Live-kodning av `can_def.vhd`.
+* `can_def` på tavlan: vilka konstanter och subtyper paketet håller, vilka som räknas ut ur
+  andra, och varför.
 
 ### Handledd grupptid
-* Sätt upp gruppens repo: privat på GitHub, alla medlemmar plus handledare inbjudna,
-  `CONTRIBUTORS.md` på plats, skyddad `main`.
-* Kopiera in de utdelade testbänkarna från [`controller/`](../../controller/README.md) och
-  [`bridge/`](../../bridge/README.md).
-* Skriv `can_def.vhd` tillsammans och lägg den i repot via en första Pull Request, så att hela
-  gruppen har gått igenom flödet en gång innan det gäller på riktigt.
+* Gör övningarna 2-6 i [Appendix C](./appendix/c_exercises.md) på papper: arbitrering,
+  bitstoppning och en hel ram för hand.
+* Läs det utdelade [`controller/can_def.vhd`](../../controller/can_def.vhd) tillsammans i gruppen,
+  med [Appendix B](./appendix/b_can_def_package.md) vid sidan, och gör övning 7.
+* Gruppens repo sätts upp i [L11](../L11/README.md), efter Git-introduktionen. Då läggs
+  `can_def.vhd` in oförändrad, tillsammans med de utdelade testbänkarna.
 
 ### Efter föreläsningen
 * [Appendix C](./appendix/c_exercises.md) innehåller övningarna. Övning 1 tar ramen från
@@ -81,8 +82,8 @@ Efter den här föreläsningen ska ni kunna:
 ---
 
 ## Riktvärde
-`can_def.vhd` bör vara skriven och mergad när passet är slut. Det är en kort fil och resten av
-projektet läser den, så den är värd att göra klar direkt.
+När passet är slut bör var och en i gruppen kunna säga var konstanterna i `can_def.vhd` kommer
+ifrån. Det är en kort fil och resten av projektet läser den, så den är värd att förstå direkt.
 
 Riktvärdena i de här föreläsningarna är just riktvärden. De är inte milstolpar, de betygsätts
 inte, och gruppen bestämmer själv i vilken ordning modulerna byggs.
@@ -103,6 +104,7 @@ inte, och gruppen bestämmer själv i vilken ordning modulerna byggs.
 ## Nästa föreläsning
 [L11](../L11/README.md): från protokoll till blockschema. Kontrollerns arkitektur, den toppnivå
 varje senare modul instansieras i, registerkartan som drivrutinsklassen ska konsumera, och
-projektets simuleringsflöde i GHDL.
+projektets simuleringsflöde i GHDL. Passet innehåller också Git-introduktionen, och där sätts
+gruppens repo upp.
 
 ---

@@ -5,7 +5,7 @@ En motor, två jobb.
 ---
 
 ## Agenda
-* Live-kodning av `crc15.vhd`, en bitseriell CRC-15-motor.
+* `crc15` på tavlan: en bitseriell CRC-15-motor, som ett block med sina portar och sitt beteende.
 * Varför samma motor både genererar och kontrollerar en CRC, utan lägesomkoppling.
 * Varför den ändå behöver ett `clear`, och vad en avbruten ram lämnar efter sig utan det.
 * En kort CRC arbetad genom rekursionen för hand.
@@ -47,11 +47,11 @@ Efter den här föreläsningen ska ni kunna:
 ### Under föreläsningen
 * Rekursionen på tavlan först: XOR av insignalen med högsta CRC-biten, skifta, och XOR:a med
   polynomet när det behövs.
-* Live-kodning av `crc15.vhd`.
-* Testbänken körd direkt, och en kort sekvens jämförd mot handräkningen.
+* `crc15` på tavlan: blocket med sina sju portar, och vad `clear`, `enable` och `valid` gör.
 
 ### Handledd grupptid
-* Skriv gruppens `crc15.vhd` och få `crc15_tb` att passera.
+* Implementera `crc15.vhd` utifrån specifikationen i Appendix A och få `crc15_tb` att passera.
+* Jämför en kort sekvens i simuleringen mot handräkningen från tavlan.
 * `crc15` beror inte på `bit_timer` och kan mycket väl ha byggts redan. Är den klar är det här
   passet ett bra tillfälle att komma ikapp med det som inte är det.
 

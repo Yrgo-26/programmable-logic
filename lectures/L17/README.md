@@ -42,12 +42,16 @@ Efter den här föreläsningen ska ni kunna:
 * Läs [Appendix A](./appendix/a_can_controller_receive.md).
 
 ### Under föreläsningen
-* Live-kodning av mottagarvägen och arbitreringskontrollen.
-* `can_controller_tb` körd hela vägen: två noder på en wired-AND-buss, där den ena tar emot den
-  andras ram, och ett arbitreringsfall där båda sänder samtidigt.
+* Mottagarvägen på tavlan: när `rx_shift_reg` slås på, hur den mottagna ramen sätts ihop, och hur
+  `crc15` matas på mottagarsidan.
+* Arbitreringskontrollen på tavlan: vilka bitar som jämförs mot bussen, och vad noden gör när den
+  förlorar.
+* Vad `can_controller_tb` prövar: två noder på en wired-AND-buss, där den ena tar emot den andras
+  ram, och ett arbitreringsfall där båda sänder samtidigt.
 
 ### Handledd grupptid
-* Färdigställ gruppens `can_controller.vhd` och få `can_controller_tb` att passera.
+* Implementera mottagarvägen och arbitreringen utifrån specifikationen i Appendix A, och få
+  `can_controller_tb` att passera.
 * Systemtestbänken hoppas över av bygget tills kontrollern har en mottagarväg. Ser ni fortfarande
   "skipped" när ni tycker att den borde köra, läs kommentaren i
   [`ci/build_project.sh`](../../ci/build_project.sh) och kör med `CI_BUILD_ALL=1`.

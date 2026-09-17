@@ -56,15 +56,16 @@ Börja där inledningen pekade: pappersversionen av stoppbitsregeln såg *tillba
 hårdvaran har ingen följd att se tillbaka över. Så innan någon process skrivs, lista vad som måste
 bo i ett register. Allt nedan följer av modulens två uppgifter - att hålla en grupp i rörelse, och
 att hålla stoppbitsregeln ärlig - och varje regel i resten av det här appendixet talar i termer av
-exakt de här fem signalerna:
+exakt de här fem signalerna. Namnen är de appendixet använder; att behålla dem får texten och er kod
+att tala om samma sak.
 
-```vhdl
-signal shift_reg    : byte_t;                     -- Remaining chunk bits, next one in bit 7.
-signal bits_left    : natural range 0 to 8;       -- Real bits of the chunk still to present.
-signal last_bit     : std_logic;                  -- The bit most recently placed on the wire.
-signal consecutive  : natural range 0 to MAX_RUN; -- Current run length; 0 = none.
-signal stuff_pending: std_logic;                  -- A stuff bit is owed on the next shift.
-```
+| Signal | Typ | Håller |
+|---|---|---|
+| `shift_reg` | `byte_t` | Gruppens återstående bitar, med nästa bit i bit 7. |
+| `bits_left` | heltal, 0 till 8 | Antal riktiga bitar i gruppen som ännu inte presenterats. |
+| `last_bit` | `std_logic` | Biten som senast lades ut på ledningen. |
+| `consecutive` | heltal, 0 till `MAX_RUN` | Längden på den aktuella följden; 0 betyder ingen. |
+| `stuff_pending` | `std_logic` | En stoppbit är skyldig vid nästa skiftning. |
 
 * **`shift_reg` och `bits_left` är gruppen i flykt.** Registret håller de osända bitarna
   vänsterjusterade så att "nästa bit" alltid är `shift_reg(7)`; `bits_left` är hur många riktiga
@@ -86,50 +87,23 @@ låga högst upp i processen och höjda bara i den gren som förtjänar dem.
 ---
 
 ### Processen, uppifrån och ned
-En klockad process håller allt ovanstående. Genomgången nedan följer koden i den ordning den
-skrivs, så varje rad har ett hem innan nästa dyker upp; kodfragmenten är processens deklarativa del
-följd av på varandra följande skivor av en enda `if`/`elsif`-kedja, och lagda i följd inuti
-skelettet nedan, vars resetgren ni fyller i utifrån dess enradiga beskrivning, är de hela
-processen. En rad använder `to_integer(unsigned(...))`, så filen behöver
-`use ieee.numeric_std.all;` vid sidan av `ieee.std_logic_1164` och `work.can_def`.
-**Följdspåraren**, de få rader som håller stoppbitsregeln ärlig, behövs på alla tre ställen där en
+En klockad process håller allt ovanstående: asynkron reset först, och på den stigande flanken först
+förvalen och sedan antingen laddgrenen eller skiftgrenen. Reglerna nedan följer den ordningen.
+Appendixet säger vad varje gren måste göra; hur det uttrycks i VHDL är ert.
+
+**Följdspåraren**, de få regler som håller stoppbitsregeln ärlig, behövs på alla tre ställen där en
 bit kan läggas ut. Den skrivs **en gång**, som en procedur processen deklarerar åt sig själv, och
 anropas från vart och ett av dem.
 
-**Skelettet.** Processen deklarerar sin egen procedur före `begin`; sedan asynkron reset först,
-allt annat på den stigande flanken:
+#### Följdspåraren, skriven en gång
+Varje gren som lägger ut en bit behöver samma få regler, så de bor i en procedur, `track_run`, med
+den utlagda biten som enda parameter, deklarerad i processens egen deklarativa del, mellan
+`process(...) is` och `begin`. För den utlagda biten gäller:
 
-```vhdl
-process(clock, reset_s2_n) is
-    -- One procedure, the run tracker (below).
-begin
-    if (reset_s2_n = '0') then
-        -- Clear everything.
-    elsif (rising_edge(clock)) then
-        -- Defaults, then the load branch or the shift branch.
-    end if;
-end process;
-```
-
-**Följdspåraren, skriven en gång.** Varje gren som lägger ut en bit behöver samma få rader, så de
-bor i en procedur som deklareras i processens egen deklarativa del, mellan `process(...) is` och
-`begin`:
-
-```vhdl
-    -- The run tracker: runs on the bit just placed on the wire.
-    procedure track_run(new_bit: in std_logic) is
-    begin
-        if ((new_bit = last_bit) and (consecutive /= 0)) then
-            consecutive <= consecutive + 1;
-            if (consecutive = MAX_RUN - 1) then -- Run reaches MAX_RUN.
-                stuff_pending <= '1';
-            end if;
-        else
-            consecutive <= 1;                   -- Start a new run.
-        end if;
-        last_bit <= new_bit;
-    end procedure;
-```
+* Är den lika med `last_bit` och `consecutive` inte 0, fortsätter följden: räkna upp
+  `consecutive`, och når följden därmed `MAX_RUN`, armera `stuff_pending`.
+* Annars börjar en ny följd: `consecutive` blir 1.
+* I båda fallen blir `last_bit` den utlagda biten.
 
 Det här är kursens första underprogram, så fyra saker om det innan något anropar det:
 
@@ -147,29 +121,31 @@ Det här är kursens första underprogram, så fyra saker om det innan något an
   parametrar av klassen `signal` skulle uppfylla regeln, till priset av tre extra argument vid
   varje anrop och en verklig fråga om vilken process som äger drivarna. Deklarerad här kan bara den
   här processen anropa den, så bara den här processen driver dem.
-* **Tajmingen är oförändrad.** En `in`-parameter evalueras vid anropet, så `new_bit` bär det värde
-  före flanken som anroparen skickade in, och signalläsningarna inuti kroppen är också från före
-  flanken (regeln om variabler kontra signaler från L05). Proceduren beter sig precis som samma
-  rader skrivna inline.
+* **Tajmingen är oförändrad.** En `in`-parameter evalueras vid anropet, så den utlagda biten bär
+  det värde före flanken som anroparen skickade in, och signalläsningarna inuti kroppen är också
+  från före flanken (regeln om variabler kontra signaler från L05). Proceduren beter sig precis som
+  samma rader skrivna inline.
 * **Syntesen inlinar den.** Resultatet är samma logik replikerad under varje anropares grenvillkor;
   ingenting delas, multiplexas eller anropas vid körning. Det här är faktorisering på källkodsnivå,
   och nätlistan blir identisk hur som helst.
 
-Två detaljer inuti kroppen, och en om var den anropas:
+Två detaljer i reglerna, och en om var proceduren anropas:
 
-* **`consecutive = MAX_RUN - 1` betyder "följden är nu full".** Läsningen ger värdet före flanken,
-  så jämförelsen sker mot följdlängden *innan* den här biten förlängde den. Den semantiken är precis
-  rätt här, och det är därför koden jämför mot `MAX_RUN - 1` och inte `MAX_RUN`.
-* **Håll reda på vilket `if` som äger vilken gren.** `consecutive <= 1` är det *yttre* `if`-satsens
-  `else` (varje utlagd bit som bryter följden startar en ny), och `last_bit <= new_bit` står efter
-  hela `if`-satsen och uppdateras vid *varje* utläggning, lika eller inte. Häng någon av dem på den
-  inre `MAX_RUN - 1`-kontrollen, så startar en bruten följd aldrig om, eller så fryser `last_bit`.
+* **"Följden når `MAX_RUN`" betyder att `consecutive` läser `MAX_RUN - 1`.** Läsningen inuti
+  proceduren ger värdet före flanken, alltså följdlängden *innan* den här biten förlängde den. Den
+  semantiken är precis rätt här, och det är därför jämförelsen görs mot `MAX_RUN - 1` och inte
+  `MAX_RUN`.
+* **Håll isär de tre reglerna.** Omstarten på 1 hör till fallet där följden *bryts*, inte till
+  fallet där den når `MAX_RUN`, och `last_bit` uppdateras vid *varje* utläggning, lika eller inte.
+  Knyt någon av dem till kontrollen mot `MAX_RUN`, så startar en bruten följd aldrig om, eller så
+  fryser `last_bit`.
 * **Anropa den från en gren som lägger ut en bit, aldrig från processens toppnivå.** Ingenting på
   ledningen ändras under de dryga fyrtionio klockflanker som ligger mellan presentationerna, så ett
   anrop som körs vid varje flank räknar spökbitar. Grupper vet den ingenting om åt något håll:
   ledningen har ingen aning om var en grupp slutar och nästa börjar, så det har inte spåraren
   heller.
 
+#### Reset och förval
 **Reset nollställer allt**: utgångarna, gruppen (`shift_reg`, `bits_left`) och följdspåraren
 (`last_bit`, `consecutive`, `stuff_pending`). Det här är det **enda** stället spåraren någonsin
 nollställs. `load` får inte röra den: stoppningen ser den utsända strömmen som sammanhängande över
@@ -178,94 +154,63 @@ stoppbit precis vid gränsen. (Det är scenariot med kedjad omladdning, test 3 i
 slutar med fyra `'1'`:or, nästa öppnar med en `'1'`, och stoppbiten landar före den gruppens andra
 riktiga bit.)
 
-**Förvalen härnäst, och bara de här tre.** Pulsutgångarna faller vid varje klockflanks början,
-`bit_timer`-idiomet, så grenarna nedan bara *höjer* dem:
+**Förvalen härnäst, och bara de här tre.** `stuff`, `done` och `bit_valid` sätts till `'0'` först
+vid varje stigande flank, `bit_timer`-idiomet, så grenarna nedan bara *höjer* dem.
 
-```vhdl
-stuff     <= '0';
-done      <= '0';
-bit_valid <= '0';
-```
+`stuff_pending` hör **inte** hemma bland dem, hur mycket den än liknar dem. Den är tillstånd, inte
+en puls: armerad vid den skiftning som fullbordar en följd, betald vid *nästa* skiftning, en hel
+bitperiod (femtio klockflanker) senare. Ge den förvalet lågt, så avdunstar skulden vid den första
+lediga flanken däremellan, och då stoppar modulen helt enkelt aldrig in något. Den skrivs på exakt
+tre ställen: nollställd vid reset, armerad av följdspåraren, och nollställd av den gren som betalar
+den.
 
-`stuff_pending` hör **inte** hemma här, hur mycket den än liknar dem. Den är tillstånd, inte en
-puls: armerad vid den skiftning som fullbordar en följd, betald vid *nästa* skiftning, en hel
-bitperiod (femtio klockflanker) senare. Ge den förvalet lågt här, så avdunstar skulden vid den
-första lediga flanken däremellan, och då stoppar modulen helt enkelt aldrig in något. Den skrivs på
-exakt tre ställen: nollställd vid reset, armerad inuti `track_run`, och nollställd av den gren som
-betalar den.
-
+#### Laddgrenen
 **`load = '1'` presenterar den första biten omedelbart.** En bitperiod börjar i samma ögonblick som
 den föregående gruppens sista `bit_done` går, vilket också är när nästa grupps `load` går. Om
 `load` bara låste data och väntade på den första `shift`-pulsen skulle den första perioden
-fortfarande visa den föregående gruppens sista bit, en hel bit försent. Så grenen lägger ut
-`data(7)` nu, för registret i förväg förbi den, sätter `bits_left` till `bit_count - 1`, och kör
-sedan den utlagda biten genom följdspåraren:
+fortfarande visa den föregående gruppens sista bit, en hel bit försent. Så när `load = '1'`:
 
-```vhdl
-if (load = '1') then
-    tx_bit    <= data(7);                 -- Output the first bit immediately.
-    shift_reg <= data(6 downto 0) & '0';  -- Remove the output bit and prepare the next one.
-    bits_left <= to_integer(unsigned(bit_count)) - 1;  -- bit_count is 1-8 by contract:
-                                                       -- 0 would underflow bits_left here.
-    bit_valid <= '1';                     -- Indicate that a valid bit has been output.
+* `tx_bit` blir `data(7)`: den första biten läggs ut nu.
+* `shift_reg` blir `data` skiftad ett steg åt vänster, med en `'0'` inskiftad underst, så att
+  gruppens andra bit står i bit 7.
+* `bits_left` blir `bit_count - 1`. Kontraktet säger att `bit_count` är 1 till 8; 0 skulle ge ett
+  underspill här.
+* `bit_valid` pulsar: en ny bit ligger på `tx_bit`.
+* Följdspåraren körs på `data(7)`, biten som just lades ut.
 
-    track_run(data(7));                   -- data(7) was just placed on the wire.
-```
+Det sista är varken valfritt eller en detalj: `load` lägger ut en bit på ledningen, så spåraren
+måste se den som vilken annan som helst. Utelämna det, så ligger följdräkningen en bit efter under
+resten av ramen; test 1 i testbänken fångar det vid skiftning 5, där stoppbiten som de fem
+`'1'`:orna förtjänat uteblir.
 
-Anropet är varken valfritt eller en detalj: `load` lägger ut en bit på ledningen, så spåraren måste
-se den som vilken annan som helst. Utelämna det, så ligger följdräkningen en bit efter under resten
-av ramen; test 1 i testbänken fångar det vid skiftning 5, där stoppbiten som de fem `'1'`:orna
-förtjänat uteblir.
+#### Skiftgrenen
+**`shift = '1'` gör exakt en av tre saker**, aldrig i samma cykel som `load`, prövade i den här
+prioritetsordningen:
 
-**`shift = '1'` gör exakt en av tre saker** (aldrig i samma cykel som `load`; det är därför grenen
-är ett `elsif`), prövade i den här prioritetsordningen. Först den stoppbit som är skyldig, om det
-finns någon:
+1. **En stoppbit är skyldig** (`stuff_pending = '1'`): `tx_bit` blir `not last_bit`, `stuff` och
+   `bit_valid` pulsar, `stuff_pending` nollställs, eftersom skulden är betald, och följdspåraren
+   körs på stoppbiten. `shift_reg` och `bits_left` lämnas orörda.
+2. **Den avslutande skiftningen** (`bits_left = 0`): `done` pulsar, och ingenting annat ändras;
+   `tx_bit` i synnerhet behåller sitt värde.
+3. **Annars, nästa riktiga bit:** samma form som laddgrenen, med `shift_reg` i `data`s ställe.
+   `tx_bit` blir `shift_reg(7)`, `shift_reg` skiftas ett steg åt vänster med en `'0'` underst,
+   `bits_left` räknas ned, `bit_valid` pulsar, och följdspåraren körs på den utlagda biten, vilket
+   kan armera en stoppbit till nästa skiftning.
 
-```vhdl
-elsif (shift = '1') then
-    if (stuff_pending = '1') then
-        tx_bit        <= not last_bit;  -- The stuff bit inverts the run.
-        stuff         <= '1';
-        bit_valid     <= '1';
-        stuff_pending <= '0';           -- The debt is paid.
+En stoppbit går genom spåraren precis som en riktig, och att den utlagda biten är `not last_bit` är
+det som gör att det blir rätt utan något specialfall: den är per konstruktion olik `last_bit`, så
+spåraren tar vägen för en bruten följd och gör precis det regeln vill, startar om följden på 1 med
+stoppbitens eget värde i `last_bit`. Ingenting armerar någon ny skuld här heller, eftersom
+armeringen hör till den väg som inte kan tas. Gruppen själv gör inga framsteg.
 
-        track_run(not last_bit);        -- A stuffed bit is a placed bit like any other.
-```
-
-En stoppbit går genom spåraren precis som en riktig, och att skicka in `not last_bit` är det som
-gör att det blir rätt utan något specialfall: inuti kroppen är jämförelsen `new_bit = last_bit` då
-falsk per konstruktion, så anropet tar `else`-vägen och gör precis det regeln vill, startar om
-följden på 1 med stoppbitens eget värde i `last_bit`. Ingenting armerar någon ny skuld här heller,
-eftersom armeringen sitter i den gren som inte kan tas. Gruppen själv gör inga framsteg:
-`shift_reg` och `bits_left` lämnas orörda.
-
-Härnäst den *avslutande* skiftningen:
-
-```vhdl
-    elsif (bits_left = 0) then
-        done <= '1';                    -- The closing shift changes nothing else.
-```
-
-Varje bit har lagts ut och den sista har nu fått sin fulla period på bussen; `tx_bit` i synnerhet
-behåller sitt värde. I annat fall: sänd nästa riktiga bit, samma form som `load`-grenen med
-`shift_reg(7)` i `data(7)`:s ställe:
-
-```vhdl
-    else
-        tx_bit    <= shift_reg(7);            -- Output the next bit.
-        shift_reg <= shift_reg(6 downto 0) & '0';
-        bits_left <= bits_left - 1;
-        bit_valid <= '1';
-
-        track_run(shift_reg(7));              -- May arm a stuff bit for the next shift.
-    end if;
-end if;
-```
+Den avslutande skiftningen finns för att den sista biten ska få sin fulla period på bussen: när
+`bits_left` är 0 har varje bit lagts ut, och den här skiftningen markerar att den sista nu har
+legat ute en hel bitperiod.
 
 Prioritetsordningen är bärande: en väntande stoppbit går före den avslutande skiftningen, och det
-är det som får specialfallet nedan att fungera utan någon extra kod; en grupp vars *sista* riktiga
-bit fullbordar en följd får ändå sin stoppbit utsänd innan `done` går. (`load` har aldrig någon
-utestående stoppbit att bekymra sig om: `can_controller` laddar bara efter `done`, och `done`
+är det som får specialfallet nedan att fungera utan någon extra regel; en grupp vars *sista*
+riktiga bit fullbordar en följd får ändå sin stoppbit utsänd innan `done` går. (`load` har aldrig
+någon utestående stoppbit att bekymra sig om: `can_controller` laddar bara efter `done`, och `done`
 kommer efter att varje väntande stoppbit har sänts.)
 
 ---

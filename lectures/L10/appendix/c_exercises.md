@@ -5,8 +5,8 @@
 * **Övning 1** slår bron mellan ramningsintroduktionens ramformat och CAN.
 * **Övning 2-6** befäster [Appendix A](./a_can_frame_format.md):
   * De görs på papper, och bygger upp till att sätta ihop en hel ram för hand.
-* **Övning 7** skriver paketet `can_def` ur [Appendix B](./b_can_def_package.md), den första VHDL
-  kursen producerar, och arbetar sedan mot det vid tangentbordet.
+* **Övning 7** läser det utdelade paketet `can_def` mot [Appendix B](./b_can_def_package.md), och
+  arbetar sedan mot det vid tangentbordet.
 
 ---
 
@@ -253,19 +253,24 @@ faktiskt reagerar på.
 
 ## Övning 7 - Att arbeta med paketet
 Varje konstant i `can_def` går att spåra tillbaka till något den här föreläsningen definierat. De
-här frågorna skriver paketet, kontrollerar att härledningarna håller när indata ändras, och utökar
-det med värden som Appendix A namngav men som paketet ännu inte håller.
+här frågorna läser paketet, kontrollerar att härledningarna håller när indata ändras, och utökar en
+kopia av det med värden som Appendix A namngav men som paketet ännu inte håller.
 
-**a)** Skriv `controller/can_def.vhd`, med konstanterna och subtyperna som Appendix B ställer upp.
-Var ni med på passet har ni den redan; var ni inte det är det här den kommer ifrån, och varje
-föreläsning från L11 och framåt förutsätter att den finns.
+**a)** Läs det utdelade `controller/can_def.vhd` med Appendix B vid sidan. Säg för varje konstant
+var i Appendix A den kommer ifrån, och dela upp dem i de som är satta och de som är uträknade ur
+andra konstanter. Vilka två av de uträknade skulle bli tyst fel, utan att något klagade vid analys,
+om de skrevs in som tal och någon sedan ändrade klockfrekvensen?
 
-Det här är den enda modulen i kursen som delas ut i sin helhet i stället för som en specifikation,
-och det av ett skäl värt att nämna: ett paket innehåller inget beteende att designa, så det finns
-ingenting mellan värdena och koden för er att lista ut. Det nya här är själva VHDL-koden, eftersom
-en paketdeklaration är en konstruktion kursen inte använt tidigare. Skriv av den för hand i stället
-för att klistra in den. Namnen är de kommande åtta föreläsningarnas vokabulär, och att skriva dem en
-gång är billigare än att slå upp dem åtta gånger.
+Paketet delas ut i sin helhet i stället för som en specifikation, och det av två skäl värda att
+nämna: ett paket innehåller inget beteende att designa, så det finns
+ingenting mellan värdena och koden för er att lista ut, och de utdelade testbänkarna läser dess
+namn och typer, så det är en del av kontraktet. Det nya här är själva VHDL-koden, eftersom en
+paketdeklaration är en konstruktion kursen inte använt tidigare. Namnen är de kommande åtta
+föreläsningarnas vokabulär, och att ha läst dem en gång, ordentligt, är billigare än att slå upp
+dem åtta gånger.
+
+Gör (e) och (f) i en kladdkopia av paketet, utanför det som blir gruppens repo: det utdelade paketet
+läggs in oförändrat.
 
 **b)** Anta att DE0-CV:ns klocka vore 40 MHz i stället för 50 MHz, med bithastigheten fortfarande
 1 Mbit/s. Räkna om `TICKS_PER_BIT` och `SAMPLE_TICK` (fortfarande 70 %).
@@ -289,7 +294,7 @@ bäst betjänt av.
 
 **g)** Kontrollera att paketet faktiskt kompilerar. Installera GHDL om ni inte redan gjort det (se
 [referensen för simuleringsflödet](../../../info/simulation_workflow.md), avsnitt 2), och kör sedan
-`make build-project` från roten av gruppens repo. Ni bör se:
+`make build-project` från roten av kursrepot. Ni bör se:
 
 ```text
 --> controller/can_def.vhd analyzes cleanly
@@ -299,11 +304,11 @@ följt av de två utdelade `bridge/`-filerna, och därefter varje testbänk rapp
 eftersom modulerna de kontrollerar inte finns ännu:
 
 ```text
-0 testbench(es) run, 8 skipped.
+0 testbench(es) run, 9 skipped.
 ```
 
-Gör nu sönder något med flit, ett saknat semikolon eller en felstavad typ, kör om, och läs vad GHDL
-säger om det. Ställ tillbaka det.
+Gör nu sönder något med flit i paketet, ett saknat semikolon eller en felstavad typ, kör om, och läs
+vad GHDL säger om det. Ställ tillbaka det, så att filen är exakt som den delades ut.
 
 Det här är hela verifieringsberättelsen för ett paket: ett paket har inget beteende att simulera, så
 "den analyseras" är allt som finns att kontrollera. L11 introducerar verktyget ordentligt, och

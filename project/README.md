@@ -101,9 +101,9 @@ Lägg upp gruppens repo så här. Två platta kataloger, med modulerna bredvid d
 kontrollerar dem:
 
 ```text
-controller/   can_def.vhd, meta_prev.vhd, bit_timer.vhd, crc15.vhd,
+controller/   meta_prev.vhd, bit_timer.vhd, crc15.vhd,
               tx_shift_reg.vhd, rx_shift_reg.vhd, can_controller.vhd
-              + de sex utdelade *_tb.vhd
+              + utdelade can_def.vhd och de sex *_tb.vhd
 bridge/       register_bank.vhd, spi_reg_bridge.vhd, can_spi_node.vhd
               + utdelade spi_slave.vhd, spi_def.vhd, register_bank_tb.vhd, spi_reg_bridge_tb.vhd
 ci/           build_project.sh, kopierad från kursrepot
@@ -147,14 +147,17 @@ i simuleringen. Det är priset för att gränssnittstabellen får vara enda sann
 
 ## 5. Det delade paketet `can_def`
 
-Skrivs i [L10](../lectures/L10/README.md), i `controller/can_def.vhd`, och läses av allt annat.
+Utdelat, i [`controller/can_def.vhd`](../controller/can_def.vhd), genomgånget i
+[L10](../lectures/L10/README.md), och läst av allt annat. Paketet läggs in oförändrat: sex av de
+utdelade testbänkarna läser dess namn och typer, så det är en del av kontraktet och inte något
+gruppen konstruerar.
 
 **Konstanter:** `CLOCK_FREQ_HZ`, `BIT_RATE_HZ`, `TICKS_PER_BIT`, `SAMPLE_TICK`, `ID_WIDTH`,
 `DLC_WIDTH`, `DLC_MAX`, `CRC_WIDTH`, `DATA_WIDTH`, `MAX_RUN`, `CRC_POLY`.
 
 **Subtyper:** `byte_t`, `id_t`, `crc_t`, `dlc_t`, `data_t`.
 
-Riktvärden för ett DE0-CV med 50 MHz systemklocka och CAN på 1 Mbit/s:
+Värdena, för ett DE0-CV med 50 MHz systemklocka och CAN på 1 Mbit/s:
 
 | Konstant | Värde | Kommentar |
 |---|---|---|

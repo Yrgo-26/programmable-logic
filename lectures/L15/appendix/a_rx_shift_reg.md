@@ -53,19 +53,20 @@ speglade - hålla en grupp *under påfyllning*, och hålla stoppbitsregeln ärli
 inte hade: att *förutsäga* var sändaren måste ha satt in en stoppbit. Varje regel nedan talar i
 termer av exakt de här fem signalerna:
 
-```vhdl
-signal data_reg      : byte_t;                     -- Collected real bits, filling from the right.
-signal collected     : natural range 0 to 8;       -- Real bits accepted toward this chunk so far.
-signal last_bit      : std_logic;                  -- The bit most recently sampled off the bus.
-signal consecutive   : natural range 0 to MAX_RUN; -- Current run length; 0 = none.
-signal stuff_expected: std_logic;                  -- The next sampled bit must be a stuff bit.
-```
+| Signal | Typ | Håller |
+|---|---|---|
+| `data_reg` | `byte_t` | De insamlade riktiga bitarna, fyllda från höger. |
+| `collected` | heltal, 0 till 8 | Antal riktiga bitar som hittills accepterats mot den här gruppen. |
+| `last_bit` | `std_logic` | Biten som senast samplades av bussen. |
+| `consecutive` | heltal, 0 till `MAX_RUN` | Längden på den aktuella följden; 0 betyder ingen. |
+| `stuff_expected` | `std_logic` | Nästa samplade bit måste vara en stoppbit. |
 
 * **`data_reg` och `collected` är gruppen som fylls på.** Varje accepterad bit skiftas in från
-  höger (`data_reg(6 downto 0) & rx_bus`), vilket är där högerjusteringen kommer ifrån, och
-  `collected` räknar accepterade bitar mot `bit_count`. Registret bakom `data` måste vara den
-  här interna signalen, med `data <= data_reg;` som en konkurrent tilldelning utanför processen:
-  en `out`-port kan inte *läsas*, och en skiftning är en läs-modifiera-skriv.
+  höger: de sju lägsta bitarna flyttas upp ett steg och den nya biten hamnar i bit 0, vilket är där
+  högerjusteringen kommer ifrån, och `collected` räknar accepterade bitar mot `bit_count`. Registret
+  bakom `data` måste vara den här interna signalen, med `data` tilldelad från den med en konkurrent
+  tilldelning utanför processen: en `out`-port kan inte *läsas*, och en skiftning är en
+  läs-modifiera-skriv.
 * **`last_bit` och `consecutive` är samma följdspårare som L14:s**, tecken för tecken: biten som
   senast låg på ledningen, och hur lång den identiska följd den avslutade är. Länkens båda sidor
   kör samma spårare över samma bitar, mot samma `MAX_RUN` från `can_def`; det är det som håller
@@ -84,140 +85,77 @@ upp i processen och höjda bara i den gren som förtjänar dem.
 ---
 
 ### Processen, uppifrån och ned
-En klockad process håller allt ovanstående, plus en konkurrent tilldelning utanför den. Som i
-L14 följer genomgången koden i den ordning den skrivs: kodfragmenten är processens deklarativa
-del följd av på varandra följande skivor av en enda `if`-kedja, och lagda i följd är de hela
-processen. **Följdspåraren** är rad för rad L14:s, med bara flaggan omdöpt efter vad den nu
-betyder: samma procedur, deklarerad inuti den här modulens process och anropad från varje gren
-som tar en bit av ledningen utom en, och undantaget noteras där det uppstår. Som i L14 jämförs
-`collected` mot `bit_count` via `to_integer(unsigned(...))`, så filen behöver
-`use ieee.numeric_std.all;` vid sidan av `ieee.std_logic_1164` och `work.can_def`.
+En klockad process håller allt ovanstående, plus den konkurrenta tilldelningen av `data` från
+`data_reg` utanför den. Processen har samma form som L14:s: asynkron reset först, och på den
+stigande flanken först förvalen och sedan den enda arbetande grenen. Appendixet säger vad den måste
+göra; hur det uttrycks i VHDL är ert. **Följdspåraren** är regel för regel L14:s, med bara flaggan
+omdöpt efter vad den nu betyder: samma procedur, deklarerad inuti den här modulens process och
+anropad från varje gren som tar en bit av ledningen utom en, och undantaget noteras där det
+uppstår.
 
-**Skelettet.** Den konkurrenta raden först: `data` är en `out`-port och kan inte *läsas*, medan
-en skiftning är en läs-modifiera-skriv, så registret är den interna `data_reg` och porten speglar
-bara den. Sedan processen, med sin procedur deklarerad före `begin`, asynkron reset först och
-allt annat på den stigande flanken:
+#### Följdspåraren, skriven en gång
+L14:s procedur `track_run` och dess tre regler, med `stuff_expected` i stället för
+`stuff_pending`; den enda omdöpningen är hela skillnaden på mottagarsidan. Allt som L14:s appendix
+säger om idiomet (varför den läser signalerna direkt, varför den deklareras inuti processen i
+stället för i arkitekturen, varför en `in`-parameter bevarar tajmingen före flanken, och varför
+syntesen inlinar den) gäller här oförändrat.
 
-```vhdl
-data <= data_reg;  -- Concurrent, outside the process.
-
-process(clock, reset_s2_n) is
-    -- One procedure, the run tracker (below).
-begin
-    if (reset_s2_n = '0') then
-        -- Clear everything.
-    elsif (rising_edge(clock)) then
-        -- Defaults, then the sample branch.
-    end if;
-end process;
-```
-
-**Följdspåraren, skriven en gång.** L14:s procedur med `stuff_expected` i stället för
-`stuff_pending`; den enda omdöpningen är hela skillnaden på mottagarsidan. Allt som L14:s
-appendix säger om idiomet (varför den läser signalerna direkt, varför den deklareras inuti
-processen i stället för i arkitekturen, varför en `in`-parameter bevarar tajmingen före flanken,
-och varför syntesen inlinar den) gäller här oförändrat:
-
-```vhdl
-    -- The run tracker: runs on the bit just taken off the wire.
-    procedure track_run(new_bit: in std_logic) is
-    begin
-        if ((new_bit = last_bit) and (consecutive /= 0)) then
-            consecutive <= consecutive + 1;
-            if (consecutive = MAX_RUN - 1) then -- Run reaches MAX_RUN.
-                stuff_expected <= '1';
-            end if;
-        else
-            consecutive <= 1;                   -- Start a new run.
-        end if;
-        last_bit <= new_bit;
-    end procedure;
-```
-
+#### Reset och förval
 **Reset nollställer allt**: gruppen (`data_reg`, `collected`), följdspåraren (`last_bit`,
 `consecutive`, `stuff_expected`) och utgångarna. Det här är det **enda** stället spåraren
 någonsin nollställs. Grupperna nollställer den inte: sändarens ström är sammanhängande över hela
 ramen, så mottagarens bild av den måste vara det också.
 
-**Förvalen härnäst, och bara de här tre.** Pulsutgångarna faller vid varje klockflanks början, så
-grenarna nedan bara *höjer* dem:
+**Förvalen härnäst, och bara de här tre.** `valid`, `stuff_error` och `real_bit_valid` sätts till
+`'0'` först vid varje stigande flank, så grenarna nedan bara *höjer* dem.
 
-```vhdl
-valid          <= '0';
-stuff_error    <= '0';
-real_bit_valid <= '0';
-```
+`stuff_expected` hör **inte** hemma bland dem, av exakt samma skäl som `stuff_pending` inte hörde
+hemma bland L14:s förval: den är tillstånd, armerad vid det sampel som fullbordar en följd och
+avgjord vid *nästa* sampel, en hel bitperiod (femtio klockflanker) senare. Ge den förvalet lågt så
+avdunstar förutsägelsen innan den kan förfalla, och då blir stoppbitar varken kastade eller
+kontrollerade. Den skrivs på exakt tre ställen: nollställd vid reset, armerad av följdspåraren, och
+nollställd när förutsägelsen förfaller (båda utfallen nedan).
 
-`stuff_expected` hör **inte** hemma här, av exakt samma skäl som `stuff_pending` inte hörde hemma
-i L14:s förval: den är tillstånd, armerad vid det sampel som fullbordar en följd och avgjord vid
-*nästa* sampel, en hel bitperiod (femtio klockflanker) senare. Ge den förvalet lågt så avdunstar
-förutsägelsen innan den kan förfalla, och då blir stoppbitar varken kastade eller kontrollerade.
-Den skrivs på exakt tre ställen: nollställd vid reset, armerad inuti `track_run`, och nollställd
-när förutsägelsen förfaller (båda utfallen nedan).
+#### Samplingsgrenen
+**`sample = '1'` och `enable = '1'` samtidigt är den enda arbetande grenen**; det finns ingen `load`
+på mottagarsidan. Den gör exakt en av tre saker, prövade i den här prioritetsordningen:
 
-**`(sample = '1') and (enable = '1')` är den enda arbetande grenen**; det finns ingen `load` på
-mottagarsidan. Den gör exakt en av tre saker, prövade i den här prioritetsordningen. Först: en
-utestående förutsägelse förfaller, och den samplade biten avgör den åt det ena eller andra
-hållet:
+1. **Den väntade stoppbiten kom** (`stuff_expected = '1'` och `rx_bus` skiljer sig från
+   `last_bit`): `stuff_expected` nollställs, eftersom förutsägelsen är avgjord, och följdspåraren
+   körs på `rx_bus`. Ingenting annat ändras.
+2. **Den väntade stoppbiten uteblev** (`stuff_expected = '1'` och `rx_bus` lika med `last_bit`):
+   `stuff_error` pulsar, `stuff_expected` nollställs, och `consecutive` sätts direkt till 1.
+   Följdspåraren körs **inte** här.
+3. **Annars, en riktig bit:**
+   * `rx_bus` skiftas in i `data_reg` från höger.
+   * `real_bit` blir `rx_bus`, och `real_bit_valid` pulsar.
+   * Om `collected` läser `bit_count - 1` fullbordar den här biten gruppen: `valid` pulsar och
+     `collected` blir 0. Annars räknas `collected` upp.
+   * Följdspåraren körs på `rx_bus`, vilket kan armera en stoppbit till nästa sampel.
 
-```vhdl
-if ((sample = '1') and (enable = '1')) then
-    if (stuff_expected = '1') then
-        if (rx_bus /= last_bit) then
-            stuff_expected <= '0';    -- The stuff bit arrived; prediction settled.
-
-            track_run(rx_bus);        -- A stuff bit is a bit off the wire like any other.
-        else
-            stuff_error    <= '1';    -- Six identical bits: a stuffing violation.
-            stuff_expected <= '0';
-            consecutive    <= 1;      -- Restart the run at the violating bit; the
-                                      -- tracker must never count past MAX_RUN.
-        end if;
-```
-
-Den anlända stoppbiten *kastas*: ingen skiftning, ingen ändring av `collected`, och
+Den anlända stoppbiten i fall 1 *kastas*: ingen skiftning, ingen ändring av `collected`, och
 `real_bit_valid` förblir `'0'`, eftersom en stoppbit aldrig är en riktig bit (det här är biten som
-`crc15` inte får se). Anropet till spåraren är spegelbilden av L14:s i dess stoppgren: en kastad
+`crc15` inte får se). Att köra spåraren på den är spegelbilden av L14:s stoppgren: en kastad
 stoppbit resynkar spåraren precis som en utsänd gör, eftersom ledningen inte skiljer riktiga
 bitar från stoppbitar och spåraren inte heller får göra det. Här behöver den inget särskilt
-argument, eftersom `rx_bus /= last_bit` är den här grenens eget villkor, så `track_run(rx_bus)`
-tar vägen för en ny följd per konstruktion och startar om räkningen på 1. I `else`-grenen är sex
-identiska bitar i rad omöjliga på en korrekt stoppad buss, så `stuff_error` pulsar. Det snyggaste
-för resten är att nollställa flaggan, inte acceptera något, och starta om följdräkningen vid den
-brytande biten (`last_bit` håller redan dess värde), eftersom det inte är den här modulens
-uppgift att avgöra vad ett brott *betyder*. Omstarten är inte valfri prydlighet: utan den ligger
-`consecutive` kvar på `MAX_RUN`, nästa identiska bit kör spårarens `+ 1`, och signalens
+argument, eftersom att `rx_bus` skiljer sig från `last_bit` är fallets eget villkor, så spåraren tar
+vägen för en ny följd per konstruktion och startar om räkningen på 1.
+
+I fall 2 är sex identiska bitar i rad omöjliga på en korrekt stoppad buss, så `stuff_error` pulsar.
+Det snyggaste för resten är att nollställa flaggan, inte acceptera något, och starta om
+följdräkningen vid den brytande biten (`last_bit` håller redan dess värde), eftersom det inte är
+den här modulens uppgift att avgöra vad ett brott *betyder*. Omstarten är inte valfri prydlighet:
+utan den ligger `consecutive` kvar på `MAX_RUN`, nästa identiska bit räknar upp den, och signalens
 deklarerade intervall överskrids; testbänken matar in en bit förbi brottet för att låsa fast
-precis det. Det här är också den enda placering `track_run` inte kan tjäna, och av samma skäl:
-`rx_bus = last_bit` här, så anropet skulle ta `+ 1`-vägen med `consecutive` redan på `MAX_RUN`.
-Den brytande biten är undantaget från regeln proceduren kodar, så dess två rader står kvar
-utskrivna. `can_controller` behandlar den som fatal och avbryter mottagningen (L17), precis som
-en riktig kontroller skulle göra.
+precis det. Det här är också det enda fall följdspåraren inte kan tjäna, och av samma skäl:
+`rx_bus` är lika med `last_bit` här, så spåraren skulle ta vägen för en fortsatt följd med
+`consecutive` redan på `MAX_RUN`. Den brytande biten är undantaget från regeln proceduren kodar, så
+dess omstart skrivs ut för sig. `can_controller` behandlar brottet som fatalt och avbryter
+mottagningen (L17), precis som en riktig kontroller skulle göra.
 
-I annat fall: acceptera en riktig bit, skifta in den från höger, exponera den bitvis för `crc15`,
-avsluta gruppen om den här biten fullbordar den, och kör spåraren på biten som just accepterats:
-
-```vhdl
-    else
-        data_reg       <= data_reg(6 downto 0) & rx_bus;  -- Shift in from the right.
-        real_bit       <= rx_bus;
-        real_bit_valid <= '1';
-
-        if (collected = to_integer(unsigned(bit_count)) - 1) then
-            valid     <= '1';                 -- This bit completes the chunk.
-            collected <= 0;
-        else
-            collected <= collected + 1;
-        end if;
-
-        track_run(rx_bus);   -- rx_bus was just accepted off the wire; may expect a stuff bit next.
-    end if;
-end if;
-```
-
-Jämförelsen här är läsningen av signalen före flanken från L14: `collected` mot `bit_count - 1`
-är idiomet "följd-är-nu-full" tillämpat på gruppens fullbordan, samma form som
-`consecutive = MAX_RUN - 1` inuti `track_run`. Ingenting annat händer vid en gruppgräns:
+Jämförelsen i fall 3 är läsningen av signalen före flanken från L14: `collected` mot
+`bit_count - 1` är samma idiom som jämförelsen mot `MAX_RUN - 1` i följdspåraren, tillämpat på
+gruppens fullbordan. Ingenting annat händer vid en gruppgräns:
 `bit_count` läses live, så nästa grupp börjar helt enkelt med nästa accepterade bit i den bredd
 `can_controller` satt vid det laget, och `data_reg` nollställs *inte*; den nya gruppens bitar
 skiftas in under vad den gamla gruppen än lämnade ovanför dem (övning 3 handlar om precis det).

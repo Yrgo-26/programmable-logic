@@ -82,10 +82,10 @@ bitperioden?
 
 **c)** Appendix A säger också att proceduren måste deklareras *inuti* processen i stället för i
 arkitekturen. Flytta ut den till arkitekturens deklarativa del, oförändrad, och analysera filen. Den
-kompilerar inte; läs de fyra felen innan ni går vidare. Gör sedan en version på arkitektursnivå som
-*faktiskt* kompilerar, med identiskt beteende och en testbänk som passerar. Jämför de två
-anropsställena och säg vad den andra versionen kostar, och vilken ny fråga den väcker som versionen
-inuti processen inte kan väcka.
+kompilerar inte; läs felen, ett per signaltilldelning i proceduren, innan ni går vidare. Gör sedan
+en version på arkitektursnivå som *faktiskt* kompilerar, med identiskt beteende och en testbänk som
+passerar. Jämför de två anropsställena och säg vad den andra versionen kostar, och vilken ny fråga
+den väcker som versionen inuti processen inte kan väcka.
 
 ---
 

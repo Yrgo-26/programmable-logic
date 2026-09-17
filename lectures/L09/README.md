@@ -72,7 +72,7 @@ poäng. Läs [projektspecifikationen](../../project/README.md) före L10; gruppe
 ---
 
 ## Nästa föreläsning
-[L10](../L10/README.md): projektstart, CAN-bussen, ramen och arbitreringen, och projektets första
-VHDL: det delade paketet `can_def`.
+[L10](../L10/README.md): projektstart, CAN-bussen, ramen och arbitreringen, och det delade paketet
+`can_def`.
 
 ---

@@ -6,12 +6,12 @@ som inte vet någonting alls, och det första som vet något om CAN.
 ---
 
 ## Agenda
-* Live-kodning av `meta_prev.vhd`: dubbelvippsynkroniseraren, skriven en gång med en
-  breddgeneric, och instansierad två gånger inuti `can_controller`, för `reset_n` och `rx_bus`.
-* Live-kodning av `bit_timer.vhd`: en fritt löpande räknare som producerar pulserna `sample` och
-  `bit_done`.
-* Att köra en utdelad testbänk mot vardera modulen, live, och läsa dess rapport. Det här är
-  passet där GHDL-flödet får sitt tredje steg.
+* `meta_prev` på tavlan: dubbelvippsynkroniseraren, med en breddgeneric, och varför den
+  instansieras två gånger inuti `can_controller`, för `reset_n` och `rx_bus`.
+* `bit_timer` på tavlan: en fritt löpande räknare som producerar pulserna `sample` och `bit_done`,
+  med beteendet som ett tidsdiagram över en bitperiod.
+* Att köra en utdelad testbänk mot vardera modulen och läsa dess rapport. Det här är passet där
+  GHDL-flödet får sitt tredje steg.
 * Att instansiera båda inuti `can_controller`.
 
 Två moduler i stället för en, eftersom båda är små och de är designens enda block som inte håller
@@ -56,13 +56,16 @@ Efter den här föreläsningen ska ni kunna:
   passet använder alla tre stegen snarare än de två första.
 
 ### Under föreläsningen
-* Live-kodning av `meta_prev.vhd`, och dess utdelade testbänk körd direkt efteråt.
-* Live-kodning av `bit_timer.vhd`, och dess testbänk.
-* Vardera modulen instansierad inuti `can_controller` så snart den är klar, med kontroll att
-  toppnivån fortfarande analyserar.
+* `meta_prev` på tavlan: blocket med sina portar och sin generic, och varför det inte behöver
+  någon reset.
+* `bit_timer` på tavlan: blocket med sina sex portar, och en bitperiod tick för tick, först
+  ostörd och sedan med en `resync` mitt i.
 
 ### Handledd grupptid
-* Skriv gruppens två moduler och få `meta_prev_tb` och `bit_timer_tb` att passera.
+* Implementera de två modulerna utifrån specifikationen i Appendix A och B, och få
+  `meta_prev_tb` och `bit_timer_tb` att passera.
+* Instansiera vardera modulen inuti `can_controller` så snart den passerar sin testbänk, och
+  kontrollera att toppnivån fortfarande analyserar.
 * De här är de första riktiga PR:erna. Använd granskningen: kontrollera portordning, att
   testbänken passerar, och att inga konstanter är hårdkodade förbi `can_def`.
 

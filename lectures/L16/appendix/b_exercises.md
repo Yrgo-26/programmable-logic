@@ -40,8 +40,8 @@ och dess `done` som kommer ett skift extra) som gör uppdelningen i två tillst�
 **a)** Sortera för en sänd ram de här kategorierna av bitar i "matas in i `crc15`" och "utesluts":
 SOF-biten, riktiga bitar ur ID, kontrollfält och data, instoppade stoppbitar, CRC-fältets egna
 bitar, och den ostoppade svansen (CRC-avgränsare, ACK-plats, ACK-avgränsare, EOF). Säg för varje
-utesluten kategori vad som utesluter den: antingen en term i
-`crc_enable <= txsr_bit_valid and not txsr_stuff and role;`, eller det faktum att fältet aldrig
+utesluten kategori vad som utesluter den: antingen ett av de tre villkoren i Appendix A:s regel för
+`crc_enable` (`txsr_bit_valid`, `txsr_stuff` och `role`), eller det faktum att fältet aldrig
 passerar genom `tx_shift_reg` över huvud taget.
 
 **b)** En av de kategorierna kan överraska er: CRC-fältets egna bitar går tillbaka in i motorn.

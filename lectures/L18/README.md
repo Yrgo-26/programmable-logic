@@ -9,8 +9,8 @@ gör inte det. Registerbanken är översättningen mellan de två världarna.
 ## Agenda
 * Varför `tx_done` och `rx_valid` som encykelspulser är oanvändbara för en pollande drivrutin, och
   vad registerkartan lovar i stället: klibbiga, pollbara nivåer med uttryckliga nollställningar.
-* Live-kodning av `register_bank.vhd`: STATUS-låsningen, `TX_SEND` som en skrivutlöst händelse,
-  infångning av mottagen ram, och maskning vid skrivning.
+* `register_bank` på tavlan: STATUS-låsningen, `TX_SEND` som en skrivutlöst händelse, infångning
+  av mottagen ram, och maskning vid skrivning.
 * SPI från vågformen och uppåt: lägen, MSB först, SS som ramning.
 * Varför slaven **inte** klockar på SCK utan översamplar den i 50 MHz-domänen, och vad `meta_prev`
   har med saken att göra.
@@ -60,13 +60,16 @@ Efter den här föreläsningen ska ni kunna:
 * Rita, för hand, vågformen för läge 0 när byten `0xA5` skiftas ut. Ta med den till passet.
 
 ### Under föreläsningen
-* Live-kodning av `register_bank.vhd`, och dess utdelade testbänk `register_bank_tb` körd direkt.
-* SPI-vågformen på tavlan, och sedan `spi_slave.vhd` läst rad för rad.
+* `register_bank` på tavlan: blocket med sina sexton portar, och när varje STATUS-bit sätts och
+  nollställs.
+* SPI-vågformen på tavlan, och sedan den utdelade `spi_slave.vhd` läst rad för rad. Den är den
+  enda modul i projektet som gruppen inte skriver själv.
 
 ### Handledd grupptid
-* Skriv gruppens `register_bank.vhd` och få `register_bank_tb` att passera. Den är utdelad och
-  täcker elva fall, från reset-tillståndet till `TX_ABORT` och de två vägar som ger tillbaka
-  TX-klar efter en avbruten sändning.
+* Implementera `register_bank.vhd` utifrån Appendix A och
+  [registerkartan](../../project/register_map.md), och få `register_bank_tb` att passera. Den är
+  utdelad och täcker elva fall, från reset-tillståndet till `TX_ABORT` och de två vägar som ger
+  tillbaka TX-klar efter en avbruten sändning.
 * Lägg in den utdelade `spi_slave.vhd` i repot oförändrad.
 
 ### Efter föreläsningen

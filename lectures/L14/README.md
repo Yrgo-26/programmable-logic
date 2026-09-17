@@ -5,8 +5,8 @@ Att serialisera ut på bussen, med samma stoppbitsregel som i [L10](../L10/READM
 ---
 
 ## Agenda
-* Live-kodning av `tx_shift_reg.vhd`: serialisering med mest signifikanta biten först, och
-  insättning av stoppbitar.
+* `tx_shift_reg` på tavlan: serialisering med mest signifikanta biten först, och insättning av
+  stoppbitar.
 * Varför en laddad grupps första bit måste presenteras omedelbart vid omladdning, och varför
   `done` väntar en extra skiftning.
 * Varför stoppningstillståndet lever kvar över omladdningar.
@@ -46,12 +46,13 @@ Efter den här föreläsningen ska ni kunna:
 ### Under föreläsningen
 * Stoppningsregeln som tillståndsmaskin på tavlan: `last_bit` och `consecutive`, och varför de
   två tillsammans är hela regelns minne.
-* Live-kodning av `tx_shift_reg.vhd`.
-* Testbänken körd, och ett par av dess fall lästa i detalj: de säger mer om kontraktet än
-  appendixet gör.
+* `tx_shift_reg` på tavlan: blocket med sina tio portar, och tidsdiagrammet för en laddning, en
+  instoppad bit och `done`.
+* Ett par av testbänkens fall lästa i detalj: de säger mer om kontraktet än appendixet gör.
 
 ### Handledd grupptid
-* Skriv gruppens `tx_shift_reg.vhd` och få `tx_shift_reg_tb` att passera.
+* Implementera `tx_shift_reg.vhd` utifrån specifikationen i Appendix A och få `tx_shift_reg_tb`
+  att passera.
 * Det här är den första modulen där det lönar sig att rita tidsdiagrammet innan ni skriver koden.
   Ta tid till det; de flesta fel här är tajmingfel med en cykel, inte logikfel.
 

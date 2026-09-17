@@ -21,10 +21,14 @@
 ---
 
 ### Att läsa `can_def.vhd`
-Live-kodad tillsammans under den här föreläsningen, och skriven **en gång**, till
-`controller/can_def.vhd`. Det här är den första VHDL kursen skriver. Varje modul ni skriver från L11
-och framåt hamnar i samma katalog, och alla utom `meta_prev` läser den här enda filen; se
+Utdelat, i [`controller/can_def.vhd`](../../../controller/can_def.vhd), och genomgånget på tavlan
+under den här föreläsningen. Paketet är en del av kontraktet och inte något att konstruera: sex av
+de utdelade testbänkarna läser dess namn och typer direkt, så det läggs in i gruppens repo
+**oförändrat**, precis som testbänkarna. Varje modul ni skriver från L11 och framåt hamnar i samma
+katalog, och alla utom `meta_prev` läser den här enda filen; se
 [referensen för simuleringsflödet](../../../info/simulation_workflow.md) för upplägget.
+
+Listningarna nedan är paketets innehåll, avsnitt för avsnitt, i samma ordning som i filen.
 
 **Bittajmingskonstanterna**, härledda snarare än handplockade, så att de förblir konsekventa med
 varandra:

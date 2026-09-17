@@ -211,8 +211,8 @@ följer:
 ---
 
 ### Att skriva `can_controller.vhd`
-Den här föreläsningen skriver filen från grunden, till `controller/can_controller.vhd`, bredvid den
-`can_def.vhd` som skrevs i L10.
+Den här föreläsningen skriver filen från grunden, till `controller/can_controller.vhd`, bredvid det
+utdelade `can_def.vhd`.
 
 **Entiteten** deklarerar de femton portarna som beskrevs ovan, i exakt den här ordningen, vilket är
 det `can_controller_tb` binder till:

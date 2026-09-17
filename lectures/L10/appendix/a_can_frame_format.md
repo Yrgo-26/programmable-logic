@@ -266,8 +266,8 @@ oscillatortolerans. Det ligger utanför den här kursens fasta sampelpunkt.
 
 ### Vad som kommer härnäst
 Varje konstant den här föreläsningen definierade behöver nu ett hem i VHDL; se
-[Appendix B](./b_can_def_package.md), det delade paketet `can_def` och den första VHDL den här
-kursen skriver. Det innehåller:
+[Appendix B](./b_can_def_package.md), det delade paketet `can_def` som resten av projektet läser.
+Det innehåller:
 * Ramfältens bredder från diagrammet ovan.
 * Bittajmingskonstanterna, inklusive 70 %-sampelpunkten.
 * CRC-15-polynomet, som används av `crc15` i L13.
